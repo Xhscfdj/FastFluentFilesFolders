@@ -61,7 +61,7 @@ namespace LRS.Views
 			Debug.WriteLine($"[TreeView_SelectionChanged] Selected item: {selectedItem.Name}, Type: {selectedItem.NodeTypeName}");
 			_ = DispatcherQueue.TryEnqueue(() =>
 			{
-				if (selectedItem is FolderNodeViewModel folder)
+				if (selectedItem is FileSystemNodeViewModel folder)
 				{
 					Debug.WriteLine($"[TreeView_SelectionChanged] Setting SelectedFolder to {folder.FullPath}");
 					// 调用 ViewModel 的更新方法
@@ -69,7 +69,7 @@ namespace LRS.Views
 					vm?.SelectedFolder = folder;
 					vm?.UpdateCurrentFolderContentAsync(folder);
 				}
-				else if (selectedItem is FileNodeViewModel)
+				else if (selectedItem is FileSystemNodeViewModel)
 				{
 					Debug.WriteLine("[TreeView_SelectionChanged] Selected item is not a folder. Setting SelectedFolder to null.");
 					// 可选：清空或显示文件信息，这里选择清空

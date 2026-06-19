@@ -21,7 +21,7 @@ namespace LRS.ViewModels
 		private void testFunction()
 		{
 			Debug.WriteLine("[DebugButton] Pressed.");
-			var folder = RootDirectories.FirstOrDefault() as FolderNodeViewModel; // 取第一个驱动器
+			var folder = RootDirectories.FirstOrDefault() as FileSystemNodeViewModel; // 取第一个驱动器
 			_ = UpdateCurrentFolderContentAsync(folder);
 			TestString = "Modified by testFunction.";
 			//CurrentFolderContent.Add(new FileNodeViewModel(@"C:\D\", _iconProvider, _appConfigs, _uiDispatcherQueue));
@@ -45,8 +45,8 @@ namespace LRS.ViewModels
 			set => _rootDirectories = value;
 		}
 		private Microsoft.UI.Dispatching.DispatcherQueue _uiDispatcherQueue;
-		[ObservableProperty] private FolderNodeViewModel? _selectedFolder;
-		partial void OnSelectedFolderChanged(FolderNodeViewModel? value)
+		[ObservableProperty] private FileSystemNodeViewModel? _selectedFolder;
+		partial void OnSelectedFolderChanged(FileSystemNodeViewModel? value)
 		{
 			Debug.WriteLine($"\n----Selected:{value?.Name}\n");
 			Debug.WriteLine($"OnSelectedFolderChanged called with value: {value?.FullPath ?? "null"}");
@@ -62,7 +62,7 @@ namespace LRS.ViewModels
 				CurrentFolderContent.Clear();
 			}
 		}
-		public async Task UpdateCurrentFolderContentAsync(FolderNodeViewModel? folder)
+		public async Task UpdateCurrentFolderContentAsync(FileSystemNodeViewModel? folder)
 		{
 			if (folder == null)
 			{
@@ -83,7 +83,7 @@ namespace LRS.ViewModels
 				CurrentFolderContent.Clear();
 				foreach (var item in folder.Children)
 				{
-					if (item is not PlaceholderNodeViewModel)
+					if (!item.IsPlaceholder)
 						CurrentFolderContent.Add(item);
 				}
 			});
@@ -93,27 +93,26 @@ namespace LRS.ViewModels
 		{
 			_uiDispatcherQueue = uiDispatcherQueue;
 			_iconProvider = iconProvider;
-			RootDirectories = new ObservableCollection<FileSystemNodeViewModel>();
 			// 在构造函数中，添加测试数据
 			//CurrentFolderContent.Add(new FileNodeViewModel(@"C:\test.txt", _iconProvider, _appConfigs, _uiDispatcherQueue));
-			//CurrentFolderContent.Add(new FolderNodeViewModel(@"C:\testfolder", _iconProvider, _appConfigs, _uiDispatcherQueue));
+			//CurrentFolderContent.Add(new FileSystemNodeViewModel(@"C:\testfolder", _iconProvider, _appConfigs, _uiDispatcherQueue));
 			foreach (var drive in DriveInfo.GetDrives())
 			{
 				if (drive.IsReady)  // 只添加就绪的驱动器
 				{
-					RootDirectories.Add(new FolderNodeViewModel(drive.RootDirectory.FullName, _iconProvider, configs, uiDispatcherQueue));
+					RootDirectories.Add(new FileSystemNodeViewModel(drive.RootDirectory.FullName, true, false, configs, uiDispatcherQueue));
 				}
 			}
 
 		}
 		public void OpenItem(FileSystemNodeViewModel item)
 		{
-			if (item is FolderNodeViewModel folder)
+			if (item is FileSystemNodeViewModel folder)
 			{
 				SelectedFolder = folder;
 
 			}
-			else if (item is FileNodeViewModel file)
+			else if (item is FileSystemNodeViewModel file)
 			{
 				Debug.WriteLine($"Double clicked file: {file.Name}");
 			}
@@ -168,7 +167,7 @@ namespace LRS.ViewModels
 	}
 }
 
-/* public async Task LoadFolderContentAsync(FolderNodeViewModel folder)
+/* public async Task LoadFolderContentAsync(FileSystemNodeViewModel folder)
 {
 	Debug.WriteLine($"----Is UI thread? {_uiDispatcherQueue.HasThreadAccess}");
 	Debug.WriteLine($"LoadFolderContentAsync: folder = {folder?.FullPath}");

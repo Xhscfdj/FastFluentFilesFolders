@@ -1,14 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿
 
 namespace LRS.ViewModels
 {
-    internal class PlaceholderNodeViewModel : FileSystemNodeViewModel
-    {
-        public PlaceholderNodeViewModel(string? fullPath, Microsoft.UI.Dispatching.DispatcherQueue? uiDispatcherQueue = null) : base(fullPath, uiDispatcherQueue)
-        {
-            Name = "Loading";
-        }
-    }
+	public class PlaceholderNodeViewModel : FileSystemNodeViewModel
+	{
+		public PlaceholderNodeViewModel() : base("C:\\", false, true, null, null)
+		{
+			IsPlaceholder = true;
+			Name = "Loading...";
+		}
+	}
 }
