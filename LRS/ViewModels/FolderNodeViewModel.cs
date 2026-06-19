@@ -43,8 +43,8 @@ namespace LRS.ViewModels
 				{
 					int dirs = 0;
 					int files = 0;
-					try { dirs = Directory.GetDirectories(FullPath).Length; } catch { dirs = 0; }
-					try { files = Directory.GetFiles(FullPath).Length; } catch { files = 0; }
+                    dirs = SafeGetDirs(FullPath).Count;
+                    files = SafeGetFiles(FullPath).Count;
 					count = dirs + files;
 				}
 				catch
@@ -69,8 +69,8 @@ namespace LRS.ViewModels
                 try
                 {
                     // 仍然可能抛异常（权限问题），所以用 try-catch
-                    count = Directory.GetDirectories(FullPath).Length +
-                            Directory.GetFiles(FullPath).Length;
+                    count = SafeGetDirs(FullPath).Count +
+                            SafeGetFiles(FullPath).Count;
                 }
                 catch { count = 0; }
                 CachedChildrenCount = count;
@@ -95,15 +95,15 @@ namespace LRS.ViewModels
 		{
 			_configs = configs;
 			//Children.Add(new PlaceholderNodeViewModel("", null));
-			if (iconProvider == null) throw new ArgumentNullException(nameof(iconProvider));
-            _uiDispatcherQueue = uiDispatcherQueue;
+			ArgumentNullException.ThrowIfNull(iconProvider);
+			_uiDispatcherQueue = uiDispatcherQueue;
             FullPath = fullPath;
             Name = fullPath.Length == 3 && fullPath.Contains(":\\") ? fullPath : Path.GetFileName(fullPath);
-            // 先设置基类的 IconProvider，然后再调用 LoadIconAsync
             IconProvider = iconProvider;
             _ = LoadIconAsync(true, _configs.ifUsesWin32APIToGetIcon, FullPath, uiDispatcherQueue);
             StartAsyncCount();
-            _ = LoadFolderInfoAsync(fullPath);
+            //_ = LoadFolderInfoAsync(fullPath);
+            LoadFolderInfoSync(fullPath);
 
         }
         public async Task LoadFolderInfoAsync(string fullPath)
@@ -137,30 +137,28 @@ namespace LRS.ViewModels
 			Debug.WriteLine("aetqpwotieywopqtyweoiqytiowqypyetqywpeoiytqwpyeipytowpqyeiwtopqyweoptyq");
 			if (IsLoaded) return;
             IsLoaded = true;
-			var subDirs = await Task.Run(() => SafeGetDirs(FullPath));
-			var files = await Task.Run(() => SafeGetFiles(FullPath));
+			var subDirs = SafeGetDirs(FullPath);
+			var files = SafeGetFiles(FullPath);
 
 			if (_uiDispatcherQueue != null && Application.Current != null)
             {
+
 				_uiDispatcherQueue.TryEnqueue(() =>
 				{
 					Debug.WriteLine("================================================");
 					Children.Clear();
-                    //foreach (var dir in subDirs)
-                    //    Children.Add(new FolderNodeViewModel(dir, IconProvider, _configs, _uiDispatcherQueue));
-                    //foreach (var file in files)
-                    //    Children.Add(new FileNodeViewModel(file, IconProvider, _configs, _uiDispatcherQueue));
-                    Children.AddRange(subDirs.Select(d => new FolderNodeViewModel(d, IconProvider, _configs, _uiDispatcherQueue)));
-					Children.AddRange(files.Select(f => new FileNodeViewModel(f, IconProvider, _configs, _uiDispatcherQueue)));
+                    foreach (var dir in subDirs)
+                        Children.Add(new FolderNodeViewModel(dir, IconProvider, _configs, _uiDispatcherQueue));
+                    foreach (var file in files)
+                        Children.Add(new FileNodeViewModel(file, IconProvider, _configs, _uiDispatcherQueue));
+					//Children.AddRange(subDirs.Select(d => new FolderNodeViewModel(d, IconProvider, _configs, _uiDispatcherQueue)));
+					//Children.AddRange(files.Select(f => new FileNodeViewModel(f, IconProvider, _configs, _uiDispatcherQueue)));
 
 					var actualCount = Children.Count(c => c is not PlaceholderNodeViewModel);
 					ChildrenCountText = actualCount > 0 ? $" [{actualCount}]" : string.Empty;
 				});
                 }
-            // 在后台收集数据，然后一次性在 UI 线程更新集合，避免重复添加
-            //await Task.Run(() => { /* already collected above */ });
-
-
+            //await Task.Run(() => { });
         }
 
         public static List<string> SafeGetFiles(string path)
@@ -202,12 +200,12 @@ namespace LRS.ViewModels
             }
             catch (UnauthorizedAccessException ex)
             {
-                Debug.WriteLine($"无权访问目录 {path}: {ex.Message}");
+                Debug.WriteLine(ex.Message);
                 return accessible;
             }
             catch (DirectoryNotFoundException ex)
             {
-                Debug.WriteLine($"目录不存在 {path}: {ex.Message}");
+                Debug.WriteLine(ex.Message);
                 return accessible;
             }
 
@@ -256,5 +254,17 @@ namespace LRS.ViewModels
 
             return totalSize;
         }
-    }
+		// Functions for debug.
+		private void LoadFolderInfoSync(string fullPath)
+		{
+			if (!(fullPath == $"{fullPath[0]}:\\"))
+			{
+				DirectoryInfo dirInfo = new(fullPath);
+				LastModifiedTime = dirInfo.LastWriteTimeUtc;
+				FirstCreatedTime = dirInfo.CreationTimeUtc;
+				LastModifiedTimeString = LastModifiedTime.ToString("yyyy-MM-dd HH:mm:ss");
+				FirstCreatedTimeString = FirstCreatedTime.ToString("yyyy-MM-dd HH:mm:ss");
+			}
+		}
+	}
 }

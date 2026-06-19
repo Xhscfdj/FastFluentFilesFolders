@@ -24,8 +24,8 @@ namespace LRS.ViewModels
             Extension = Path.GetExtension(fullPath);
             // 先设置 _iconProvider，然后再调用 LoadIconAsync
             IconProvider = iconProvider;
-            _ = LoadIconAsync(false, true, FullPath, uiDispatcherQueue);
-            if (!(fullPath == $"{fullPath[0]}:\\"))
+            //_ = LoadIconAsync(false, true, FullPath, uiDispatcherQueue);
+            if (!(fullPath == $"{fullPath[0]}:\\") && File.Exists(fullPath))
             {
                 FileInfo fileInfo = new(fullPath);
                 ExactSize = fileInfo.Length;

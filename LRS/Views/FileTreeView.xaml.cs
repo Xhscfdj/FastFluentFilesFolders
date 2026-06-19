@@ -14,6 +14,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading.Tasks;
 using Windows.Foundation;
 using Windows.Foundation.Collections;
 
@@ -35,8 +36,7 @@ namespace LRS.Views
 				InitializeComponent();
 				var uiDispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 				IIconProvider iconProvider = new WindowsIconProvider();
-				var viewModel = new MainWindowViewModel(iconProvider, uiDispatcherQueue, configs);
-				this.DataContext = viewModel;
+				this.DataContext = App.SharedViewModel;
 
 			}
 			catch (Exception ex)
@@ -47,23 +47,36 @@ namespace LRS.Views
 
 		}
 
-		private void TreeView_SelectionChanged(TreeView sender, TreeViewSelectionChangedEventArgs e)
+		private async void TreeView_SelectionChanged(TreeView sender, TreeViewSelectionChangedEventArgs args)
 		{
-			if (DataContext is not MainWindowViewModel mainVm) return;
-
-			// 获取新增的选中项（单选时通常只有一个）
-			var selectedItem = e.AddedItems.Count > 0 ? e.AddedItems[0] as FileSystemNodeViewModel : null;
-
-			if (selectedItem is FolderNodeViewModel folder)
+			Debug.WriteLine($"[TreeView_SelectionChanged] Entered. AddedItems count: {args.AddedItems.Count}");
+			// 获取选中的 TreeViewItem 的数据上下文
+			var selectedItem = args.AddedItems.FirstOrDefault() as FileSystemNodeViewModel;
+			if (selectedItem is null)
 			{
-				mainVm.SelectedFolder = folder; // 触发 OnSelectedFolderChanged
-				Debug.WriteLine($"Selected folder: {folder.FullPath}");
+				Debug.WriteLine("[TreeView_SelectionChanged] No FileSystemNodeViewModel selected.");
+				return;
 			}
-			else
+			await Task.Delay(50);
+			Debug.WriteLine($"[TreeView_SelectionChanged] Selected item: {selectedItem.Name}, Type: {selectedItem.NodeTypeName}");
+			_ = DispatcherQueue.TryEnqueue(() =>
 			{
-				// 点击文件或取消选择时，可清空内容或保持原样
-				// mainVm.SelectedFolder = null; 
-			}
+				if (selectedItem is FolderNodeViewModel folder)
+				{
+					Debug.WriteLine($"[TreeView_SelectionChanged] Setting SelectedFolder to {folder.FullPath}");
+					// 调用 ViewModel 的更新方法
+					var vm = DataContext as MainWindowViewModel;
+					vm?.SelectedFolder = folder;
+					vm?.UpdateCurrentFolderContentAsync(folder);
+				}
+				else if (selectedItem is FileNodeViewModel)
+				{
+					Debug.WriteLine("[TreeView_SelectionChanged] Selected item is not a folder. Setting SelectedFolder to null.");
+					// 可选：清空或显示文件信息，这里选择清空
+					var vm = DataContext as MainWindowViewModel;
+					vm?.UpdateCurrentFolderContentAsync(null);
+				}
+			});
 		}
 	}
 

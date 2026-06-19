@@ -100,8 +100,8 @@ namespace LRS.ViewModels
                 {
                     int dirs = 0;
                     int files = 0;
-                    try { dirs = Directory.GetDirectories(FullPath).Length; } catch { dirs = 0; }
-                    try { files = Directory.GetFiles(FullPath).Length; } catch { files = 0; }
+                    dirs = FolderNodeViewModel.SafeGetDirs(FullPath).Count;
+                    files = FolderNodeViewModel.SafeGetFiles(FullPath).Count;
                     count = dirs + files;
                 }
                 catch

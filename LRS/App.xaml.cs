@@ -1,6 +1,8 @@
-﻿using LRS.ViewModels;
+﻿using LRS.Services;
+using LRS.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -32,7 +34,17 @@ namespace LRS
     {
         private Window? _window;
         private IHost _host;
+		public static MainWindowViewModel SharedViewModel { get; private set; }
 		public static IServiceProvider Services { get; private set; }
+        private static IServiceProvider ConfigureServices()
+        {
+			var services = new ServiceCollection();
+
+			services.AddSingleton<Configs>();
+			services.AddSingleton<IIconProvider, WindowsIconProvider>();
+
+			return services.BuildServiceProvider();
+		}
 		/// <summary>
 		/// Initializes the singleton application object.  This is the first line of authored code
 		/// executed, and as such is the logical equivalent of main() or WinMain().
@@ -43,7 +55,8 @@ namespace LRS
             _host = Host.CreateDefaultBuilder().ConfigureServices((context, services) =>
             {
                 services.AddSingleton(new Configs());
-            }).Build();
+				services.AddSingleton<IIconProvider, WindowsIconProvider>();
+			}).Build();
             Services = _host.Services;
         }
 
@@ -53,9 +66,16 @@ namespace LRS
         /// <param name="args">Details about the launch request and process.</param>
         protected override async void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
         {
-            await _host.StartAsync();
-            _window = new Views.MainWindowView();
-            _window.Activate();
-        }
+			await _host.StartAsync();
+
+			// 在 UI 线程上创建共享 ViewModel
+			var dispatcher = DispatcherQueue.GetForCurrentThread();
+			var configs = Services.GetRequiredService<Configs>();
+			var iconProvider = Services.GetRequiredService<IIconProvider>();
+			SharedViewModel = new MainWindowViewModel(iconProvider, dispatcher, configs);
+
+			_window = new Views.MainWindowView();
+			_window.Activate();
+		}
     }
 }

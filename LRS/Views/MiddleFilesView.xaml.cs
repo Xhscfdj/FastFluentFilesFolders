@@ -32,8 +32,16 @@ namespace LRS.Views
 			InitializeComponent();
 			var uiDispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 			IIconProvider iconProvider = new WindowsIconProvider(); // 实际可从服务容器获取
-            var viewModel = new MainWindowViewModel(iconProvider, uiDispatcherQueue, configs);
-            this.DataContext = viewModel;
+            this.DataContext = App.SharedViewModel;
         }
+		private void OnRowDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+		{
+			// sender 是触发事件的 Grid，它的 DataContext 就是被双击的数据对象
+			if (sender is FrameworkElement element && element.DataContext is FileSystemNodeViewModel item)
+			{
+				var vm = this.DataContext as MainWindowViewModel;
+				vm?.OpenItem(item);
+			}
+		}
     }
 }

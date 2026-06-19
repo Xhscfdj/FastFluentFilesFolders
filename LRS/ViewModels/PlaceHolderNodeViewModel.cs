@@ -6,7 +6,7 @@ namespace LRS.ViewModels
 {
     internal class PlaceholderNodeViewModel : FileSystemNodeViewModel
     {
-        public PlaceholderNodeViewModel(string fullPath, Microsoft.UI.Dispatching.DispatcherQueue? uiDispatcherQueue = null) : base(fullPath, uiDispatcherQueue)
+        public PlaceholderNodeViewModel(string? fullPath, Microsoft.UI.Dispatching.DispatcherQueue? uiDispatcherQueue = null) : base(fullPath, uiDispatcherQueue)
         {
             Name = "Loading";
         }

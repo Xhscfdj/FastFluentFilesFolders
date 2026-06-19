@@ -16,7 +16,7 @@ namespace LRS.ViewModels
             .AddJsonFile("./Configs/appsettings.json", optional: false, reloadOnChange: true)
             .Build();
         // 所有配置
-        private int _middleFilesHeight = 30;
+        private int _middleFilesHeight = 40;
         public int MiddleFilesHeight
         {
             get => _middleFilesHeight;
