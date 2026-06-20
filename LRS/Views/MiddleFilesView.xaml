@@ -13,12 +13,14 @@
     mc:Ignorable="d">
 	<Grid>
 		<Grid.RowDefinitions>
+			<RowDefinition Height="Auto" />
 			<RowDefinition Height="*"/>
 			<RowDefinition Height="Auto"/>
 		</Grid.RowDefinitions>
+		<BreadcrumbBar ItemsSource="{Binding CurrentFolderContent[0].PathsForBreadcrumbBar}"/>
 		<!--<Button Content="Click to change the testString." Command="{Binding testFunctionCommand}"/>-->
 		<tv:TableView ItemsSource="{Binding CurrentFolderContent}"
-              Grid.Row="0"
+              Grid.Row="1"
               RowHeight="{Binding AppConfigs.MiddleFilesHeight}"
               AutoGenerateColumns="False"
               IsReadOnly="True"
@@ -41,8 +43,8 @@
 						</DataTemplate>
 					</tv:TableViewTemplateColumn.CellTemplate>
 				</tv:TableViewTemplateColumn>
-				
-				<tv:TableViewTemplateColumn Header="修改日期" Width="2*" CanSort="True" SortMemberPath="LastModifiedTime">
+
+				<tv:TableViewTemplateColumn Header="上次修改" Width="2*" CanSort="True" SortMemberPath="LastModifiedTime">
 					<tv:TableViewTemplateColumn.CellTemplate>
 						<DataTemplate>
 							<TextBlock DoubleTapped="OnRowDoubleTapped" Text="{Binding LastModifiedTimeString}" VerticalAlignment="Center"/>
@@ -50,7 +52,13 @@
 					</tv:TableViewTemplateColumn.CellTemplate>
 				</tv:TableViewTemplateColumn>
 
-				<tv:TableViewTextColumn Header="创建日期" Width="2*" CanSort="True" SortMemberPath="FirstCreatedTime" Binding="{Binding FirstCreatedTimeString}"/>
+				<tv:TableViewTemplateColumn Header="创建日期" Width="2*" CanSort="True" SortMemberPath="FirstCreatedTime">
+					<tv:TableViewTemplateColumn.CellTemplate>
+						<DataTemplate>
+							<TextBlock DoubleTapped="OnRowDoubleTapped" Text="{Binding FirstCreatedTimeString}" VerticalAlignment="Center"/>
+						</DataTemplate>
+					</tv:TableViewTemplateColumn.CellTemplate>
+				</tv:TableViewTemplateColumn>
 
 				<tv:TableViewTemplateColumn Header="大小" Width="*" CanSort="True" SortMemberPath="ExactSize">
 					<tv:TableViewTemplateColumn.CellTemplate>
@@ -61,6 +69,10 @@
 				</tv:TableViewTemplateColumn>
 			</tv:TableView.Columns>
 		</tv:TableView>
+		<StackPanel Orientation="Horizontal" Grid.Row="2" Padding="20,10,20,10">
+			<TextBlock Text="{Binding CurrentFolderContent.Count}" Foreground="#D6D6D6"/>
+			<TextBlock Text="个项目" Foreground="#D6D6D6"/>
+		</StackPanel>
 	</Grid>
 </Page>
 <!--<tv:TableView ItemsSource="{Binding CurrentFolderContent}"

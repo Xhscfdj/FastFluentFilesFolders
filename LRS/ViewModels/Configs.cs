@@ -13,7 +13,7 @@ namespace LRS.ViewModels
     public partial class Configs : ObservableObject
     {
         public IConfiguration configuration = new ConfigurationBuilder().SetBasePath(AppContext.BaseDirectory)
-            .AddJsonFile("./Configs/appsettings.json", optional: false, reloadOnChange: true)
+            .AddJsonFile("./Configs/configs.json", optional: false, reloadOnChange: true)
             .Build();
         // 所有配置
         private int _middleFilesHeight = 40;
@@ -38,10 +38,8 @@ namespace LRS.ViewModels
         }
         public void ReadConfigs()
         {
-            MiddleFilesHeight = configuration.GetValue<int>("AppearanceSettings:MiddleFilesHeight");
-            ifUsesWin32APIToGetIcon = configuration.GetValue<bool>("Advanced:UsesWin32APIToGetIcon");
-
-            
+            MiddleFilesHeight = configuration.GetValue<int>("Appearance:MiddleFilesHeight");
+            ifUsesWin32APIToGetIcon = configuration.GetValue<bool>("Advanced:ifUsesWin32APIToGetIcon");
         }
 
     }

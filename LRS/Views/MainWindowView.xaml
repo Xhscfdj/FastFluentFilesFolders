@@ -24,8 +24,8 @@
 			<ColumnDefinition Width="5*" />
         </Grid.ColumnDefinitions>
         <TitleBar x:Name="AppTitleBar"
-                  Grid.ColumnSpan="2"
-              Title="LRS" Subtitle="v0.0.0-dev">
+                  Grid.ColumnSpan="3"
+              Title="LRS" Subtitle="v0.0.2-dev">
             <TitleBar.IconSource>
 				<FontIconSource Glyph="&#xE838;"/>
             </TitleBar.IconSource>

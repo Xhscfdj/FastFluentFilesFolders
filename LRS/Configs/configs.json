@@ -1,0 +1,8 @@
+﻿{
+  "Appearance": {
+    "MiddleFilesHeight": 30
+  },
+  "Advanced": {
+    "ifUsesWin32APIToGetIcon" : true
+  }
+}

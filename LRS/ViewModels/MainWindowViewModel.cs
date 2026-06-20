@@ -5,6 +5,7 @@
 //using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.WinUI;
 using LRS.Services;
 using System;
 using System.Collections.ObjectModel;
@@ -21,7 +22,7 @@ namespace LRS.ViewModels
 		private void testFunction()
 		{
 			Debug.WriteLine("[DebugButton] Pressed.");
-			var folder = RootDirectories.FirstOrDefault() as FileSystemNodeViewModel; // 取第一个驱动器
+			var folder = RootDirectories.FirstOrDefault(); // 取第一个驱动器
 			_ = UpdateCurrentFolderContentAsync(folder);
 			TestString = "Modified by testFunction.";
 			//CurrentFolderContent.Add(new FileNodeViewModel(@"C:\D\", _iconProvider, _appConfigs, _uiDispatcherQueue));
@@ -36,6 +37,7 @@ namespace LRS.ViewModels
 		[ObservableProperty] private string _testString = "hasn't changed";
 		// 文件系统相关的属性和方法
 		private readonly IIconProvider _iconProvider;
+		[ObservableProperty] private string[] _pathsForBreadcrumbBar = ["C:\\"];
 		[ObservableProperty] private ObservableCollection<FileSystemNodeViewModel> _currentFolderContent = new();
 		[ObservableProperty] private Configs _appConfigs = new();
 		private ObservableCollection<FileSystemNodeViewModel> _rootDirectories = new();
@@ -55,7 +57,7 @@ namespace LRS.ViewModels
 			//UpdateCurrentFolderContentSync(value);
 			if (value != null)
 			{
-				_ = UpdateCurrentFolderContentAsync(value);
+			    _ = UpdateCurrentFolderContentAsync(value);
 			}
 			else
 			{
@@ -78,7 +80,7 @@ namespace LRS.ViewModels
 
 			// 此时 folder.Children 已经在 UI 线程完成填充，可以直接读取
 			// 但为了线程安全，仍然在 UI 线程执行 Clear + Add
-			_uiDispatcherQueue.TryEnqueue(() =>
+			await _uiDispatcherQueue.EnqueueAsync(() =>
 			{
 				CurrentFolderContent.Clear();
 				foreach (var item in folder.Children)
@@ -86,6 +88,9 @@ namespace LRS.ViewModels
 					if (!item.IsPlaceholder)
 						CurrentFolderContent.Add(item);
 				}
+				PathsForBreadcrumbBar = folder.FullPath.Split();
+				string[] newArray = new string[PathsForBreadcrumbBar.Length - 1];
+				Array.Copy(PathsForBreadcrumbBar, 0, newArray, 0, PathsForBreadcrumbBar.Length - 1);
 			});
 		}
 
@@ -100,71 +105,101 @@ namespace LRS.ViewModels
 			{
 				if (drive.IsReady)  // 只添加就绪的驱动器
 				{
-					RootDirectories.Add(new FileSystemNodeViewModel(drive.RootDirectory.FullName, true, false, configs, uiDispatcherQueue));
+					RootDirectories.Add(new FileSystemNodeViewModel(drive.RootDirectory.FullName, true, false, configs, uiDispatcherQueue, false));
 				}
 			}
 
 		}
 		public void OpenItem(FileSystemNodeViewModel item)
 		{
-			if (item is FileSystemNodeViewModel folder)
+			if (item.IsDirectory)
 			{
-				SelectedFolder = folder;
+				SelectedFolder = item;
 
 			}
-			else if (item is FileSystemNodeViewModel file)
+			else if (!item.IsDirectory)
 			{
-				Debug.WriteLine($"Double clicked file: {file.Name}");
+				OpenWithDefaultProgram(item.FullPath);
 			}
 		}
-		//// 排序相关
-		//[ObservableProperty] private string _sortPropertyName = "Name"; // 默认按名称排序
+		/// <summary>
+		/// 使用 Windows 默认关联程序打开指定路径的文件
+		/// </summary>
+		/// <param name="filePath">要打开的文件的完整路径</param>
+		/// <exception cref="ArgumentNullException">路径为空或 null</exception>
+		/// <exception cref="FileNotFoundException">文件不存在</exception>
+		/// <exception cref="InvalidOperationException">打开文件时发生其他错误</exception>
+		public static void OpenWithDefaultProgram(string filePath)
+		{
+			if (string.IsNullOrWhiteSpace(filePath))
+				throw new ArgumentNullException(nameof(filePath), "文件路径不能为空");
 
-		//[ObservableProperty] private bool _sortAscending = true;
+			if (!File.Exists(filePath))
+				throw new FileNotFoundException($"文件不存在: {filePath}", filePath);
 
-		//[RelayCommand]
-		//private void SortItems(string propertyName)
-		//{
-		//	// 如果点击同一列，切换升序/降序；否则按该列升序
-		//	if (propertyName == SortPropertyName)
-		//	{
-		//		SortAscending = !SortAscending;
-		//	}
-		//	else
-		//	{
-		//		SortPropertyName = propertyName;
-		//		SortAscending = true;
-		//	}
+			try
+			{
+				// UseShellExecute = true 表示使用 Windows Shell（即双击打开的方式）
+				Process.Start(new ProcessStartInfo
+				{
+					FileName = filePath,
+					UseShellExecute = true
+				});
+			}
+			catch (Exception ex)
+			{
+				throw new InvalidOperationException($"无法打开文件: {ex.Message}", ex);
+			}
+		}
+	
+	//// 排序相关
+	//[ObservableProperty] private string _sortPropertyName = "Name"; // 默认按名称排序
 
-		//	ApplySort();
-		//}
+	//[ObservableProperty] private bool _sortAscending = true;
 
-		//private void ApplySort()
-		//{
-		//	if (CurrentFolderContent == null || CurrentFolderContent.Count == 0)
-		//		return;
+	//[RelayCommand]
+	//private void SortItems(string propertyName)
+	//{
+	//	// 如果点击同一列，切换升序/降序；否则按该列升序
+	//	if (propertyName == SortPropertyName)
+	//	{
+	//		SortAscending = !SortAscending;
+	//	}
+	//	else
+	//	{
+	//		SortPropertyName = propertyName;
+	//		SortAscending = true;
+	//	}
 
-		//	var sorted = CurrentFolderContent.ToList(); // 复制一份
+	//	ApplySort();
+	//}
 
-		//	// 根据属性名和排序方向排序
-		//	Func<FileSystemNodeViewModel, object> keySelector = propertyName switch
-		//	{
-		//		"Name" => item => item.Name,
-		//		"LastModifiedTime" => item => item.LastModifiedTime,
-		//		"FirstCreatedTime" => item => item.FirstCreatedTime,
-		//		"ExactSize" => item => item.ExactSize,
-		//		_ => item => item.Name
-		//	};
+	//private void ApplySort()
+	//{
+	//	if (CurrentFolderContent == null || CurrentFolderContent.Count == 0)
+	//		return;
 
-		//	if (SortAscending)
-		//		sorted = sorted.OrderBy(keySelector).ToList();
-		//	else
-		//		sorted = sorted.OrderByDescending(keySelector).ToList();
+	//	var sorted = CurrentFolderContent.ToList(); // 复制一份
 
-		//	// 重新创建 ObservableCollection 并赋值（触发 PropertyChanged）
-		//	CurrentFolderContent = new ObservableCollection<FileSystemNodeViewModel>(sorted);
-		//}
-	}
+	//	// 根据属性名和排序方向排序
+	//	Func<FileSystemNodeViewModel, object> keySelector = propertyName switch
+	//	{
+	//		"Name" => item => item.Name,
+	//		"LastModifiedTime" => item => item.LastModifiedTime,
+	//		"FirstCreatedTime" => item => item.FirstCreatedTime,
+	//		"ExactSize" => item => item.ExactSize,
+	//		_ => item => item.Name
+	//	};
+
+	//	if (SortAscending)
+	//		sorted = sorted.OrderBy(keySelector).ToList();
+	//	else
+	//		sorted = sorted.OrderByDescending(keySelector).ToList();
+
+	//	// 重新创建 ObservableCollection 并赋值（触发 PropertyChanged）
+	//	CurrentFolderContent = new ObservableCollection<FileSystemNodeViewModel>(sorted);
+	//}
+}
 }
 
 /* public async Task LoadFolderContentAsync(FileSystemNodeViewModel folder)

@@ -1,4 +1,5 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.WinUI;
 using LRS.Services;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml.Media;
@@ -9,6 +10,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Isg.Collections;
 
 namespace LRS.ViewModels
 {
@@ -18,12 +20,14 @@ namespace LRS.ViewModels
 		private readonly DispatcherQueue _uiDispatcherQueue;
 		private bool _isLoaded;
 		private bool _isCounting;
+		private bool _isInited;
+		private bool _isLazyLoad;
 
 		// 基础属性
 		[ObservableProperty] private bool _isPlaceholder = false;
 		[ObservableProperty] private string _name = string.Empty;
 		[ObservableProperty] private string _fullPath = string.Empty;
-		[ObservableProperty] private bool _isDirectory;
+		[ObservableProperty] private bool _isDirectory = true;
 		[ObservableProperty] private string _extension = string.Empty;
 		[ObservableProperty] private ImageSource? _icon;
 		[ObservableProperty] private IIconProvider _iconProvider;
@@ -48,10 +52,12 @@ namespace LRS.ViewModels
 			bool isDirectory,
 			bool isPlaceholder,
 			Configs configs,
-			DispatcherQueue uiDispatcherQueue)
+			DispatcherQueue uiDispatcherQueue,
+			bool lazyLoad)
 			: base()
 		{
 			IsPlaceholder = isPlaceholder;
+			_isLazyLoad = lazyLoad;
 			_uiDispatcherQueue = uiDispatcherQueue;
 			if (configs != null)
 			{
@@ -75,12 +81,15 @@ namespace LRS.ViewModels
 			}
 
 		    _ = LoadBasicInfoAsync();
-			if (configs != null)
-				_ = LoadIconAsync(isDirectory, configs.ifUsesWin32APIToGetIcon, fullPath, uiDispatcherQueue);
+			if (configs != null && !_isLazyLoad)
+			{
+				_ = LoadIconAsync(fullPath, isDirectory);
+			}
+
 
 			if (isDirectory)
 			{
-				StartAsyncCount();
+				_ = StartAsyncCount();
 			}
 			else
 			{
@@ -91,29 +100,37 @@ namespace LRS.ViewModels
 		// 同步加载基本文件/文件夹信息（确保排序时属性已就绪）
 		private async Task LoadBasicInfoAsync()
 		{
+			if (IsPlaceholder) { return; }
 			try
 			{
 				if (IsDirectory)
 				{
-					// 文件夹：获取时间和大小（大小设为0，或可递归计算，但为了性能设为0）
-					var dirInfo = new DirectoryInfo(FullPath);
-					LastModifiedTime = dirInfo.LastWriteTimeUtc;
-					FirstCreatedTime = dirInfo.CreationTimeUtc;
-					ExactSize = 0; // 不计算目录大小
+					await Task.Run(() =>
+					{
+						var dirInfo = new DirectoryInfo(FullPath);
+						LastModifiedTime = dirInfo.LastWriteTimeUtc;
+						FirstCreatedTime = dirInfo.CreationTimeUtc;
+						ExactSize = 0;
+					});
 				}
-				else
+				else if (File.Exists(FullPath))
 				{
-					// 文件：获取所有信息
-					var fileInfo = new FileInfo(FullPath);
-					LastModifiedTime = fileInfo.LastWriteTimeUtc;
-					FirstCreatedTime = fileInfo.CreationTimeUtc;
-					ExactSize = fileInfo.Length;
+					await Task.Run(() =>
+					{
+						var fileInfo = new FileInfo(FullPath);
+						LastModifiedTime = fileInfo.LastWriteTimeUtc;
+						FirstCreatedTime = fileInfo.CreationTimeUtc;
+						ExactSize = fileInfo.Length;
+					});
 				}
 
-				// 更新字符串显示
-				LastModifiedTimeString = LastModifiedTime.ToString("yyyy-MM-dd HH:mm:ss");
-				FirstCreatedTimeString = FirstCreatedTime.ToString("yyyy-MM-dd HH:mm:ss");
-				VisualSize = FormatFileSize(ExactSize);
+				await _uiDispatcherQueue.EnqueueAsync(() =>
+				{
+					// 更新字符串显示
+					LastModifiedTimeString = LastModifiedTime.ToString("yyyy-MM-dd HH:mm:ss");
+					FirstCreatedTimeString = FirstCreatedTime.ToString("yyyy-MM-dd HH:mm:ss");
+					VisualSize = FormatFileSize(ExactSize);
+				});
 
 				Debug.WriteLine($"[BasicInfo] {FullPath} loaded: Size={ExactSize}, Modified={LastModifiedTimeString}");
 			}
@@ -123,27 +140,44 @@ namespace LRS.ViewModels
 				// 保持默认值，不影响排序
 			}
 		}
+		public async Task InitAsync(string fullPath, bool isDirectory)
+		{
+			if (_isInited) return;
+			_isInited = true;
 
-		// 异步加载图标（保留原有逻辑）
-		public async Task LoadIconAsync(bool isFolder, bool ifUseWin32API, string fullPath, DispatcherQueue dispatcherQueue)
+			await Task.Run(async () =>
+			{
+				await LoadBasicInfoAsync();
+				await LoadIconAsync(fullPath, isDirectory);
+			});
+			
+			if (IsDirectory)
+			{
+				await StartAsyncCount();
+			}
+		}	
+
+		public async Task LoadIconAsync(string fullPath, bool isDirectory)
 		{
 			try
 			{
 				if (IconProvider == null) return;
 
 				ImageSource? icon = null;
-				if (ifUseWin32API)
+				await Task.Run( async () =>
 				{
-					icon = await ((ShellIconHelper)IconProvider).GetIconAsync(fullPath, isFolder, dispatcherQueue, 32);
-				}
-				else
-				{
-					icon = await ((WindowsIconProvider)IconProvider).GetIconAsync(fullPath, isFolder, dispatcherQueue);
-				}
-
+					if (_configs.ifUsesWin32APIToGetIcon)
+					{
+						icon = await ((ShellIconHelper)IconProvider).GetIconAsync(fullPath, isDirectory, _uiDispatcherQueue, 32);
+					}
+					else
+					{
+						icon = await ((WindowsIconProvider)IconProvider).GetIconAsync(fullPath, isDirectory, _uiDispatcherQueue);
+					}
+				});
 				if (icon != null)
 				{
-					dispatcherQueue.TryEnqueue(() => Icon = icon);
+					_uiDispatcherQueue.TryEnqueue(() => Icon = icon);
 				}
 			}
 			catch (Exception ex)
@@ -235,44 +269,43 @@ namespace LRS.ViewModels
 			if (_isLoaded || !IsDirectory) return;
 			_isLoaded = true;
 
-			var subDirs = SafeGetDirs(FullPath);
-			var files = SafeGetFiles(FullPath);
+			var subDirs = await Task.Run(() => SafeGetDirs(FullPath));
+			var files = await Task.Run(() => SafeGetFiles(FullPath));
 
-			var tcs = new TaskCompletionSource<bool>();
-			_uiDispatcherQueue.TryEnqueue(() =>
+			var childTasks = subDirs.Select(dir => Task.Run(async () =>
 			{
-				try
-				{
-					Children.Clear();
-					foreach (var dir in subDirs)
-					{
-						Children.Add(new FileSystemNodeViewModel(dir, true, false, _configs, _uiDispatcherQueue));
-					}
-					foreach (var file in files)
-					{
-						Children.Add(new FileSystemNodeViewModel(file, false, false, _configs, _uiDispatcherQueue));
-					}
+				var node = new FileSystemNodeViewModel(dir, true, false, _configs, _uiDispatcherQueue, true);
+				await node.InitAsync(node.FullPath, true);
+				return node;
+			})).Concat(files.Select(file => Task.Run( async () =>
+			{
+				var node = new FileSystemNodeViewModel(file, false, false, _configs, _uiDispatcherQueue, true);
+				await node.InitAsync(node.FullPath, false);
+				return node;
+			})));
 
-					// 更新计数显示
-					var actualCount = Children.Count(c => !(c.IsPlaceholder));
-					ChildrenCountText = actualCount > 0 ? $" [{actualCount}]" : string.Empty;
-					tcs.SetResult(true);
-				}
-				catch (Exception ex)
+			var children = await Task.WhenAll(childTasks);
+
+			await _uiDispatcherQueue.EnqueueAsync(() =>
+			{
+				Children.Clear();
+				foreach (var item in children)
 				{
-					tcs.SetException(ex);
+					Children.Add(item);
 				}
+
+				var actualCount = Children.Count(c => !c.IsPlaceholder);
+				ChildrenCountText = actualCount > 0 ? $"[{actualCount}]" : "[?]";
 			});
-			await tcs.Task;
 		}
 
 		// 启动异步统计子项数量（用于显示括号）
-		private void StartAsyncCount()
+		private async Task StartAsyncCount()
 		{
 			if (_cachedChildrenCount.HasValue || _isCounting || !IsDirectory) return;
 			_isCounting = true;
 
-			Task.Run(async () =>
+			await Task.Run(async () =>
 			{
 				try
 				{
@@ -333,5 +366,14 @@ namespace LRS.ViewModels
 				}
 			}
 		}
+		//private bool IsRoot()
+		//{
+		//	if (FullPath == null) return true;
+		//	if (FullPath[FullPath.Length - 1] == '\\')
+		//	{
+		//		return true;
+		//	}
+		//	return false;
+		//}
 	}
 }

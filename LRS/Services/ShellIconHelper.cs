@@ -1,11 +1,234 @@
-﻿using LRS.Services;
-using Microsoft.Extensions.FileProviders;
-// Services/ShellIIconHelper.cs
+﻿//using Microsoft.UI.Dispatching;
+//using Microsoft.UI.Xaml.Media;
+//using Microsoft.UI.Xaml.Media.Imaging;
+//using System;
+//using System.Collections.Concurrent;
+//using System.Diagnostics;
+//using System.Drawing;
+//using System.Drawing.Imaging;
+//using System.IO;
+//using System.Runtime.InteropServices;
+//using System.Runtime.InteropServices.WindowsRuntime;
+//using System.Threading.Tasks;
+//using Windows.Storage.Streams;
+
+//namespace LRS.Services
+//{
+//	public class ShellIconHelper : IIconProvider
+//	{
+//		// 图标缓存：键格式为 "类型_尺寸"，类型包括 "_drive_", "_folder_", ".扩展名_"
+//		private static readonly ConcurrentDictionary<string, ImageSource> _iconCache = new();
+
+//		// P/Invoke 定义
+//		private const uint SHGFI_ICON = 0x100;
+//		private const uint SHGFI_LARGEICON = 0x0;
+//		private const uint SHGFI_SMALLICON = 0x1;
+//		private const uint SHGFI_USEFILEATTRIBUTES = 0x10;
+
+//		[DllImport("shell32.dll", CharSet = CharSet.Auto)]
+//		private static extern IntPtr SHGetFileInfo(string pszPath, uint dwFileAttributes, ref SHFILEINFO psfi, uint cbSizeFileInfo, uint uFlags);
+
+//		[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+//		private struct SHFILEINFO
+//		{
+//			public IntPtr hIcon;
+//			public int iIcon;
+//			public uint dwAttributes;
+//			[MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+//			public string szDisplayName;
+//			[MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)]
+//			public string szTypeName;
+//		}
+
+//		[DllImport("user32.dll", SetLastError = true)]
+//		private static extern bool DestroyIcon(IntPtr hIcon);
+
+//		/// <summary>
+//		/// 获取文件/文件夹的系统图标（异步，支持缓存）
+//		/// </summary>
+//		public async Task<ImageSource?> GetIconAsync(string path, bool isFolder, DispatcherQueue dispatcherQueue, uint size = 32)
+//		{
+//			if (string.IsNullOrEmpty(path))
+//				return null;
+
+//			bool useLargeIcon = size >= 32;
+//			string cacheKey = BuildCacheKey(path, isFolder, useLargeIcon);
+
+//			// 1. 尝试从缓存获取
+//			if (_iconCache.TryGetValue(cacheKey, out var cachedIcon))
+//				return cachedIcon;
+
+//			// 2. 缓存未命中，加载图标
+//			var icon = await LoadIconCoreAsync(path, isFolder, useLargeIcon, dispatcherQueue);
+//			if (icon != null)
+//			{
+//				_iconCache.TryAdd(cacheKey, icon);
+//			}
+//			return icon;
+//		}
+
+//		/// <summary>
+//		/// 构建缓存键
+//		/// </summary>
+//		private string BuildCacheKey(string path, bool isFolder, bool useLargeIcon)
+//		{
+//			string typeKey;
+//			if (isFolder)
+//			{
+//				// 判断是否为驱动器根目录（如 "C:\"）
+//				typeKey = IsDriveRoot(path) ? "_drive_" : "_folder_";
+//			}
+//			else
+//			{
+//				// 文件：使用扩展名
+//				string ext = Path.GetExtension(path).ToLowerInvariant();
+//				typeKey = string.IsNullOrEmpty(ext) ? "_noext_" : ext;
+//			}
+//			return $"{typeKey}_{(useLargeIcon ? "32" : "16")}";
+//		}
+
+//		/// <summary>
+//		/// 判断路径是否为驱动器根目录
+//		/// </summary>
+//		private static bool IsDriveRoot(string path)
+//		{
+//			if (string.IsNullOrEmpty(path)) return false;
+//			// 检查形如 "C:\" 或 "D:\" 等（长度=3 且格式为 盘符:反斜杠）
+//			return path.Length == 3 && path[1] == ':' && path[2] == '\\';
+//		}
+
+//		private async Task<ImageSource?> LoadIconCoreAsync(string path, bool isFolder, bool useLargeIcon, DispatcherQueue dispatcherQueue)
+//		{
+//			var shfi = new SHFILEINFO();
+//			uint flags = SHGFI_ICON | (useLargeIcon ? SHGFI_LARGEICON : SHGFI_SMALLICON);
+//			uint dwAttributes = 0;
+
+//			// 对于文件夹或无效路径，使用 USEFILEATTRIBUTES 避免实际访问
+//			if (isFolder || Directory.Exists(path) || !File.Exists(path))
+//			{
+//				flags |= SHGFI_USEFILEATTRIBUTES;
+//				if (isFolder)
+//					dwAttributes = 0x10; // FILE_ATTRIBUTE_DIRECTORY
+//			}
+
+//			IntPtr hIcon = SHGetFileInfo(path, dwAttributes, ref shfi, (uint)Marshal.SizeOf<SHFILEINFO>(), flags);
+//			if (shfi.hIcon == IntPtr.Zero)
+//				return null;
+
+//			try
+//			{
+//				// 在后台线程提取像素数据（避免阻塞 UI）
+//				var pixelData = await Task.Run(() =>
+//				{
+//					using (var icon = Icon.FromHandle(shfi.hIcon))
+//					{
+//						return ExtractIconPixelData(icon);
+//					}
+//				});
+
+//				if (pixelData == null)
+//					return null;
+
+//				// 在 UI 线程创建 WriteableBitmap 并填充数据
+//				var tcs = new TaskCompletionSource<ImageSource?>();
+//				dispatcherQueue.TryEnqueue(() =>
+//				{
+//					try
+//					{
+//						var bitmap = new WriteableBitmap(pixelData.Width, pixelData.Height);
+//						using (var stream = bitmap.PixelBuffer.AsStream())
+//						{
+//							stream.Write(pixelData.Pixels, 0, pixelData.Pixels.Length);
+//						}
+//						tcs.SetResult(bitmap);
+//					}
+//					catch (Exception ex)
+//					{
+//						Debug.WriteLine($"[ShellIconHelper] UI thread error: {ex.Message}");
+//						tcs.SetResult(null);
+//					}
+//				});
+
+//				return await tcs.Task;
+//			}
+//			catch (Exception ex)
+//			{
+//				Debug.WriteLine($"[ShellIconHelper] LoadIconCoreAsync error: {ex.Message}");
+//				return null;
+//			}
+//			finally
+//			{
+//				DestroyIcon(shfi.hIcon);
+//			}
+//		}
+
+//		/// <summary>
+//		/// 从 Icon 提取 BGRA 像素数据（在后台线程执行）
+//		/// </summary>
+//		private IconPixelData? ExtractIconPixelData(Icon icon)
+//		{
+//			using (var bitmap = icon.ToBitmap())
+//			{
+//				int width = bitmap.Width;
+//				int height = bitmap.Height;
+//				var bmpData = bitmap.LockBits(
+//					new System.Drawing.Rectangle(0, 0, width, height),
+//					ImageLockMode.ReadOnly,
+//					System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+
+//				try
+//				{
+//					int stride = bmpData.Stride;
+//					int bufferSize = stride * height;
+//					byte[] argbData = new byte[bufferSize];
+//					Marshal.Copy(bmpData.Scan0, argbData, 0, bufferSize);
+
+//					// 转换为 BGRA（WriteableBitmap 要求）
+//					byte[] bgraData = new byte[bufferSize];
+//					for (int i = 0; i < argbData.Length; i += 4)
+//					{
+//						bgraData[i] = argbData[i];     // B
+//						bgraData[i + 1] = argbData[i + 1]; // G
+//						bgraData[i + 2] = argbData[i + 2]; // R
+//						bgraData[i + 3] = argbData[i + 3]; // A
+//					}
+//					return new IconPixelData(width, height, bgraData);
+//				}
+//				finally
+//				{
+//					bitmap.UnlockBits(bmpData);
+//				}
+//			}
+//		}
+
+//		private class IconPixelData
+//		{
+//			public int Width { get; }
+//			public int Height { get; }
+//			public byte[] Pixels { get; } // BGRA 格式
+//			public IconPixelData(int width, int height, byte[] pixels)
+//			{
+//				Width = width;
+//				Height = height;
+//				Pixels = pixels;
+//			}
+//		}
+
+//		/// <summary>
+//		/// 清除图标缓存（例如在系统主题更改时调用）
+//		/// </summary>
+//		public static void ClearCache()
+//		{
+//			_iconCache.Clear();
+//		}
+//	}
+//}
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using System;
-using System.Diagnostics;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -19,6 +242,21 @@ namespace LRS.Services
 {
 	public class ShellIconHelper : IIconProvider
 	{
+		// 图标缓存：键格式见 BuildCacheKey
+		private static readonly ConcurrentDictionary<string, ImageSource> _iconCache = new();
+
+		// 定义需要特殊处理（图标不固定）的扩展名
+		private static readonly HashSet<string> SpecialExtensions = new(StringComparer.OrdinalIgnoreCase)
+		{
+			".exe",
+			".lnk",
+			".url",
+			".ico",
+			".msi",
+			".cpl",
+			".scr"
+		};
+
 		// P/Invoke 定义
 		private const uint SHGFI_ICON = 0x100;
 		private const uint SHGFI_LARGEICON = 0x0;
@@ -44,135 +282,147 @@ namespace LRS.Services
 		private static extern bool DestroyIcon(IntPtr hIcon);
 
 		/// <summary>
-		/// 获取文件/文件夹的系统图标（始终返回固定类型图标，不是内容缩略图）
+		/// 获取文件/文件夹的系统图标（异步，支持缓存）
 		/// </summary>
-		/// <param name="path">文件或文件夹路径</param>
-		/// <param name="isFolder">是否是文件夹（帮助API选择正确标志）</param>
-		/// <param name="dispatcherQueue">UI线程调度器</param>
-		/// <param name="useLargeIcon">是否使用大图标（默认true，32x32；false为16x16）</param>
-		/// <returns>ImageSource 或 null</returns>
 		public async Task<ImageSource?> GetIconAsync(string path, bool isFolder, DispatcherQueue dispatcherQueue, uint size = 32)
 		{
-			bool useLargeIcon = false;
-			if (size >= 32)
+			if (string.IsNullOrEmpty(path))
+				return null;
+
+			bool useLargeIcon = size >= 32;
+			string cacheKey = BuildCacheKey(path, isFolder, useLargeIcon);
+
+			// 1. 尝试从缓存获取
+			if (_iconCache.TryGetValue(cacheKey, out var cachedIcon))
+				return cachedIcon;
+
+			// 2. 缓存未命中，加载图标
+			var icon = await LoadIconCoreAsync(path, isFolder, useLargeIcon, dispatcherQueue);
+			if (icon != null)
 			{
-				useLargeIcon = true;
+				_iconCache.TryAdd(cacheKey, icon);
 			}
-			return await GetSystemIconAsync(path, isFolder, useLargeIcon, dispatcherQueue);
+			return icon;
 		}
 
-		private async Task<ImageSource?> GetSystemIconAsync(string path, bool isFolder, bool useLargeIcon, DispatcherQueue dispatcherQueue)
+		/// <summary>
+		/// 构建缓存键
+		/// </summary>
+		private string BuildCacheKey(string path, bool isFolder, bool useLargeIcon)
 		{
-			Debug.WriteLine($"[ShellIconHelper] GetSystemIconAsync called with path='{path}', isFolder={isFolder}, useLargeIcon={useLargeIcon}");
+			string key;
 
-			if (string.IsNullOrEmpty(path))
+			if (isFolder)
 			{
-				Debug.WriteLine("[ShellIconHelper] Path is null or empty, returning null.");
-				return null;
+				// 驱动器根目录单独缓存
+				if (IsDriveRoot(path))
+					key = $"_drive_{path}";
+				else
+					key = "_folder_";
+			}
+			else
+			{
+				string ext = Path.GetExtension(path).ToLowerInvariant();
+				// 特殊扩展名：使用完整路径作为键（确保每个文件独立）
+				if (SpecialExtensions.Contains(ext))
+				{
+					// 将路径转为小写（Windows 路径不区分大小写）
+					key = path.ToLowerInvariant();
+				}
+				else
+				{
+					key = string.IsNullOrEmpty(ext) ? "_noext_" : ext;
+				}
 			}
 
+			// 附加尺寸信息
+			return $"{key}_{(useLargeIcon ? "32" : "16")}";
+		}
+
+		/// <summary>
+		/// 判断路径是否为驱动器根目录
+		/// </summary>
+		private static bool IsDriveRoot(string path)
+		{
+			if (string.IsNullOrEmpty(path)) return false;
+			// 检查形如 "C:\" 或 "D:\" 等（长度=3 且格式为 盘符:反斜杠）
+			return path.Length == 3 && path[1] == ':' && path[2] == '\\';
+		}
+
+		private async Task<ImageSource?> LoadIconCoreAsync(string path, bool isFolder, bool useLargeIcon, DispatcherQueue dispatcherQueue)
+		{
 			var shfi = new SHFILEINFO();
 			uint flags = SHGFI_ICON | (useLargeIcon ? SHGFI_LARGEICON : SHGFI_SMALLICON);
 			uint dwAttributes = 0;
 
-			// 对于文件夹或无效路径，使用 USEFILEATTRIBUTES 避免实际访问文件
+			// 对于文件夹或无效路径，使用 USEFILEATTRIBUTES 避免实际访问
 			if (isFolder || Directory.Exists(path) || !File.Exists(path))
 			{
 				flags |= SHGFI_USEFILEATTRIBUTES;
 				if (isFolder)
-				{
 					dwAttributes = 0x10; // FILE_ATTRIBUTE_DIRECTORY
-					Debug.WriteLine("[ShellIconHelper] isFolder = true, set dwAttributes = 0x10");
-				}
-				Debug.WriteLine($"[ShellIconHelper] Using SHGFI_USEFILEATTRIBUTES (flags = 0x{flags:X})");
-			}
-			else
-			{
-				Debug.WriteLine("[ShellIconHelper] Not using USEFILEATTRIBUTES, will attempt to access actual file.");
 			}
 
-			Debug.WriteLine($"[ShellIconHelper] Calling SHGetFileInfo with path='{path}', dwAttributes=0x{dwAttributes:X}, flags=0x{flags:X}");
-
-			// 获取图标句柄
 			IntPtr hIcon = SHGetFileInfo(path, dwAttributes, ref shfi, (uint)Marshal.SizeOf<SHFILEINFO>(), flags);
-			int lastError = Marshal.GetLastWin32Error();
-
-			Debug.WriteLine($"[ShellIconHelper] SHGetFileInfo returned hIcon = 0x{hIcon.ToInt64():X}, lastError = {lastError} (0x{lastError:X})");
-			Debug.WriteLine($"[ShellIconHelper] SHFILEINFO.hIcon = 0x{shfi.hIcon.ToInt64():X}, iIcon = {shfi.iIcon}, dwAttributes = 0x{shfi.dwAttributes:X}");
-				
 			if (shfi.hIcon == IntPtr.Zero)
-			{
-				Debug.WriteLine($"[ShellIconHelper] shfi.hIcon is zero, returning null. (Possible causes: missing System.Drawing.Common, or SHGetFileInfo failed)");
 				return null;
-			}
 
 			try
 			{
-				Debug.WriteLine("[ShellIconHelper] Converting HICON to Icon and Bitmap...");
-				// 将 HICON 转为 Bitmap 并保存到内存流
-				using (var icon = Icon.FromHandle(shfi.hIcon))
+				// 在后台线程提取像素数据（避免阻塞 UI）
+				var pixelData = await Task.Run(() =>
 				{
-					Debug.WriteLine($"[ShellIconHelper] Icon created, Size = {icon.Width}x{icon.Height}");
-					using (var bitmap = icon.ToBitmap())
+					using (var icon = Icon.FromHandle(shfi.hIcon))
 					{
-						Debug.WriteLine($"[ShellIconHelper] Bitmap created, Size = {bitmap.Width}x{bitmap.Height}, PixelFormat = {bitmap.PixelFormat}");
-						var stream = new InMemoryRandomAccessStream();
-						bitmap.Save(stream.AsStream(), ImageFormat.Png);
-						Debug.WriteLine($"[ShellIconHelper] Bitmap saved as PNG, stream length = {stream.Size}");
-						stream.Seek(0);
-
-						var tcs = new TaskCompletionSource<ImageSource?>();
-						dispatcherQueue.TryEnqueue(async () =>
-						{
-							try
-							{
-								//Debug.WriteLine("[ShellIconHelper] UI thread: Creating BitmapImage...");
-								//var bitmapImage = new BitmapImage();
-								//await bitmapImage.SetSourceAsync(stream);
-								//Debug.WriteLine("[ShellIconHelper] BitmapImage.SetSourceAsync completed successfully.");
-								//tcs.SetResult(bitmapImage);
-								var imageSource = ConvertIconToWriteableBitmap(icon);
-								tcs.SetResult(imageSource);
-							}
-							catch (Exception ex)
-							{
-								Debug.WriteLine($"[ShellIconHelper] Exception in UI thread: {ex.Message}\n{ex.StackTrace}");
-								tcs.SetResult(null);
-							}
-							finally
-							{
-								stream.Dispose();
-							}
-						});
-
-						var result = await tcs.Task;
-						Debug.WriteLine($"[ShellIconHelper] Returning ImageSource: {(result == null ? "null" : "non-null")}");
-						return result;
+						return ExtractIconPixelData(icon);
 					}
-				}
+				});
+
+				if (pixelData == null)
+					return null;
+
+				// 在 UI 线程创建 WriteableBitmap 并填充数据
+				var tcs = new TaskCompletionSource<ImageSource?>();
+				dispatcherQueue.TryEnqueue(() =>
+				{
+					try
+					{
+						var bitmap = new WriteableBitmap(pixelData.Width, pixelData.Height);
+						using (var stream = bitmap.PixelBuffer.AsStream())
+						{
+							stream.Write(pixelData.Pixels, 0, pixelData.Pixels.Length);
+						}
+						tcs.SetResult(bitmap);
+					}
+					catch (Exception ex)
+					{
+						Debug.WriteLine($"[ShellIconHelper] UI thread error: {ex.Message}");
+						tcs.SetResult(null);
+					}
+				});
+
+				return await tcs.Task;
 			}
 			catch (Exception ex)
 			{
-				Debug.WriteLine($"[ShellIconHelper] Exception during bitmap conversion: {ex.Message}\n{ex.StackTrace}");
+				Debug.WriteLine($"[ShellIconHelper] LoadIconCoreAsync error: {ex.Message}");
 				return null;
 			}
 			finally
 			{
-				if (shfi.hIcon != IntPtr.Zero)
-				{
-					bool destroyed = DestroyIcon(shfi.hIcon);
-					Debug.WriteLine($"[ShellIconHelper] DestroyIcon called, result = {destroyed}");
-				}
+				DestroyIcon(shfi.hIcon);
 			}
 		}
-		private ImageSource? ConvertIconToWriteableBitmap(Icon icon)
+
+		/// <summary>
+		/// 从 Icon 提取 BGRA 像素数据（在后台线程执行）
+		/// </summary>
+		private IconPixelData? ExtractIconPixelData(Icon icon)
 		{
-			using(var bitmap = icon.ToBitmap())
+			using (var bitmap = icon.ToBitmap())
 			{
 				int width = bitmap.Width;
 				int height = bitmap.Height;
-				var writeableBitmap = new WriteableBitmap(width, height);
-
 				var bmpData = bitmap.LockBits(
 					new System.Drawing.Rectangle(0, 0, width, height),
 					ImageLockMode.ReadOnly,
@@ -180,41 +430,48 @@ namespace LRS.Services
 
 				try
 				{
-					// 计算缓冲区大小
 					int stride = bmpData.Stride;
 					int bufferSize = stride * height;
-					byte[] pixels = new byte[bufferSize];
-					Marshal.Copy(bmpData.Scan0, pixels, 0, bufferSize);
+					byte[] argbData = new byte[bufferSize];
+					Marshal.Copy(bmpData.Scan0, argbData, 0, bufferSize);
 
-					// WriteableBitmap 的像素格式是 BGRA，而 bmpData 是 ARGB，需要转换
-					using (var stream = writeableBitmap.PixelBuffer.AsStream())
+					// 转换为 BGRA（WriteableBitmap 要求）
+					byte[] bgraData = new byte[bufferSize];
+					for (int i = 0; i < argbData.Length; i += 4)
 					{
-						for (int y = 0; y < height; y++)
-						{
-							int rowStart = y * stride;
-							for (int x = 0; x < width; x++)
-							{
-								int pixelStart = rowStart + x * 4;
-								byte b = pixels[pixelStart + 0]; // B
-								byte g = pixels[pixelStart + 1]; // G
-								byte r = pixels[pixelStart + 2]; // R
-								byte a = pixels[pixelStart + 3]; // A
-
-								stream.WriteByte(b);
-								stream.WriteByte(g);
-								stream.WriteByte(r);
-								stream.WriteByte(a);
-							}
-						}
+						bgraData[i] = argbData[i];     // B
+						bgraData[i + 1] = argbData[i + 1]; // G
+						bgraData[i + 2] = argbData[i + 2]; // R
+						bgraData[i + 3] = argbData[i + 3]; // A
 					}
+					return new IconPixelData(width, height, bgraData);
 				}
 				finally
 				{
 					bitmap.UnlockBits(bmpData);
 				}
-
-				return writeableBitmap;
 			}
+		}
+
+		private class IconPixelData
+		{
+			public int Width { get; }
+			public int Height { get; }
+			public byte[] Pixels { get; } // BGRA 格式
+			public IconPixelData(int width, int height, byte[] pixels)
+			{
+				Width = width;
+				Height = height;
+				Pixels = pixels;
+			}
+		}
+
+		/// <summary>
+		/// 清除图标缓存（例如在系统主题更改时调用）
+		/// </summary>
+		public static void ClearCache()
+		{
+			_iconCache.Clear();
 		}
 	}
 }
