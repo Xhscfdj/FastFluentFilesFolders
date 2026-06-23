@@ -29,6 +29,7 @@ namespace LRS.Views
             InitializeComponent();
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(AppTitleBar);
+            
         }
     }
 }

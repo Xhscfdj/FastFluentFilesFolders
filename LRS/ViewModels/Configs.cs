@@ -23,6 +23,8 @@ namespace LRS.ViewModels
             set => _middleFilesHeight = value;
         }
         public bool ifUsesWin32APIToGetIcon;
+        [ObservableProperty] private int _iconParallelLoadingCount = 30;
+		[ObservableProperty] private string _homePageFullPath = "C:\\";
         // 其他
         public Configs()
         {
@@ -40,7 +42,8 @@ namespace LRS.ViewModels
         {
             MiddleFilesHeight = configuration.GetValue<int>("Appearance:MiddleFilesHeight");
             ifUsesWin32APIToGetIcon = configuration.GetValue<bool>("Advanced:ifUsesWin32APIToGetIcon");
+            HomePageFullPath = configuration["General:HomePageFullPath"] ?? "C:\\";
+            IconParallelLoadingCount = configuration.GetValue<int>("General:IconParallelLoadingCount");
         }
-
     }
 }

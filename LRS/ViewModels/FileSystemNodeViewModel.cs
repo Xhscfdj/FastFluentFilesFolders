@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.WinUI;
+using Isg.Collections;
 using LRS.Services;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml.Media;
@@ -9,8 +10,8 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
-using Isg.Collections;
 
 namespace LRS.ViewModels
 {
@@ -201,12 +202,12 @@ namespace LRS.ViewModels
 		}
 
 		// 安全枚举方法（已有）
-		public static List<string> SafeGetFiles(string path)
+		public static List<string> SafeGetFiles(string Path)
 		{
 			var accessible = new List<string>();
 			try
 			{
-				var allFiles = Directory.GetFiles(path);
+				var allFiles = Directory.GetFiles(Path);
 				foreach (string file in allFiles)
 				{
 					if (IsFileAccessible(file))
@@ -215,17 +216,17 @@ namespace LRS.ViewModels
 			}
 			catch (Exception ex)
 			{
-				Debug.WriteLine($"[SafeGetFiles] {path}: {ex.Message}");
+				Debug.WriteLine($"[SafeGetFiles] {Path}: {ex.Message}");
 			}
 			return accessible;
 		}
 
-		public static List<string> SafeGetDirs(string path)
+		public static List<string> SafeGetDirs(string Path)
 		{
 			var accessible = new List<string>();
 			try
 			{
-				var allSubDirs = Directory.GetDirectories(path);
+				var allSubDirs = Directory.GetDirectories(Path);
 				foreach (string subDir in allSubDirs)
 				{
 					if (IsDirectoryAccessible(subDir))
@@ -234,16 +235,16 @@ namespace LRS.ViewModels
 			}
 			catch (Exception ex)
 			{
-				Debug.WriteLine($"[SafeGetDirs] {path}: {ex.Message}");
+				Debug.WriteLine($"[SafeGetDirs] {Path}: {ex.Message}");
 			}
 			return accessible;
 		}
 
-		public static bool IsDirectoryAccessible(string path)
+		public static bool IsDirectoryAccessible(string Path)
 		{
 			try
 			{
-				return Directory.Exists(path);
+				return Directory.Exists(Path);
 			}
 			catch
 			{
@@ -251,11 +252,11 @@ namespace LRS.ViewModels
 			}
 		}
 
-		public static bool IsFileAccessible(string path)
+		public static bool IsFileAccessible(string Path)
 		{
 			try
 			{
-				return File.Exists(path);
+				return File.Exists(Path);
 			}
 			catch
 			{

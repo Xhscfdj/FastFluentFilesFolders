@@ -13,6 +13,7 @@ using Microsoft.UI.Xaml.Navigation;
 using Microsoft.UI.Xaml.Shapes;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
@@ -58,7 +59,12 @@ namespace LRS
 				services.AddSingleton<IIconProvider, WindowsIconProvider>();
 			}).Build();
             Services = _host.Services;
-        }
+			this.UnhandledException += (s, e) =>
+			{
+				Debug.WriteLine($"未处理异常: {e.Exception}");
+				e.Handled = true; // 防止立即崩溃，方便调试
+			};
+		}
 
         /// <summary>
         /// Invoked when the application is launched.

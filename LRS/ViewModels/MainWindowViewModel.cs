@@ -3,16 +3,23 @@
 //using System.Linq;
 //using System.Text;
 //using System.Threading.Tasks;
+using BetterBreadcrumbBar.Control;
+using BetterBreadcrumbBar.Control.Providers;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI;
 using LRS.Services;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Input;
+using System.Runtime.InteropServices;
 
 namespace LRS.ViewModels
 {
@@ -34,12 +41,17 @@ namespace LRS.ViewModels
 				Debug.WriteLine($"[DebugButton]Item: {item.Name}, Type is {item.NodeTypeName}");
 			}
 		}
+		[ObservableProperty] private IPathProvider _pathProvider = new FileSystemPathProvider();
 		[ObservableProperty] private string _testString = "hasn't changed";
 		// 文件系统相关的属性和方法
 		private readonly IIconProvider _iconProvider;
-		[ObservableProperty] private string[] _pathsForBreadcrumbBar = ["C:\\"];
+		//[ObservableProperty] private string[] _PathsForBreadcrumbBar = ["C:\\"];
 		[ObservableProperty] private ObservableCollection<FileSystemNodeViewModel> _currentFolderContent = new();
+		[ObservableProperty] private string _currentBreadcrumbPath = "C:\\";
 		[ObservableProperty] private Configs _appConfigs = new();
+		[ObservableProperty] private bool _canGoBack;
+		private SemaphoreSlim IconLoadSemaphore = new(30, 30); // 最多10个并发
+		public Stack<List<PathNode>> history = new();
 		private ObservableCollection<FileSystemNodeViewModel> _rootDirectories = new();
 		public ObservableCollection<FileSystemNodeViewModel> RootDirectories
 		{
@@ -64,6 +76,7 @@ namespace LRS.ViewModels
 				CurrentFolderContent.Clear();
 			}
 		}
+
 		public async Task UpdateCurrentFolderContentAsync(FileSystemNodeViewModel? folder)
 		{
 			if (folder == null)
@@ -88,9 +101,11 @@ namespace LRS.ViewModels
 					if (!item.IsPlaceholder)
 						CurrentFolderContent.Add(item);
 				}
-				PathsForBreadcrumbBar = folder.FullPath.Split();
-				string[] newArray = new string[PathsForBreadcrumbBar.Length - 1];
-				Array.Copy(PathsForBreadcrumbBar, 0, newArray, 0, PathsForBreadcrumbBar.Length - 1);
+				CurrentBreadcrumbPath = folder.FullPath;
+				// 以下代码原本用来切掉PathsForBreadcrumbBar的最后一项，现在用不到，遂注释
+				//PathsForBreadcrumbBar = folder.FullPath.Split();
+				//string[] newArray = new string[PathsForBreadcrumbBar.Length - 1];
+				//Array.Copy(PathsForBreadcrumbBar, 0, newArray, 0, PathsForBreadcrumbBar.Length - 1);
 			});
 		}
 
@@ -98,7 +113,10 @@ namespace LRS.ViewModels
 		{
 			_uiDispatcherQueue = uiDispatcherQueue;
 			_iconProvider = iconProvider;
-			// 在构造函数中，添加测试数据
+			NavigateToPathCommand = new RelayCommand<string>(NavigateToPath);
+			NavigateToSubFolderCommand = new RelayCommand<string>(NavigateToPath);
+			if (configs.IconParallelLoadingCount != 0) IconLoadSemaphore = new(configs.IconParallelLoadingCount, configs.IconParallelLoadingCount);
+			//在构造函数中，添加测试数据
 			//CurrentFolderContent.Add(new FileNodeViewModel(@"C:\test.txt", _iconProvider, _appConfigs, _uiDispatcherQueue));
 			//CurrentFolderContent.Add(new FileSystemNodeViewModel(@"C:\testfolder", _iconProvider, _appConfigs, _uiDispatcherQueue));
 			foreach (var drive in DriveInfo.GetDrives())
@@ -108,7 +126,7 @@ namespace LRS.ViewModels
 					RootDirectories.Add(new FileSystemNodeViewModel(drive.RootDirectory.FullName, true, false, configs, uiDispatcherQueue, false));
 				}
 			}
-
+			SelectedFolder = RootDirectories.FirstOrDefault();
 		}
 		public void OpenItem(FileSystemNodeViewModel item)
 		{
@@ -146,112 +164,51 @@ namespace LRS.ViewModels
 					UseShellExecute = true
 				});
 			}
+			catch(Win32Exception ex) when (ex.NativeErrorCode == 1155)
+			{
+				IntPtr result = ShellExcute
+			}
 			catch (Exception ex)
 			{
 				throw new InvalidOperationException($"无法打开文件: {ex.Message}", ex);
 			}
 		}
-	
-	//// 排序相关
-	//[ObservableProperty] private string _sortPropertyName = "Name"; // 默认按名称排序
+		public ICommand NavigateToPathCommand { get; }  // 用于文本导航
+		public ICommand NavigateToSubFolderCommand { get; } // 用于子菜单导航
 
-	//[ObservableProperty] private bool _sortAscending = true;
-
-	//[RelayCommand]
-	//private void SortItems(string propertyName)
-	//{
-	//	// 如果点击同一列，切换升序/降序；否则按该列升序
-	//	if (propertyName == SortPropertyName)
-	//	{
-	//		SortAscending = !SortAscending;
-	//	}
-	//	else
-	//	{
-	//		SortPropertyName = propertyName;
-	//		SortAscending = true;
-	//	}
-
-	//	ApplySort();
-	//}
-
-	//private void ApplySort()
-	//{
-	//	if (CurrentFolderContent == null || CurrentFolderContent.Count == 0)
-	//		return;
-
-	//	var sorted = CurrentFolderContent.ToList(); // 复制一份
-
-	//	// 根据属性名和排序方向排序
-	//	Func<FileSystemNodeViewModel, object> keySelector = propertyName switch
-	//	{
-	//		"Name" => item => item.Name,
-	//		"LastModifiedTime" => item => item.LastModifiedTime,
-	//		"FirstCreatedTime" => item => item.FirstCreatedTime,
-	//		"ExactSize" => item => item.ExactSize,
-	//		_ => item => item.Name
-	//	};
-
-	//	if (SortAscending)
-	//		sorted = sorted.OrderBy(keySelector).ToList();
-	//	else
-	//		sorted = sorted.OrderByDescending(keySelector).ToList();
-
-	//	// 重新创建 ObservableCollection 并赋值（触发 PropertyChanged）
-	//	CurrentFolderContent = new ObservableCollection<FileSystemNodeViewModel>(sorted);
-	//}
-}
-}
-
-/* public async Task LoadFolderContentAsync(FileSystemNodeViewModel folder)
-{
-	Debug.WriteLine($"----Is UI thread? {_uiDispatcherQueue.HasThreadAccess}");
-	Debug.WriteLine($"LoadFolderContentAsync: folder = {folder?.FullPath}");
-	if (folder == null)
-	{
-		Debug.WriteLine("Selected folder is null.");
-		return;
-	}
-	var tcs = new TaskCompletionSource<bool>();
-	TestString = "Changed outside tryEnqueue";
-	Debug.WriteLine($"Before TryEnqueue: CurrentFolderContent hash = {CurrentFolderContent.GetHashCode()}");
-
-	Debug.WriteLine($"\nInside TryEnqueue: Is UI thread? {_uiDispatcherQueue.HasThreadAccess}\n");
-	Debug.WriteLine($"Inside TryEnqueue: CurrentFolderContent hash = {CurrentFolderContent.GetHashCode()}");
-	Debug.WriteLine($"Loading folder: {folder.FullPath}");
-	TestString = "changed! HU!!!!!!";
-	Debug.WriteLine($"Before Clear: _CurrentFolderContent == CurrentFolderContent? {ReferenceEquals(_CurrentFolderContent, CurrentFolderContent)}");
-	CurrentFolderContent.Clear();
-	var testItem = new FileNodeViewModel(@"C:\test.txt", _iconProvider, _appConfigs, _uiDispatcherQueue);
-	Debug.WriteLine($"LoadFolderContentAsync: Cleared CurrentFolderContent");
-	Debug.WriteLine($"folder.IsLoaded = {folder.IsLoaded}, folder.Children.Count = {folder.Children.Count}");
-	if (!folder.IsLoaded && folder.Children.Count == 1)
-	{
-		Debug.WriteLine($"Folder '{folder.FullPath}' is not loaded. Loading children...");
-		await folder.LoadChildrenAsync();
-		Debug.WriteLine($"After LoadChildrenAsync: folder.Children.Count = {folder.Children.Count}");
-	}
-	else
-	{
-		Debug.WriteLine("Skipping LoadChildrenAsync (already loaded or no placeholder)");
-	}
-
-	int added = 0;
-
-	foreach (var item in folder.Children)
-	{
-		if (!(item is PlaceholderNodeViewModel))
+		private void NavigateToPath(string path)
 		{
-			CurrentFolderContent.Add(item);
-			added++;
-			Debug.WriteLine($"Added:{item.Name} Type:{item.GetType().Name}");
-			Debug.WriteLine($"[MainWindowViewModel.LoadFolderContentAsync] CurrentFolderContent added item: {item.Name}");
+			// 根据路径查找对应的 FileSystemNodeViewModel 并设置为 SelectedFolder
+			var target = FindNodeByPath(path);
+			if (target != null)
+				SelectedFolder = target;
+		}
+		public FileSystemNodeViewModel? FindNodeByPath(string fullPath)
+		{
+			foreach (var root in RootDirectories)
+			{
+				var result = FindNodeRecursive(root, fullPath);
+				if (result != null)
+					return result;
+			}
+			return null;
+		}
+
+		public static FileSystemNodeViewModel? FindNodeRecursive(FileSystemNodeViewModel node, string fullPath)
+		{
+			if (string.Equals(node.FullPath, fullPath, StringComparison.OrdinalIgnoreCase))
+				return node;
+
+			if (node.IsDirectory && node.IsLoaded)
+			{
+				foreach (var child in node.Children)
+				{
+					var result = FindNodeRecursive(child, fullPath);
+					if (result != null)
+						return result;
+				}
+			}
+			return null;
 		}
 	}
-	Debug.WriteLine($"AFTER Clear: _CurrentFolderContent == CurrentFolderContent? {ReferenceEquals(_CurrentFolderContent, CurrentFolderContent)}");
-	OnPropertyChanged(nameof(CurrentFolderContent));
-	Debug.WriteLine($"Total added: {added}, CurrentFolderContent.Count = {CurrentFolderContent.Count}");
-	CurrentFolderContent = CurrentFolderContent;
-		//tcs.SetResult(true);
-
-	//await tcs.Task;
-} */
+}

@@ -8,18 +8,29 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
 	xmlns:BBB="using:BetterBreadcrumbBar.Control"
 	xmlns:vm="using:LRS.ViewModels"
+	xmlns:services="using:LRS.Services"
+	xmlns:LRSCtrls="using:LRS.UserControls"
 	d:DataContext="{d:DesignInstance Type=vm:MainWindowViewModel}"
     mc:Ignorable="d">
 
-    <Grid>
-		<BBB:BetterBreadcrumbBar    
-			x:Name="MyBreadcrumb"
-            PathProvider="{Binding PathsForBreadcrumbBar}"
+	<Grid>
+		<!--<BBB:BetterBreadcrumbBar    
+			x:Name="BBB"
+            PathProvider="{Binding FileSystemPathProvider}"
             ShowLastSegmentChevron="True"
             ShowBackButton="True"
             ShowUpButton="True"
             ShowHomeButton="True"
-            CanGoBack="True"
-/>
-    </Grid>
+			Language="zh-CN"
+			UpButtonTooltip=""
+			HomeRequested="BBB_HomeRequested"
+			BackRequested="BBB_BackRequested"
+			NodeSelected="FsBreadcrumb_NodeSelected"
+            CanGoBack="True">
+		</BBB:BetterBreadcrumbBar>-->
+		<LRSCtrls:LRSBreadcrumb CurrentPath="{Binding SelectedFolder.FullPath, Mode=OneWay}"
+                        NavigateCommand="{Binding NavigateToPathCommand}"
+                        NavigateSubCommand="{Binding NavigateToSubFolderCommand}">
+		</LRSCtrls:LRSBreadcrumb>
+	</Grid>
 </Page>

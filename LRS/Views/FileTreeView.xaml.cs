@@ -67,14 +67,14 @@ namespace LRS.Views
 					// 调用 ViewModel 的更新方法
 					var vm = DataContext as MainWindowViewModel;
 					vm?.SelectedFolder = folder;
-					vm?.UpdateCurrentFolderContentAsync(folder);
+					//vm?.UpdateCurrentFolderContentAsync(folder);
 				}
-				else if (selectedItem is FileSystemNodeViewModel)
+				else if (!selectedItem.IsDirectory)
 				{
 					Debug.WriteLine("[TreeView_SelectionChanged] Selected item is not a folder. Setting SelectedFolder to null.");
 					// 可选：清空或显示文件信息，这里选择清空
-					var vm = DataContext as MainWindowViewModel;
-					vm?.UpdateCurrentFolderContentAsync(null);
+					//var vm = DataContext as MainWindowViewModel;
+					//vm?.UpdateCurrentFolderContentAsync(null);
 				}
 			});
 		}

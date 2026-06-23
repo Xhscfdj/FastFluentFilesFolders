@@ -16,6 +16,7 @@
     <Grid>
         <Grid.RowDefinitions>
 			<RowDefinition Height="Auto" />
+			<RowDefinition Height="Auto" />
 			<RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
@@ -30,9 +31,10 @@
 				<FontIconSource Glyph="&#xE838;"/>
             </TitleBar.IconSource>
         </TitleBar>
-        <views:FileTreeView Grid.Row="1" Grid.Column="0" />
-		<CTKTCtrls:GridSplitter Grid.Column="1" Grid.RowSpan="2"/>
-		<views:MiddleFilesView Grid.Row="1" Grid.Column="2"/>
+		<views:TopView Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" MinHeight="100"/>
+		<views:FileTreeView Grid.Row="2" Grid.Column="0" />
+		<CTKTCtrls:GridSplitter Grid.Row="1" Grid.Column="1" Grid.RowSpan="2"/>
+		<views:MiddleFilesView Grid.Row="2" Grid.Column="2"/>
     </Grid>
 
 </Window>

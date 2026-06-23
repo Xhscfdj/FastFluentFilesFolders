@@ -89,15 +89,15 @@ namespace LRS.Services
 		/// <summary>
 		/// 
 		/// </summary>
-		/// <param name="path"></param>
+		/// <param name="Path"></param>
 		/// <param name="size"></param>
 		/// <returns></returns>
-		public async Task<ImageSource>? GetIconAsync(string path, bool isFolder, Microsoft.UI.Dispatching.DispatcherQueue dispatcherQueue, uint size = 32)
+		public async Task<ImageSource>? GetIconAsync(string Path, bool isFolder, Microsoft.UI.Dispatching.DispatcherQueue dispatcherQueue, uint size = 32)
 		{
-			if (isFolder && Directory.Exists(path))
-				return await GetFolderIconAsync(path, dispatcherQueue, size);
+			if (isFolder && Directory.Exists(Path))
+				return await GetFolderIconAsync(Path, dispatcherQueue, size);
 			else
-				return await GetFileIconAsync(path, dispatcherQueue, size);
+				return await GetFileIconAsync(Path, dispatcherQueue, size);
 		}
 		//    /// <summary>
 		//    /// 获取文件对应的系统图标

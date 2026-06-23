@@ -3,6 +3,12 @@
     "MiddleFilesHeight": 30
   },
   "Advanced": {
-    "ifUsesWin32APIToGetIcon" : true
+    "ifUsesWin32APIToGetIcon": true
+  },
+  "General": {
+    "HomePageFullPath": "C:\\"
+  },
+  "Performance": {
+    "IconParallelLoadingCount": 30
   }
 }
