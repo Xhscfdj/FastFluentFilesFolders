@@ -1,14 +1,6 @@
 ﻿{
-  "Appearance": {
-    "MiddleFilesHeight": 30
-  },
-  "Advanced": {
-    "ifUsesWin32APIToGetIcon": true
-  },
-  "General": {
-    "HomePageFullPath": "C:\\"
-  },
-  "Performance": {
-    "IconParallelLoadingCount": 30
+  "App": {
+    "Inited": false,
+    "Mode": "Debug"
   }
 }

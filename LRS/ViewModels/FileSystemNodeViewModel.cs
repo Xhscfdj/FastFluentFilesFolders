@@ -31,7 +31,7 @@ namespace LRS.ViewModels
 		[ObservableProperty] private bool _isDirectory = true;
 		[ObservableProperty] private string _extension = string.Empty;
 		[ObservableProperty] private ImageSource? _icon;
-		[ObservableProperty] private IIconProvider _iconProvider;
+		[ObservableProperty] private MainIconProvider _iconProvider;
 		[ObservableProperty] private long _exactSize = 0;
 		[ObservableProperty] private string _visualSize = "0B";
 		[ObservableProperty] private DateTime _lastModifiedTime = DateTime.MinValue;
@@ -63,8 +63,8 @@ namespace LRS.ViewModels
 			if (configs != null)
 			{
 				_configs = configs;
-				IconProvider = configs.ifUsesWin32APIToGetIcon ? new ShellIconHelper() : new WindowsIconProvider();
 			}
+			_iconProvider = new MainIconProvider(configs);
 			FullPath = fullPath;
 			IsDirectory = isDirectory;
 			// 设置名称和扩展名
@@ -149,7 +149,7 @@ namespace LRS.ViewModels
 			await Task.Run(async () =>
 			{
 				await LoadBasicInfoAsync();
-				await LoadIconAsync(fullPath, isDirectory);
+				_ = LoadIconAsync(fullPath, isDirectory);
 			});
 			
 			if (IsDirectory)
@@ -163,18 +163,12 @@ namespace LRS.ViewModels
 			try
 			{
 				if (IconProvider == null) return;
-
+				
 				ImageSource? icon = null;
 				await Task.Run( async () =>
 				{
-					if (_configs.ifUsesWin32APIToGetIcon)
-					{
-						icon = await ((ShellIconHelper)IconProvider).GetIconAsync(fullPath, isDirectory, _uiDispatcherQueue, 32);
-					}
-					else
-					{
-						icon = await ((WindowsIconProvider)IconProvider).GetIconAsync(fullPath, isDirectory, _uiDispatcherQueue);
-					}
+					var task = IconProvider.GetIconAsync(fullPath, isDirectory, _uiDispatcherQueue, 32);
+					if (task != null) icon = await task;
 				});
 				if (icon != null)
 				{
@@ -275,10 +269,12 @@ namespace LRS.ViewModels
 
 			var childTasks = subDirs.Select(dir => Task.Run(async () =>
 			{
+				//if (App.SharedViewModel.AppConfigs.IfLimitIconLoadingConcurrency)
+				//	await App.SharedViewModel.IconLoadSemaphore.WaitAsync();
 				var node = new FileSystemNodeViewModel(dir, true, false, _configs, _uiDispatcherQueue, true);
 				await node.InitAsync(node.FullPath, true);
 				return node;
-			})).Concat(files.Select(file => Task.Run( async () =>
+			})).Concat(files.Select(file => Task.Run(async () =>
 			{
 				var node = new FileSystemNodeViewModel(file, false, false, _configs, _uiDispatcherQueue, true);
 				await node.InitAsync(node.FullPath, false);

@@ -24,12 +24,12 @@ namespace LRS.Services
 		private static readonly HashSet<string> SpecialExtensions = new(StringComparer.OrdinalIgnoreCase)
 		{
 			".exe",
-			//".lnk",
-			//".url",
-			//".ico",
-			//".msi",
-			//".cpl",
-			//".scr"
+			".lnk",
+			".url",
+			".ico",
+			".msi",
+			".cpl",
+			".scr"
 		};
 
 		// P/Invoke 定义
@@ -59,20 +59,22 @@ namespace LRS.Services
 		/// <summary>
 		/// 获取文件/文件夹的系统图标（异步，支持缓存）
 		/// </summary>
-		public async Task<ImageSource?> GetIconAsync(string Path, bool isFolder, DispatcherQueue dispatcherQueue, uint size = 32)
+		public async Task<ImageSource?> GetIconAsync(string fullPath, bool isFolder, DispatcherQueue dispatcherQueue, uint size = 32)
 		{
-			if (string.IsNullOrEmpty(Path))
+			if (string.IsNullOrEmpty(fullPath))
 				return null;
 			size = 16;
 			bool useLargeIcon = size >= 32;
-			string cacheKey = BuildCacheKey(Path, isFolder, useLargeIcon);
+			string cacheKey = BuildCacheKey(fullPath, isFolder, useLargeIcon);
+			if (IsSpecialFolder(fullPath))
+				
 
 			// 1. 尝试从缓存获取
 			if (_iconCache.TryGetValue(cacheKey, out var cachedIcon))
 				return cachedIcon;
 
 			// 2. 缓存未命中，加载图标
-			var icon = await LoadIconCoreAsync(Path, isFolder, useLargeIcon, dispatcherQueue);
+			var icon = await LoadIconCoreAsync(fullPath, isFolder, useLargeIcon, dispatcherQueue);
 			if (icon != null)
 			{
 				_iconCache.TryAdd(cacheKey, icon);
@@ -83,7 +85,7 @@ namespace LRS.Services
 		/// <summary>
 		/// 构建缓存键
 		/// </summary>
-		private string BuildCacheKey(string fullPath, bool isFolder, bool useLargeIcon)
+		private static string BuildCacheKey(string fullPath, bool isFolder, bool useLargeIcon)
 		{
 			string key;
 
@@ -247,6 +249,20 @@ namespace LRS.Services
 		public static void ClearCache()
 		{
 			_iconCache.Clear();
+		}
+		public static bool IsSpecialFolder(string path)
+		{
+			if (string.IsNullOrWhiteSpace(path)) return false;
+
+			// 去除末尾的目录分隔符（Windows 和 Linux 都兼容）
+			string trimmed = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+			// 取最后一级目录名
+			string folderName = Path.GetFileName(trimmed);
+
+			return string.Equals(folderName, "Documents", StringComparison.OrdinalIgnoreCase) ||
+				   string.Equals(folderName, "Downloads", StringComparison.OrdinalIgnoreCase) ||
+				   string.Equals(folderName, "Desktop", StringComparison.OrdinalIgnoreCase);
 		}
 	}
 }

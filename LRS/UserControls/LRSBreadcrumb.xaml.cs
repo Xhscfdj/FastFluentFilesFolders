@@ -2,9 +2,9 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -13,264 +13,425 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.System;
+using LRS.ViewModels;
 
 namespace LRS.UserControls
 {
-	public sealed partial class LRSBreadcrumb : UserControl, INotifyPropertyChanged
-	{
-		// ---------- 依赖属性 ----------
-		public static readonly DependencyProperty CurrentPathProperty =
-			DependencyProperty.Register(nameof(CurrentPath), typeof(string), typeof(LRSBreadcrumb),
-				new PropertyMetadata(null, OnCurrentPathChanged));
+    public sealed partial class LRSBreadcrumb : UserControl, INotifyPropertyChanged
+    {
+        public static readonly DependencyProperty CurrentPathProperty =
+            DependencyProperty.Register(nameof(CurrentPath), typeof(string), typeof(LRSBreadcrumb),
+                new PropertyMetadata(null, OnCurrentPathChanged));
 
-		public static readonly DependencyProperty NavigateCommandProperty =
-			DependencyProperty.Register(nameof(NavigateCommand), typeof(ICommand), typeof(LRSBreadcrumb),
-				new PropertyMetadata(null));
+        public static readonly DependencyProperty NavigateCommandProperty =
+            DependencyProperty.Register(nameof(NavigateCommand), typeof(ICommand), typeof(LRSBreadcrumb),
+                new PropertyMetadata(null));
 
-		public static readonly DependencyProperty NavigateSubCommandProperty =
-			DependencyProperty.Register(nameof(NavigateSubCommand), typeof(ICommand), typeof(LRSBreadcrumb),
-				new PropertyMetadata(null));
+        public static readonly DependencyProperty NavigateSubCommandProperty =
+            DependencyProperty.Register(nameof(NavigateSubCommand), typeof(ICommand), typeof(LRSBreadcrumb),
+                new PropertyMetadata(null));
 
-		// ---------- CLR 属性 ----------
-		public string CurrentPath
-		{
-			get => (string)GetValue(CurrentPathProperty);
-			set => SetValue(CurrentPathProperty, value);
-		}
+        public static readonly DependencyProperty GoBackCommandProperty =
+            DependencyProperty.Register(nameof(GoBackCommand), typeof(ICommand), typeof(LRSBreadcrumb),
+                new PropertyMetadata(null));
 
-		public ICommand NavigateCommand
-		{
-			get => (ICommand)GetValue(NavigateCommandProperty);
-			set => SetValue(NavigateCommandProperty, value);
-		}
+        public static readonly DependencyProperty GoForwardCommandProperty =
+            DependencyProperty.Register(nameof(GoForwardCommand), typeof(ICommand), typeof(LRSBreadcrumb),
+                new PropertyMetadata(null));
 
-		public ICommand NavigateSubCommand
-		{
-			get => (ICommand)GetValue(NavigateSubCommandProperty);
-			set => SetValue(NavigateSubCommandProperty, value);
-		}
+        public static readonly DependencyProperty GoUpCommandProperty =
+            DependencyProperty.Register(nameof(GoUpCommand), typeof(ICommand), typeof(LRSBreadcrumb),
+                new PropertyMetadata(null));
 
-		// ---------- 内部数据 ----------
-		public ObservableCollection<BreadcrumbSegment> Segments { get; } = new();
+        public static readonly DependencyProperty CanGoBackProperty =
+            DependencyProperty.Register(nameof(CanGoBack), typeof(bool), typeof(LRSBreadcrumb),
+                new PropertyMetadata(false));
 
-		// 复制路径命令
-		public ICommand CopyPathCommand { get; }
+        public static readonly DependencyProperty CanGoForwardProperty =
+            DependencyProperty.Register(nameof(CanGoForward), typeof(bool), typeof(LRSBreadcrumb),
+                new PropertyMetadata(false));
 
-		// ---------- 构造函数 ----------
-		public LRSBreadcrumb()
-		{
-			this.InitializeComponent();
-			CopyPathCommand = new RelayCommand(ExecuteCopyPath);
-			DataContext = App.SharedViewModel;
+        public double controlHeight = 30.0;
+        public string CurrentPath
+        {
+            get => (string)GetValue(CurrentPathProperty);
+            set => SetValue(CurrentPathProperty, value);
+        }
 
-			// 获取 Compositor（用于动画）
-			this.Loaded += (s, e) =>
-			{
-				_compositor = ElementCompositionPreview.GetElementVisual(this).Compositor;
-			};
-		}
+        public ICommand NavigateCommand
+        {
+            get => (ICommand)GetValue(NavigateCommandProperty);
+            set => SetValue(NavigateCommandProperty, value);
+        }
 
-		private Compositor _compositor;
+        public ICommand NavigateSubCommand
+        {
+            get => (ICommand)GetValue(NavigateSubCommandProperty);
+            set => SetValue(NavigateSubCommandProperty, value);
+        }
 
-		// ---------- 静态回调 ----------
-		private static void OnCurrentPathChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-		{
-			var control = (LRSBreadcrumb)d;
-			control.UpdateSegments(e.NewValue as string);
-		}
+        public ICommand GoBackCommand
+        {
+            get => (ICommand)GetValue(GoBackCommandProperty);
+            set => SetValue(GoBackCommandProperty, value);
+        }
 
-		// ---------- 更新面包屑段 ----------
-		private void UpdateSegments(string path)
-		{
-			Debug.WriteLine($"[UpdateSegments] path = {path}");
-			Segments.Clear();
-			if (string.IsNullOrEmpty(path))
-				return;
+        public ICommand GoForwardCommand
+        {
+            get => (ICommand)GetValue(GoForwardCommandProperty);
+            set => SetValue(GoForwardCommandProperty, value);
+        }
 
-			var parts = ParsePath(path);
-			for (int i = 0; i < parts.Count; i++)
-			{
-				var displayName = parts[i];
-				string fullPath;
-				if (i == 0 && path.StartsWith("\\")) // 网络路径特殊处理
-				{
-					fullPath = parts[0];
-				}
-				else
-				{
-					fullPath = string.Join("\\", parts.Take(i + 1));
-					if (i == 0 && fullPath.Length == 2 && fullPath[1] == ':')
-						fullPath += "\\";
-				}
+        public ICommand GoUpCommand
+        {
+            get => (ICommand)GetValue(GoUpCommandProperty);
+            set => SetValue(GoUpCommandProperty, value);
+        }
 
-				var segment = new BreadcrumbSegment
-				{
-					DisplayName = displayName,
-					FullPath = fullPath,
-					IsLast = (i == parts.Count - 1),
-					NavigateCommand = NavigateCommand,
-					NavigateSubCommand = NavigateSubCommand
-				};
-				Segments.Add(segment);
-			}
-		}
+        public bool CanGoBack
+        {
+            get => (bool)GetValue(CanGoBackProperty);
+            set => SetValue(CanGoBackProperty, value);
+        }
 
-		private List<string> ParsePath(string path)
-		{
-			if (string.IsNullOrEmpty(path))
-				return new List<string>();
+        public bool CanGoForward
+        {
+            get => (bool)GetValue(CanGoForwardProperty);
+            set => SetValue(CanGoForwardProperty, value);
+        }
 
-			// 处理驱动器根目录 "C:\"
-			if (path.EndsWith(":\\"))
-				return new List<string> { path.TrimEnd('\\') };
+        public ObservableCollection<BreadcrumbSegment> Segments { get; } = new();
+        public ICommand CopyPathCommand { get; }
 
-			// 处理网络路径 "\\Server\Share\Folder"
-			if (path.StartsWith("\\\\"))
-			{
-				var parts = path.Split('\\');
-				var result = new List<string>();
-				if (parts.Length >= 2)
-				{
-					result.Add(parts[0] + "\\" + parts[1]); // \\Server
-					for (int i = 2; i < parts.Length; i++)
-					{
-						if (!string.IsNullOrEmpty(parts[i]))
-							result.Add(parts[i]);
-					}
-				}
-				return result;
-			}
+        private Compositor _compositor;
 
-			// 普通路径
-			return new List<string>(path.Split('\\', StringSplitOptions.RemoveEmptyEntries));
-		}
+        public LRSBreadcrumb()
+        {
+            this.InitializeComponent();
+            CopyPathCommand = new RelayCommand(ExecuteCopyPath);
 
-		// ---------- 箭头点击事件 ----------
-		private void OnArrowClick(object sender, RoutedEventArgs e)
-		{
-			var button = sender as Button;
-			if (sender is not Button btn) return;
+            this.Loaded += (s, e) =>
+            {
+                _compositor = ElementCompositionPreview.GetElementVisual(this).Compositor;
+            };
+        }
 
-			if (btn.Tag is not LRSBreadcrumb currentItem) return;
-			var segment = button?.Tag as BreadcrumbSegment;
-			if (segment == null) return;
+        private void OnAddressBarAreaPointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            if (_isEditing) return;
+            if (!IsButtonOrDescendant(e.OriginalSource as DependencyObject))
+            {
+                EnterEditMode();
+                e.Handled = true;
+            }
+        }
 
-			// ---- 旋转动画 ----
-			var visual = ElementCompositionPreview.GetElementVisual(button);
-			if (_compositor != null)
-			{
-				// 判断当前旋转角度：若接近0则旋转到180，否则回0
-				float currentAngle = (float)visual.RotationAngleInDegrees;
-				float targetAngle = (Math.Abs(currentAngle) < 1) ? 180f : 0f;
+        private static bool IsButtonOrDescendant(DependencyObject element)
+        {
+            while (element != null)
+            {
+                if (element is Button) return true;
+                element = VisualTreeHelper.GetParent(element);
+            }
+            return false;
+        }
 
-				// 1. 创建动画
-				var animation = _compositor.CreateScalarKeyFrameAnimation();
-				animation.Duration = TimeSpan.FromMilliseconds(200);
+        private void OnPathTextBoxGotFocus(object sender, RoutedEventArgs e)
+        {
+            if (!_isEditing)
+                EnterEditMode();
+        }
 
-				// 2. 创建缓动函数 (Cubic Bezier)
-				var easingFunction = _compositor.CreateCubicBezierEasingFunction(
-					new System.Numerics.Vector2(0.25f, 0.1f),
-					new System.Numerics.Vector2(0.25f, 1.0f));
+        private bool _isEditing;
+        public bool IsEditing
+        {
+            get => _isEditing;
+            set
+            {
+                if (_isEditing == value) return;
+                _isEditing = value;
+                OnPropertyChanged(nameof(IsEditing));
+                if (value)
+                    EnterEditMode();
+                else
+                    ExitEditMode();
+            }
+        }
 
-				// 3. 在插入关键帧时指定缓动函数
-				animation.InsertKeyFrame(1.0f, targetAngle, easingFunction);
+        private void EnterEditMode()
+        {
+            if (_isEditing) return;
+            _isEditing = true;
+            PathTextBox.Visibility = Visibility.Visible;
+            PathTextBox.IsReadOnly = false;
+            PathTextBox.BorderThickness = new Microsoft.UI.Xaml.Thickness(1);
+            PathTextBox.Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextBoxBackgroundThemeBrush"];
+            BreadcrumbScrollViewer.Visibility = Visibility.Collapsed;
+            PathTextBox.SetBinding(TextBox.TextProperty, new Microsoft.UI.Xaml.Data.Binding
+            {
+                Source = this,
+                Path = new PropertyPath(nameof(CurrentPath)),
+                Mode = Microsoft.UI.Xaml.Data.BindingMode.OneWay
+            });
+            PathTextBox.Focus(FocusState.Programmatic);
+            PathTextBox.SelectAll();
+        }
 
-				// 4. 运行动画
-				visual.StartAnimation("RotationAngleInDegrees", animation);
-			}
+        private void ExitEditMode()
+        {
+            PathTextBox.Visibility = Visibility.Collapsed;
+            PathTextBox.IsReadOnly = true;
+            PathTextBox.BorderThickness = new Microsoft.UI.Xaml.Thickness(0);
+            PathTextBox.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            BreadcrumbScrollViewer.Visibility = Visibility.Visible;
+        }
 
-			// ---- 弹出子文件夹菜单 ----
-			var flyout = button.Flyout as MenuFlyout;
-			if (flyout != null)
-			{
-				flyout.Items.Clear();
+        private void OnPathTextBoxKeyDown(object sender, KeyRoutedEventArgs e)
+        {
+            if (e.Key == VirtualKey.Enter)
+            {
+                var path = PathTextBox.Text;
+                if (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+                {
+                    NavigateCommand?.Execute(path);
+                }
+                IsEditing = false;
+                e.Handled = true;
+            }
+            else if (e.Key == VirtualKey.Escape)
+            {
+                IsEditing = false;
+                e.Handled = true;
+            }
+        }
 
-				// 异步获取子文件夹（为避免阻塞UI，使用Task.Run，但需在UI线程构建菜单项）
-				var subDirs = Task.Run(() => SafeGetDirs(segment.FullPath)).Result; // 同步等待，但数量少可接受
-				foreach (var dir in subDirs)
-				{
-					var item = new MenuFlyoutItem
-					{
-						Text = Path.GetFileName(dir),
-						Tag = dir
-					};
-					item.Click += (s, args) =>
-					{
-						var path = (s as MenuFlyoutItem)?.Tag as string;
-						if (!string.IsNullOrEmpty(path))
-							NavigateSubCommand?.Execute(path);
-					};
-					flyout.Items.Add(item);
-				}
+        private void OnPathTextBoxLostFocus(object sender, RoutedEventArgs e)
+        {
+            IsEditing = false;
+        }
 
-				if (flyout.Items.Count == 0)
-				{
-					flyout.Items.Add(new MenuFlyoutItem { Text = "（空文件夹）", IsEnabled = false });
-				}
+        private static void OnCurrentPathChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var control = (LRSBreadcrumb)d;
+            control.UpdateSegments(e.NewValue as string);
+        }
 
-				// Flyout 会自动打开（Button 自带 Flyout）
-			}
-		}
+        private void UpdateSegments(string path)
+        {
+            Segments.Clear();
+            if (string.IsNullOrEmpty(path))
+                return;
 
-		// ---------- 辅助方法 ----------
-		private static List<string> SafeGetDirs(string path)
-		{
-			// 复用你已有的 SafeGetDirs 方法
-			return LRS.ViewModels.FileSystemNodeViewModel.SafeGetDirs(path);
-		}
+            var parts = ParsePath(path);
+            for (int i = 0; i < parts.Length; i++)
+            {
+                var displayName = parts[i];
+                string fullPath;
+                if (i == 0 && path.StartsWith("\\\\"))
+                {
+                    fullPath = string.Join("\\", parts.Take(2));
+                    if (displayName == fullPath)
+                        continue;
+                }
+                else if (i == 0)
+                {
+                    fullPath = parts[0] + "\\";
+                }
+                else
+                {
+                    var rootPrefix = path.StartsWith("\\\\")
+                        ? string.Join("\\", parts.Take(2))
+                        : parts[0] + "\\";
+                    var remaining = parts.Skip(path.StartsWith("\\\\") ? 2 : 1).Take(i - (path.StartsWith("\\\\") ? 1 : 0));
+                    fullPath = path.StartsWith("\\\\")
+                        ? rootPrefix + "\\" + string.Join("\\", remaining) + "\\" + displayName
+                        : parts[0] + "\\" + string.Join("\\", parts.Skip(1).Take(i));
+                }
 
-		// ---------- 复制路径 ----------
-		private void ExecuteCopyPath()
-		{
-			if (!string.IsNullOrEmpty(CurrentPath))
-			{
-				var dataPackage = new DataPackage();
-				dataPackage.SetText(CurrentPath);
-				Clipboard.SetContent(dataPackage);
-			}
-		}
+                fullPath = fullPath.TrimEnd('\\');
+                if (fullPath.Length == 2 && fullPath[1] == ':')
+                    fullPath += "\\";
 
-		// ---------- 转换器 ----------
-		public class BoolToVisibilityConverter : Microsoft.UI.Xaml.Data.IValueConverter
-		{
-			public object Convert(object value, Type targetType, object parameter, string language)
-			{
-				bool val = value is bool && (bool)value;
-				// 若参数为 "Collapse"，则 Collapse 隐藏，否则用 Visibility.Collapsed
-				string param = parameter as string;
-				return val ? Visibility.Collapsed : Visibility.Visible;
-			}
+                var segment = new BreadcrumbSegment
+                {
+                    DisplayName = displayName,
+                    FullPath = fullPath,
+                    IsLast = (i == parts.Length - 1),
+                    NavigateCommand = NavigateCommand,
+                    NavigateSubCommand = NavigateSubCommand
+                };
+                Segments.Add(segment);
+            }
+        }
 
-			public object ConvertBack(object value, Type targetType, object parameter, string language)
-			{
-				throw new NotImplementedException();
-			}
-		}
+        private string[] ParsePath(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+                return Array.Empty<string>();
 
-		// ---------- RelayCommand 简单实现 ----------
-		private class RelayCommand : ICommand
-		{
-			private readonly Action _execute;
-			public RelayCommand(Action execute) => _execute = execute;
-			public event EventHandler CanExecuteChanged;
-			public bool CanExecute(object parameter) => true;
-			public void Execute(object parameter) => _execute();
-		}
+            if (path.Length == 3 && path.EndsWith(":\\"))
+                return new[] { path.TrimEnd('\\') };
 
-		// ---------- INotifyPropertyChanged ----------
-		public event PropertyChangedEventHandler PropertyChanged;
-		private void OnPropertyChanged(string name) =>
-			PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-	}
+            if (path.StartsWith("\\\\"))
+                return path.TrimEnd('\\').Split('\\');
 
-	// ---------- 面包屑段数据模型 ----------
-	public class BreadcrumbSegment
-	{
-		public string DisplayName { get; set; }
-		public string FullPath { get; set; }
-		public bool IsLast { get; set; }
-		public ICommand NavigateCommand { get; set; }
-		public ICommand NavigateSubCommand { get; set; }
-		public ObservableCollection<string> SubFolders { get; set; } = new();
-	}
+            return path.Split('\\', StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        private void OnChevronClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn || btn.Tag is not BreadcrumbSegment segment)
+                return;
+
+            var visual = ElementCompositionPreview.GetElementVisual(btn);
+            if (_compositor != null)
+            {
+                float currentAngle = (float)visual.RotationAngleInDegrees;
+                float targetAngle = (Math.Abs(currentAngle) < 1) ? 180f : 0f;
+
+                var animation = _compositor.CreateScalarKeyFrameAnimation();
+                animation.Duration = TimeSpan.FromMilliseconds(200);
+                var easingFunction = _compositor.CreateCubicBezierEasingFunction(
+                    new System.Numerics.Vector2(0.25f, 0.1f),
+                    new System.Numerics.Vector2(0.25f, 1.0f));
+                animation.InsertKeyFrame(1.0f, targetAngle, easingFunction);
+                visual.StartAnimation("RotationAngleInDegrees", animation);
+            }
+        }
+
+        private async void OnFlyoutOpening(object sender, object e)
+        {
+            if (sender is not MenuFlyout flyout) return;
+            var btn = flyout.Target as Button;
+            if (btn?.Tag is not BreadcrumbSegment segment) return;
+
+            flyout.Items.Clear();
+            flyout.Items.Add(new MenuFlyoutItem { Text = "加载中...", IsEnabled = false });
+
+            await PopulateSubFolderFlyout(flyout, segment.FullPath);
+        }
+
+        private async Task PopulateSubFolderFlyout(MenuFlyout flyout, string path)
+        {
+            try
+            {
+                var subDirs = await Task.Run(() => FileSystemNodeViewModel.SafeGetDirs(path));
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    flyout.Items.Clear();
+                    foreach (var dir in subDirs)
+                    {
+                        var dirName = Path.GetFileName(dir);
+                        var item = new MenuFlyoutItem
+                        {
+                            Text = dirName,
+                            Tag = dir
+                        };
+                        item.Click += OnSubFolderItemClick;
+                        flyout.Items.Add(item);
+                    }
+
+                    if (flyout.Items.Count == 0)
+                    {
+                        flyout.Items.Add(new MenuFlyoutItem
+                        {
+                            Text = "（空文件夹）",
+                            IsEnabled = false
+                        });
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[LRSBreadcrumb] PopulateSubFolderFlyout error: {ex.Message}");
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    flyout.Items.Clear();
+                    flyout.Items.Add(new MenuFlyoutItem
+                    {
+                        Text = "（无法访问）",
+                        IsEnabled = false
+                    });
+                });
+            }
+        }
+
+        private void OnSubFolderItemClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuFlyoutItem item && item.Tag is string path)
+            {
+                NavigateSubCommand?.Execute(path);
+            }
+        }
+
+        private void OnFlyoutClosing(object sender, object e)
+        {
+            if (sender is not MenuFlyout flyout) return;
+
+            if (flyout.Target is Button btn && _compositor != null)
+            {
+                var visual = ElementCompositionPreview.GetElementVisual(btn);
+                var animation = _compositor.CreateScalarKeyFrameAnimation();
+                animation.Duration = TimeSpan.FromMilliseconds(200);
+                var easingFunction = _compositor.CreateCubicBezierEasingFunction(
+                    new System.Numerics.Vector2(0.25f, 0.1f),
+                    new System.Numerics.Vector2(0.25f, 1.0f));
+                animation.InsertKeyFrame(1.0f, 0f, easingFunction);
+                visual.StartAnimation("RotationAngleInDegrees", animation);
+            }
+
+            flyout.Items.Clear();
+        }
+
+        private void ExecuteCopyPath()
+        {
+            if (!string.IsNullOrEmpty(CurrentPath))
+            {
+                var dataPackage = new DataPackage();
+                dataPackage.SetText(CurrentPath);
+                Clipboard.SetContent(dataPackage);
+            }
+        }
+
+        private class RelayCommand : ICommand
+        {
+            private readonly Action _execute;
+            private readonly Func<bool> _canExecute;
+            public RelayCommand(Action execute, Func<bool> canExecute = null)
+            {
+                _execute = execute;
+                _canExecute = canExecute;
+            }
+            public event EventHandler CanExecuteChanged;
+            public bool CanExecute(object parameter) => _canExecute?.Invoke() ?? true;
+            public void Execute(object parameter) => _execute();
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        private void OnPropertyChanged(string name) =>
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    }
+
+    public class LastToVisibilityConverter : Microsoft.UI.Xaml.Data.IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            return (value is bool isLast && isLast) ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    public class BreadcrumbSegment
+    {
+        public string DisplayName { get; set; }
+        public string FullPath { get; set; }
+        public bool IsLast { get; set; }
+        public ICommand NavigateCommand { get; set; }
+        public ICommand NavigateSubCommand { get; set; }
+    }
 }

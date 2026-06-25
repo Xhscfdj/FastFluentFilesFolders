@@ -6,26 +6,27 @@
     xmlns:local="using:LRS.Views"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:ui="using:Microsoft.UI.Xaml"
-    xmlns:vm="using:LRS.ViewModels" 
-    d:DataContext="{d:DesignInstance Type=vm:MainWindowViewModel}"
+    xmlns:vm="using:LRS.ViewModels"
     mc:Ignorable="d">
-    <Page.Resources>
-        <Style TargetType="TreeViewItem" x:Key="FileTreeViewItemStyle">
-            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
-            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
-        </Style>
-    </Page.Resources>
+
     <Grid>
-        <TreeView ItemsSource="{Binding RootDirectories}"
+		<Grid.ColumnDefinitions>
+			<ColumnDefinition Width="*" />
+		</Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TreeView Grid.Row="0"
+                  ItemsSource="{Binding RootDirectories}"
                   SelectionChanged="TreeView_SelectionChanged">
             <TreeView.ItemTemplate>
                 <DataTemplate x:DataType="vm:FileSystemNodeViewModel">
-                    <!-- 直接在这个 TreeViewItem 上绑定展开和选中状态 -->
                     <TreeViewItem ItemsSource="{Binding Children}"
                                   IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
                                   IsSelected="{Binding IsSelected, Mode=TwoWay}">
-                        <TreeViewItem.Content >
+                        <TreeViewItem.Content>
                             <StackPanel Orientation="Horizontal">
                                 <Image Source="{Binding Icon}" Width="20" Height="20" />
                                 <TextBlock Text="{Binding Name}" Margin="5,0,0,0" />
@@ -35,23 +36,17 @@
                 </DataTemplate>
             </TreeView.ItemTemplate>
         </TreeView>
-        <!--        <TreeView ItemsSource="{Binding RootDirectories}"
-                  ItemContainerStyle="{StaticResource FileTreeViewItemStyle}"
-                  SelectionChanged="TreeView_SelectionChanged">
-            <TreeView.ItemTemplate>
-                <DataTemplate x:DataType="vm:FileSystemNodeViewModel">
-                    <TreeViewItem ItemsSource="{Binding Children}">
-                        <TreeViewItem.Content>
-                            <StackPanel Orientation="Horizontal">
-                                <Image Source="{Binding Icon}" Width="20" Height="20" />
-                                <TextBlock Margin="0,0,10,0" />
-                                <TextBlock Text="{Binding Name}" />
-                            </StackPanel>
-                        </TreeViewItem.Content>
-                    </TreeViewItem>
-                </DataTemplate>
-            </TreeView.ItemTemplate>
-        </TreeView>-->
-        
+
+        <Button Grid.Row="1" Click="ToggleSettings"
+				Grid.Column="0"
+                BorderThickness="0" Background="Transparent"
+                Padding="12,8" Margin="4,0,0,4">
+			<Button.Content>
+				<StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Left">
+					<FontIcon x:Name="SettingsBtnIcon" Glyph="&#xE713;" FontSize="14" HorizontalAlignment="Left"/>
+					<TextBlock x:Name="SettingsBtnLabel" Text="设置" FontSize="13" HorizontalAlignment="Left"/>
+				</StackPanel>
+			</Button.Content>
+		</Button>
     </Grid>
 </Page>

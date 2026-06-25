@@ -1,49 +1,90 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Primitives;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.IO;
 
 namespace LRS.ViewModels
 {
     public partial class Configs : ObservableObject
     {
-        public IConfiguration configuration = new ConfigurationBuilder().SetBasePath(AppContext.BaseDirectory)
-            .AddJsonFile("./Configs/configs.json", optional: false, reloadOnChange: true)
-            .Build();
-        // 所有配置
-        private int _middleFilesHeight = 40;
-        public int MiddleFilesHeight
-        {
-            get => _middleFilesHeight;
-            set => _middleFilesHeight = value;
-        }
-        public bool ifUsesWin32APIToGetIcon;
+        private static readonly string DefaultConfigPath =
+            Path.Combine(AppContext.BaseDirectory, "Configs", "configs.json");
+
+        private static readonly string UserConfigDir =
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LRS");
+
+        public static readonly string UserConfigPath =
+            Path.Combine(UserConfigDir, "user_configs.json");
+
+        public string UserConfigPathToDisplay = "C:C:C:C:C";
+        public IConfiguration configuration;
+
+        [ObservableProperty] private int _middleFilesHeight = 40;
+        [ObservableProperty] private bool _ifUsesWin32APIToGetIcon = true;
+        [ObservableProperty] private bool _ifLimitIconLoadingConcurrency = false;
         [ObservableProperty] private int _iconParallelLoadingCount = 30;
-		[ObservableProperty] private string _homePageFullPath = "C:\\";
-        // 其他
+        [ObservableProperty] private string _homePageFullPath = "C:\\";
+
         public Configs()
         {
+            UserConfigPathToDisplay = UserConfigPath;
+            EnsureUserConfigExists();
+            BuildConfiguration();
             ReadConfigs();
-            Debug.WriteLine($"Configs initialized. MiddleFilesHeight: {MiddleFilesHeight}");
-            ChangeToken.OnChange(
-                () => configuration.GetReloadToken(),
-                () =>
-                {
-                    ReadConfigs();
-                });
-
+            Debug.WriteLine($"Configs initialized. MiddleFilesHeight: {MiddleFilesHeight}, UserConfig: {UserConfigPath}");
         }
+
+        private void EnsureUserConfigExists()
+        {
+            if (!File.Exists(UserConfigPath))
+            {
+                Directory.CreateDirectory(UserConfigDir);
+                File.WriteAllText(UserConfigPath, "{}");
+            }
+        }
+
+        private void BuildConfiguration()
+        {
+            configuration = new ConfigurationBuilder()
+                .AddJsonFile(DefaultConfigPath, optional: false, reloadOnChange: false)
+                .AddJsonFile(UserConfigPath, optional: true, reloadOnChange: false)
+                .Build();
+        }
+
         public void ReadConfigs()
         {
-            MiddleFilesHeight = configuration.GetValue<int>("Appearance:MiddleFilesHeight");
-            ifUsesWin32APIToGetIcon = configuration.GetValue<bool>("Advanced:ifUsesWin32APIToGetIcon");
-            HomePageFullPath = configuration["General:HomePageFullPath"] ?? "C:\\";
-            IconParallelLoadingCount = configuration.GetValue<int>("General:IconParallelLoadingCount");
+            MiddleFilesHeight = configuration.GetValue("Appearance:MiddleFilesHeight", 40);
+            IfUsesWin32APIToGetIcon = configuration.GetValue("Advanced:ifUsesWin32APIToGetIcon", true);
+            HomePageFullPath = configuration.GetValue("General:HomePageFullPath", "C:\\")!;
+            IconParallelLoadingCount = configuration.GetValue("Performance:IconParallelLoadingCount", 30);
+            if (IconParallelLoadingCount != 0) IfLimitIconLoadingConcurrency = true;
+        }
+
+        public void SaveConfig()
+        {
+            var escapedPath = HomePageFullPath.Replace("\\", "\\\\").Replace("\"", "\\\"");
+            var json = string.Concat(
+                "{\n",
+                "  \"Appearance\": {\n",
+               $"    \"MiddleFilesHeight\": {MiddleFilesHeight}\n",
+                "  },\n",
+                "  \"Advanced\": {\n",
+               $"    \"ifUsesWin32APIToGetIcon\": {IfUsesWin32APIToGetIcon.ToString().ToLower()}\n",
+                "  },\n",
+                "  \"General\": {\n",
+               $"    \"HomePageFullPath\": \"{escapedPath}\"\n",
+                "  },\n",
+                "  \"Performance\": {\n",
+               $"    \"IconParallelLoadingCount\": {IconParallelLoadingCount}\n",
+                "  }\n",
+                "}\n");
+            File.WriteAllText(UserConfigPath, json);
+            if (configuration != null)
+            {
+                ((IConfigurationRoot)configuration).Reload();
+                ReadConfigs();
+            }
         }
     }
 }

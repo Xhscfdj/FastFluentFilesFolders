@@ -1,0 +1,71 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="LRS.Views.SettingsView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:LRS.Views"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:ctrls="using:Microsoft.UI.Xaml.Controls"
+	xmlns:comCtrls="using:CommunityToolkit.WinUI.Controls"
+    mc:Ignorable="d">
+
+    <ScrollViewer>
+        <StackPanel Padding="24" Spacing="14" HorizontalAlignment="Stretch">
+            <TextBlock Text="设置" FontSize="22" FontWeight="Bold" />
+
+            <TextBlock Text="外观" FontSize="16" FontWeight="SemiBold" Margin="0,8,0,0" />
+			<comCtrls:SettingsCard Header="中间文件列表高度">
+				<comCtrls:SettingsCard.HeaderIcon>
+					<FontIcon Glyph="&#xE752;" />
+				</comCtrls:SettingsCard.HeaderIcon>
+				<ctrls:NumberBox Value="{Binding AppConfigs.MiddleFilesHeight, Mode=TwoWay}"
+                                 Minimum="20" Maximum="200"
+                                 SpinButtonPlacementMode="Inline" />
+			</comCtrls:SettingsCard>
+			
+			<TextBlock Text="高级" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
+			<comCtrls:SettingsCard Header="使用 Win32 API 获取图标">
+				<comCtrls:SettingsCard.HeaderIcon>
+					<FontIcon Glyph="&#xE770;"/>
+					<!--或者使用&#xE8FF;-->
+				</comCtrls:SettingsCard.HeaderIcon>
+				<ToggleSwitch IsOn="{Binding AppConfigs.IfUsesWin32APIToGetIcon, Mode=TwoWay}" />
+			</comCtrls:SettingsCard>
+			<!--
+            <ToggleSwitch Header="限制图标并行加载"
+                          IsOn="{Binding AppConfigs.IfLimitIconLoadingConcurrency, Mode=TwoWay}" />
+			-->
+
+            <TextBlock Text="通用" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
+			<comCtrls:SettingsCard Header="主页路径">
+				<comCtrls:SettingsCard.HeaderIcon>
+					<FontIcon Glyph="&#xE80F;" />
+				</comCtrls:SettingsCard.HeaderIcon>
+				<TextBox Text="{Binding AppConfigs.HomePageFullPath, Mode=TwoWay}" />
+			</comCtrls:SettingsCard>
+
+			<TextBlock Text="性能" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
+			<comCtrls:SettingsCard  Header="图标并行加载数量">
+				<comCtrls:SettingsCard.HeaderIcon>
+					<FontIcon Glyph="&#xF16A;"/>
+				</comCtrls:SettingsCard.HeaderIcon>
+				<ctrls:NumberBox Value="{Binding AppConfigs.IconParallelLoadingCount, Mode=TwoWay}"
+                                 Minimum="1" Maximum="200"
+                                 SpinButtonPlacementMode="Inline" />
+			</comCtrls:SettingsCard>
+
+			<TextBlock Text="调试" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0"/>
+			<comCtrls:SettingsCard Header="用户设置路径 *若遇到配置读写问题，请查看">
+				<comCtrls:SettingsCard.HeaderIcon>
+					<FontIcon Glyph="&#xE756;" />
+				</comCtrls:SettingsCard.HeaderIcon>
+				<TextBlock Text="本来要写路径的，但绑定一直失效，暂时弃用" />
+			</comCtrls:SettingsCard>
+
+			<Button x:Name="SaveButton" Click="SaveSettings" Margin="0,12,0,0"
+					Style="{StaticResource AccentButtonStyle}"
+                    HorizontalAlignment="Left">保存设置</Button>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

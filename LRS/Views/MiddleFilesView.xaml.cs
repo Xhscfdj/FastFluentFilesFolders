@@ -28,10 +28,7 @@ namespace LRS.Views
     {
         public MiddleFilesView()
         {
-			Configs configs = App.Services.GetRequiredService<Configs>();
 			InitializeComponent();
-			var uiDispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-			IIconProvider iconProvider = new WindowsIconProvider(); // 实际可从服务容器获取
             this.DataContext = App.SharedViewModel;
         }
 		private void OnRowDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)

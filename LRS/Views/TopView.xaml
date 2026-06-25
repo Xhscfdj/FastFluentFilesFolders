@@ -14,23 +14,16 @@
     mc:Ignorable="d">
 
 	<Grid>
-		<!--<BBB:BetterBreadcrumbBar    
-			x:Name="BBB"
-            PathProvider="{Binding FileSystemPathProvider}"
-            ShowLastSegmentChevron="True"
-            ShowBackButton="True"
-            ShowUpButton="True"
-            ShowHomeButton="True"
-			Language="zh-CN"
-			UpButtonTooltip=""
-			HomeRequested="BBB_HomeRequested"
-			BackRequested="BBB_BackRequested"
-			NodeSelected="FsBreadcrumb_NodeSelected"
-            CanGoBack="True">
-		</BBB:BetterBreadcrumbBar>-->
 		<LRSCtrls:LRSBreadcrumb CurrentPath="{Binding SelectedFolder.FullPath, Mode=OneWay}"
-                        NavigateCommand="{Binding NavigateToPathCommand}"
-                        NavigateSubCommand="{Binding NavigateToSubFolderCommand}">
+								NavigateCommand="{Binding NavigateToPathCommand}"
+								Margin="10,0,10,0"
+								Height="35"
+								NavigateSubCommand="{Binding NavigateToSubFolderCommand}"
+								GoBackCommand="{Binding GoBackCommand}"
+								GoForwardCommand="{Binding GoForwardCommand}"
+								GoUpCommand="{Binding GoUpCommand}"
+								CanGoBack="{Binding CanGoBack}"
+								CanGoForward="{Binding CanGoForward}">
 		</LRSCtrls:LRSBreadcrumb>
 	</Grid>
 </Page>
