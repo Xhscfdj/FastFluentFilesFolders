@@ -72,18 +72,38 @@ $Platforms = @(
     @{ Name="ARM64"; RID="win-arm64" }
 )
 
-# ---- Helper function for signing ----
+# ---- Helper function for signing (fixed parameter passing) ----
 function Sign-File {
     param([string]$FilePath)
     if ($CertificatePath -and (Test-Path $CertificatePath)) {
         Write-Host "  Using certificate: $CertificatePath" -ForegroundColor Gray
-        $signArgs = "/fd SHA256 /f `"$CertificatePath`" /p $CertificatePassword /tr http://timestamp.digicert.com /td SHA256 `"$FilePath`""
+        # Build argument list as an array
+        $signArgs = @(
+            'sign',
+            '/fd', 'SHA256',
+            '/f', $CertificatePath,
+            '/p', $CertificatePassword,
+            '/tr', 'http://timestamp.digicert.com',
+            '/td', 'SHA256',
+            $FilePath
+        )
     } else {
         Write-Host "  Using default certificate (auto-select from store)" -ForegroundColor Gray
-        $signArgs = "/fd SHA256 /a /tr http://timestamp.digicert.com /td SHA256 `"$FilePath`""
+        $signArgs = @(
+            'sign',
+            '/fd', 'SHA256',
+            '/a',
+            '/tr', 'http://timestamp.digicert.com',
+            '/td', 'SHA256',
+            $FilePath
+        )
     }
-    & $SignTool sign $signArgs
-    if ($LASTEXITCODE -ne 0) { throw "Sign failed: $FilePath" }
+    # Call signtool with splatted arguments
+    & $SignTool @signArgs
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "SignTool failed with exit code $LASTEXITCODE" -ForegroundColor Red
+        throw "Sign failed: $FilePath"
+    }
 }
 
 # ================================================================
@@ -105,6 +125,7 @@ $MsixFiles = @()
 foreach ($p in $Platforms) {
     $bin  = "$ProjectDir\bin\$($p.Name)\$Configuration\net8.0-windows10.0.19041.0\$($p.RID)"
     $msix = "$bin\LRS_$($Version)_$($p.Name).msix"
+    Remove-Item -Path "$bin\*.msix" -Force -ErrorAction SilentlyContinue
 
     if (-not (Test-Path "$bin\AppxManifest.xml")) { throw "AppxManifest.xml not found in: $bin" }
 
