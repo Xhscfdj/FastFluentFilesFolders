@@ -9,7 +9,7 @@ A modern file explorer for Windows, built with WinUI 3 and the Windows App SDK.
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue)](https://www.microsoft.com/windows)
 ## I want a starrrrrrrrrrr
 If you like it, please give me a starrrrr, thank youuuuuuuuuu!!! meow~
-starrr⭐rrrats
+starrr⭐rrratsDA☆ZE
 
 ## Features
 
