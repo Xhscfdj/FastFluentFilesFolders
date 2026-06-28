@@ -7,7 +7,10 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI;
 using LRS.Services;
-//using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Text;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -182,6 +185,113 @@ namespace LRS.ViewModels
 			dataPackage.SetText(item.FullPath);
 			Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dataPackage);
 			await Task.CompletedTask;
+		}
+
+		[RelayCommand]
+		private async Task OpenWith(FileSystemNodeViewModel? item)
+		{
+			if (item == null || item.IsDirectory) return;
+			await Task.Run(() => ShowOpenWithDialog(item.FullPath));
+		}
+
+		internal static void ShowOpenWithDialog(string filePath)
+		{
+			if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+				return;
+
+			var info = new OPENASINFO
+			{
+				pcszFile = Marshal.StringToHGlobalUni(filePath),
+				pcszClass = IntPtr.Zero,
+				oaifInFlags = OPEN_AS_INFO_FLAGS.OAIF_ALLOW_REGISTRATION | OPEN_AS_INFO_FLAGS.OAIF_EXEC
+			};
+			try
+			{
+				SHOpenWithDialog(IntPtr.Zero, ref info);
+			}
+			finally
+			{
+				Marshal.FreeHGlobal(info.pcszFile);
+			}
+		}
+
+		[RelayCommand]
+		private async Task Properties(FileSystemNodeViewModel? item)
+		{
+			if (item == null) return;
+			await _uiDispatcherQueue.EnqueueAsync(() => ShowPropertiesDialog(item));
+		}
+
+		private async void ShowPropertiesDialog(FileSystemNodeViewModel item)
+		{
+			var panel = new StackPanel { Spacing = 12, Width = 420, Margin = new Thickness(0, 0, 0, 8) };
+
+			var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+			if (item.Icon != null)
+				header.Children.Add(new Image { Source = item.Icon, Width = 32, Height = 32, VerticalAlignment = VerticalAlignment.Center });
+			header.Children.Add(new TextBlock
+			{
+				Text = item.Name,
+				FontSize = 18,
+				FontWeight = FontWeights.SemiBold,
+				TextTrimming = TextTrimming.CharacterEllipsis,
+				VerticalAlignment = VerticalAlignment.Center
+			});
+			panel.Children.Add(header);
+
+			panel.Children.Add(new Border { Height = 1, Background = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"] });
+
+			var propsGrid = new Grid { ColumnSpacing = 16, RowSpacing = 10 };
+			propsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Auto) });
+			propsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+			int row = 0;
+			void AddRow(string label, string value)
+			{
+				propsGrid.RowDefinitions.Add(new RowDefinition());
+				var lbl = new TextBlock
+				{
+					Text = label,
+					Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+					FontSize = 13,
+					VerticalAlignment = VerticalAlignment.Center,
+					Margin = new Thickness(0, 0, 4, 0)
+				};
+				var val = new TextBlock
+				{
+					Text = value,
+					Foreground = (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"],
+					FontSize = 13,
+					TextWrapping = TextWrapping.Wrap,
+					VerticalAlignment = VerticalAlignment.Center
+				};
+				Grid.SetRow(lbl, row); Grid.SetColumn(lbl, 0);
+				Grid.SetRow(val, row); Grid.SetColumn(val, 1);
+				propsGrid.Children.Add(lbl);
+				propsGrid.Children.Add(val);
+				row++;
+			}
+
+			var typeDesc = item.IsDirectory ? "文件夹"
+				: item.Extension.Length > 0 ? $"{item.Extension.TrimStart('.')} 文件"
+				: "文件";
+			AddRow("类型:", typeDesc);
+			AddRow("路径:", item.FullPath);
+			AddRow("大小:", item.IsDirectory ? item.VisualSize : $"{item.VisualSize} ({item.ExactSize:N0} 字节)");
+			AddRow("修改日期:", item.LastModifiedTimeString);
+			AddRow("创建日期:", item.FirstCreatedTimeString);
+
+			panel.Children.Add(propsGrid);
+
+			var dialog = new ContentDialog
+			{
+				Title = "属性",
+				Content = panel,
+				CloseButtonText = "关闭",
+				DefaultButton = ContentDialogButton.Close,
+				XamlRoot = App.MainWindow.Content.XamlRoot
+			};
+			_ = dialog.ShowAsync();
 		}
 
 		[RelayCommand]

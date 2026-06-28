@@ -41,8 +41,10 @@ namespace LRS.Views
             flyout.PrimaryCommands.Add(ThemedBtn("删除",   ThemedIconKey("Icon.Delete"),  OnDeleteClick));
 
             flyout.SecondaryCommands.Add(PlainBtn("打开",     "\uE8E5", OnOpenClick));
-            flyout.SecondaryCommands.Add(PlainBtn("打开方式", "\uE8E5", OnOpenClick));
+            flyout.SecondaryCommands.Add(PlainBtn("打开方式", "\uE8E5", OnOpenWithClick));
             flyout.SecondaryCommands.Add(PlainBtn("复制路径", "\uE8C8", OnCopyPathClick));
+            flyout.SecondaryCommands.Add(new AppBarSeparator());
+            flyout.SecondaryCommands.Add(PlainBtn("属性", "\uE90F", OnPropertiesClick));
 
             return flyout;
         }
@@ -89,6 +91,8 @@ namespace LRS.Views
             if (item == null) return;
             (this.DataContext as MainWindowViewModel)?.OpenItem(item);
         }
+        private void OnOpenWithClick(object sender, RoutedEventArgs e)
+            => (this.DataContext as MainWindowViewModel)?.OpenWithCommand.Execute(FileGrid.SelectedItem);
         private void OnCutClick(object sender, RoutedEventArgs e)
             => (this.DataContext as MainWindowViewModel)?.CutCommand.Execute(FileGrid.SelectedItem);
         private void OnCopyClick(object sender, RoutedEventArgs e)
@@ -104,6 +108,8 @@ namespace LRS.Views
             => (this.DataContext as MainWindowViewModel)?.DeleteCommand.Execute(FileGrid.SelectedItem);
         private void OnCopyPathClick(object sender, RoutedEventArgs e)
             => (this.DataContext as MainWindowViewModel)?.CopyPathCommand.Execute(FileGrid.SelectedItem);
+        private void OnPropertiesClick(object sender, RoutedEventArgs e)
+            => (this.DataContext as MainWindowViewModel)?.PropertiesCommand.Execute(FileGrid.SelectedItem);
         private void OnNewFolderClick(object sender, RoutedEventArgs e)
             => (this.DataContext as MainWindowViewModel)?.NewFolderCommand.Execute(null);
         private void OnNewTextDocumentClick(object sender, RoutedEventArgs e)
