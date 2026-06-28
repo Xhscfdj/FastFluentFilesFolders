@@ -82,7 +82,7 @@ function Sign-File {
         Write-Host "  Using default certificate (auto-select from store)" -ForegroundColor Gray
         $signArgs = "/fd SHA256 /a /tr http://timestamp.digicert.com /td SHA256 `"$FilePath`""
     }
-    & $SignTool sign $signArgs 2>&1 | Out-Null
+    & $SignTool sign $signArgs
     if ($LASTEXITCODE -ne 0) { throw "Sign failed: $FilePath" }
 }
 

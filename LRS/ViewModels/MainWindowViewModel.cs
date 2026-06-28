@@ -3,13 +3,11 @@
 //using System.Linq;
 //using System.Text;
 //using System.Threading.Tasks;
-using BetterBreadcrumbBar.Control;
-using BetterBreadcrumbBar.Control.Providers;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI;
 using LRS.Services;
-using Microsoft.UI.Xaml.Controls;
+//using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -212,7 +210,7 @@ namespace LRS.ViewModels
 				BreadcrumbRefreshRequested?.Invoke();
 			}
 		}
-		[ObservableProperty] private IPathProvider _pathProvider = new FileSystemPathProvider();
+
 		[ObservableProperty] private string _testString = "hasn't changed";
 		// 文件系统相关的属性和方法
 		private readonly IIconProvider _iconProvider;
