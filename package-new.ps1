@@ -2,11 +2,21 @@
 <#
 .SYNOPSIS
     LRS MSIX packaging script - build 3 platforms, create .msix, sign, bundle
+.PARAMETER Version
+    版本号（格式 x.y.z.w），不指定则从 Package.appxmanifest 读取并更新
+.PARAMETER Configuration
+    编译配置，默认 Release
+.PARAMETER OutputDir
+    输出目录，默认脚本所在目录下的 LRS\AppPackages
+.PARAMETER CertificatePath
+    用于签名的 .pfx 证书文件路径（可选）
+.PARAMETER CertificatePassword
+    证书密码（建议使用环境变量或 SecureString）
 #>
 param(
     [string]$Version,
     [string]$Configuration = "Release",
-    [string]$OutputDir = "$PSScriptRoot\LRS\AppPackages"
+    [string]$OutputDir = "$PSScriptRoot\LRS\AppPackages",
     [string]$CertificatePath,
     [string]$CertificatePassword
 )
@@ -62,6 +72,20 @@ $Platforms = @(
     @{ Name="ARM64"; RID="win-arm64" }
 )
 
+# ---- Helper function for signing ----
+function Sign-File {
+    param([string]$FilePath)
+    if ($CertificatePath -and (Test-Path $CertificatePath)) {
+        Write-Host "  Using certificate: $CertificatePath" -ForegroundColor Gray
+        $signArgs = "/fd SHA256 /f `"$CertificatePath`" /p $CertificatePassword /tr http://timestamp.digicert.com /td SHA256 `"$FilePath`""
+    } else {
+        Write-Host "  Using default certificate (auto-select from store)" -ForegroundColor Gray
+        $signArgs = "/fd SHA256 /a /tr http://timestamp.digicert.com /td SHA256 `"$FilePath`""
+    }
+    & $SignTool sign $signArgs 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Sign failed: $FilePath" }
+}
+
 # ================================================================
 # 1. dotnet publish (3 platforms)
 # ================================================================
@@ -100,8 +124,7 @@ Write-Host "`n[3/4] Signing .msix packages..." -ForegroundColor Yellow
 foreach ($msix in $MsixFiles) {
     $name = Split-Path $msix -Leaf
     Write-Host "  Signing $name..." -NoNewline
-    & $SignTool sign /fd SHA256 /a /tr http://timestamp.digicert.com /td SHA256 $msix 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Sign failed: $msix" }
+    Sign-File $msix
     Write-Host " done" -ForegroundColor Green
 }
 
@@ -125,8 +148,7 @@ $BundlePath = "$OutDir\$BundleName"
 if ($LASTEXITCODE -ne 0) { throw "MakeAppx bundle failed" }
 
 Write-Host "  Signing bundle..." -NoNewline
-& $SignTool sign /fd SHA256 /a /tr http://timestamp.digicert.com /td SHA256 $BundlePath 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "Bundle sign failed" }
+Sign-File $BundlePath
 Write-Host " done" -ForegroundColor Green
 
 Remove-Item -Recurse $WorkDir -Force

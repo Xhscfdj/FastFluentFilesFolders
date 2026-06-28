@@ -26,11 +26,11 @@ namespace LRS.UserControls
 
         public static readonly DependencyProperty NavigateCommandProperty =
             DependencyProperty.Register(nameof(NavigateCommand), typeof(ICommand), typeof(LRSBreadcrumb),
-                new PropertyMetadata(null));
+                new PropertyMetadata(null, OnNavigateCommandChanged));
 
         public static readonly DependencyProperty NavigateSubCommandProperty =
             DependencyProperty.Register(nameof(NavigateSubCommand), typeof(ICommand), typeof(LRSBreadcrumb),
-                new PropertyMetadata(null));
+                new PropertyMetadata(null, OnNavigateCommandChanged));
 
         public static readonly DependencyProperty GoBackCommandProperty =
             DependencyProperty.Register(nameof(GoBackCommand), typeof(ICommand), typeof(LRSBreadcrumb),
@@ -217,6 +217,17 @@ namespace LRS.UserControls
             control.UpdateSegments(e.NewValue as string);
         }
 
+        private static void OnNavigateCommandChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var control = (LRSBreadcrumb)d;
+            control.UpdateSegments(control.CurrentPath);
+        }
+
+        public void RefreshSegments()
+        {
+            UpdateSegments(CurrentPath);
+        }
+
         private void UpdateSegments(string path)
         {
             Segments.Clear();
@@ -392,6 +403,12 @@ namespace LRS.UserControls
                 dataPackage.SetText(CurrentPath);
                 Clipboard.SetContent(dataPackage);
             }
+        }
+
+        private void OnRefreshClick(object sender, RoutedEventArgs e)
+        {
+            if (!string.IsNullOrEmpty(CurrentPath))
+                NavigateCommand?.Execute(CurrentPath);
         }
 
         private class RelayCommand : ICommand

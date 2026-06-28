@@ -30,11 +30,12 @@
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+			<ColumnDefinition Width="Auto" />
+			<ColumnDefinition Width="*"    />
+            <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
@@ -69,7 +70,16 @@
             <FontIcon Glyph="&#xE74A;" FontSize="14"/>
         </Button>
 
-        <Grid Grid.Column="3" x:Name="AddressBarArea" Margin="4,0,0,0" PointerPressed="OnAddressBarAreaPointerPressed">
+		<Button Grid.Column="3" x:Name="RefreshButton"
+				Width="32" Height="32"
+				Style="{StaticResource SubtleButtonStyle}"
+				ToolTipService.ToolTip="重新加载"
+				Click="OnRefreshClick"
+				Padding="4">
+			<FontIcon Glyph="&#xE72C;" FontSize="14"/>
+		</Button>
+		
+        <Grid Grid.Column="4" x:Name="AddressBarArea" Margin="4,0,0,0" PointerPressed="OnAddressBarAreaPointerPressed">
 			<SystemBackdropElement CornerRadius="16">
 				<SystemBackdropElement.SystemBackdrop>
 					<DesktopAcrylicBackdrop />
@@ -140,7 +150,7 @@
             </ScrollViewer>
         </Grid>
 
-        <Button Grid.Column="4" x:Name="CopyPathButton"
+        <Button Grid.Column="5" x:Name="CopyPathButton"
                 Width="32" Height="32"
 				Margin="10,0,0,0"
                 ToolTipService.ToolTip="复制路径"

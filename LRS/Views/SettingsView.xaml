@@ -8,13 +8,47 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:ctrls="using:Microsoft.UI.Xaml.Controls"
 	xmlns:comCtrls="using:CommunityToolkit.WinUI.Controls"
+	xmlns:vm="using:LRS.ViewModels"
     mc:Ignorable="d">
 
     <ScrollViewer>
         <StackPanel Padding="24" Spacing="14" HorizontalAlignment="Stretch">
-            <TextBlock Text="设置" FontSize="22" FontWeight="Bold" />
+			<TextBlock Text="设置" FontSize="22" FontWeight="Bold" />
+			<!--General-->
+			<TextBlock Text="通用" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
+			<comCtrls:SettingsCard Header="主页路径">
+				<comCtrls:SettingsCard.HeaderIcon>
+					<FontIcon Glyph="&#xE80F;" />
+				</comCtrls:SettingsCard.HeaderIcon>
+				<TextBox Text="{Binding AppConfigs.HomePageFullPath, Mode=TwoWay}" />
+			</comCtrls:SettingsCard>
+			
+			<comCtrls:SettingsExpander Header="普通文件夹默认排序方式">
+				<comCtrls:SettingsExpander.HeaderIcon>
+					<FontIcon Glyph="&#xE8CB;" />
+				</comCtrls:SettingsExpander.HeaderIcon>
+				<comCtrls:SettingsExpander.Items>
+					<comCtrls:SettingsCard Header="排序方式">
+						<comCtrls:SettingsCard.HeaderIcon>
+							<FontIcon Glyph="&#xE8CB;" />
+						</comCtrls:SettingsCard.HeaderIcon>
+						<ComboBox x:Name="OrderModeComboBox" SelectionChanged="OnSettingComboBox_SelectionChanged" ItemsSource="{Binding OrderModePairs}" DisplayMemberPath="Value"/>
+					</comCtrls:SettingsCard>
+				</comCtrls:SettingsExpander.Items>
+				<StackPanel>
 
-            <TextBlock Text="外观" FontSize="16" FontWeight="SemiBold" Margin="0,8,0,0" />
+				</StackPanel>
+			</comCtrls:SettingsExpander>
+
+			<comCtrls:SettingsCard Header="普通文件夹默认排序方式">
+				<comCtrls:SettingsCard.HeaderIcon>
+					<FontIcon Glyph="&#xE8CB;" />
+				</comCtrls:SettingsCard.HeaderIcon>
+
+			</comCtrls:SettingsCard>
+
+			<!--Appearance-->
+			<TextBlock Text="外观" FontSize="16" FontWeight="SemiBold" Margin="0,8,0,0" />
 			<comCtrls:SettingsCard Header="中间文件列表高度">
 				<comCtrls:SettingsCard.HeaderIcon>
 					<FontIcon Glyph="&#xE752;" />
@@ -37,18 +71,10 @@
                           IsOn="{Binding AppConfigs.IfLimitIconLoadingConcurrency, Mode=TwoWay}" />
 			-->
 
-            <TextBlock Text="通用" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
-			<comCtrls:SettingsCard Header="主页路径">
-				<comCtrls:SettingsCard.HeaderIcon>
-					<FontIcon Glyph="&#xE80F;" />
-				</comCtrls:SettingsCard.HeaderIcon>
-				<TextBox Text="{Binding AppConfigs.HomePageFullPath, Mode=TwoWay}" />
-			</comCtrls:SettingsCard>
-
 			<TextBlock Text="性能" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
 			<comCtrls:SettingsCard  Header="图标并行加载数量">
 				<comCtrls:SettingsCard.HeaderIcon>
-					<FontIcon Glyph="&#xF16A;"/>
+					<FontIcon Glyph="&#xE8B9;"/>
 				</comCtrls:SettingsCard.HeaderIcon>
 				<ctrls:NumberBox Value="{Binding AppConfigs.IconParallelLoadingCount, Mode=TwoWay}"
                                  Minimum="1" Maximum="200"

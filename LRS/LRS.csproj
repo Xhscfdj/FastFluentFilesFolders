@@ -136,6 +136,15 @@
     <Page Update="Views\FileTreeView.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
+    <Page Update="UserControls\TreeDataGrid.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Update="UserControls\ThemedIcon.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Update="UserControls\ThemedIconResources.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
   </ItemGroup>
 
   <!--

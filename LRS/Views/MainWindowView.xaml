@@ -21,12 +21,12 @@
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="2*" />
-			<ColumnDefinition Width="20" />
-			<ColumnDefinition Width="5*" />
+			<ColumnDefinition Width="10" />
+			<ColumnDefinition Width="7*" />
         </Grid.ColumnDefinitions>
         <TitleBar x:Name="AppTitleBar"
                   Grid.ColumnSpan="3"
-              Title="LRS" Subtitle="戴夫-00滚木">
+              Title="LRS" Subtitle="0.0.5">
             <TitleBar.IconSource>
 				<FontIconSource Glyph="&#xE838;"/>
             </TitleBar.IconSource>

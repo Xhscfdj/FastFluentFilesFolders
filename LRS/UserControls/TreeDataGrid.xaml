@@ -1,0 +1,235 @@
+﻿<UserControl
+    x:Class="LRS.UserControls.TreeDataGrid"
+    x:Name="Root"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:LRS.UserControls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:LRS.ViewModels"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <local:TimeGroupConverter x:Key="TimeGroupConverter"/>
+        <local:TimeGroupSortConverter x:Key="TimeGroupSortConverter"/>
+
+        <CollectionViewSource
+            x:Key="GroupedSource"
+            x:Name="GroupedSource"
+            IsSourceGrouped="True"
+            ItemsPath="Items"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Column Header Row -->
+        <Grid x:Name="HeaderGrid" Grid.Row="0"
+              Height="36" Background="{ThemeResource CardBackgroundFillColorDefault}"
+              BorderBrush="{ThemeResource CardStrokeColorDefault}" BorderThickness="0,0,0,1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="32"/>
+                <ColumnDefinition x:Name="NameColDef" Width="4*"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition x:Name="ModifiedColDef" Width="2*"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition x:Name="CreatedColDef" Width="2*"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition x:Name="SizeColDef" Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Icon spacer -->
+            <TextBlock Grid.Column="0" Text="" VerticalAlignment="Center" Margin="6,0,0,0"/>
+
+            <!-- Name header -->
+            <Grid Grid.Column="1" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0" Spacing="2">
+                    <TextBlock Text="名称"
+                               FontWeight="SemiBold" FontSize="12"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <TextBlock x:Name="NameSortIndicator" Text=""
+                               FontSize="10" VerticalAlignment="Center"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+                <Button x:Name="NameHeaderBtn" Style="{StaticResource SubtleButtonStyle}"
+                        BorderThickness="0" Opacity="0"
+                        Click="OnSortByName"
+                        VerticalAlignment="Stretch" HorizontalAlignment="Stretch"/>
+            </Grid>
+
+            <!-- Name drag handle -->
+            <local:ResizeHandleGrid Grid.Column="2" x:Name="NameDragHandle"
+                  VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
+                  PointerPressed="OnColumnDragStarted"
+                  PointerMoved="OnColumnDragDelta"
+                  PointerReleased="OnColumnDragCompleted"
+                  PointerCaptureLost="OnColumnDragCompleted">
+                <Grid Background="Transparent" Width="10" HorizontalAlignment="Center"/>
+            </local:ResizeHandleGrid>
+
+            <!-- Modified header -->
+            <Grid Grid.Column="3" VerticalAlignment="Stretch">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0" Spacing="2">
+                    <TextBlock Text="修改日期"
+                               FontWeight="SemiBold" FontSize="12"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <TextBlock x:Name="ModifiedSortIndicator" Text=""
+                               FontSize="10" VerticalAlignment="Center"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+                <Button x:Name="ModifiedHeaderBtn" Style="{StaticResource SubtleButtonStyle}"
+                        BorderThickness="0" Opacity="0"
+                        Click="OnSortByModified"
+                        VerticalAlignment="Stretch" HorizontalAlignment="Stretch"/>
+            </Grid>
+
+            <!-- Modified drag handle -->
+            <local:ResizeHandleGrid Grid.Column="4" x:Name="ModifiedDragHandle"
+                  VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
+                  PointerPressed="OnColumnDragStarted"
+                  PointerMoved="OnColumnDragDelta"
+                  PointerReleased="OnColumnDragCompleted"
+                  PointerCaptureLost="OnColumnDragCompleted">
+                <Grid Background="Transparent" Width="10" HorizontalAlignment="Center"/>
+            </local:ResizeHandleGrid>
+
+            <!-- Created header -->
+            <Grid Grid.Column="5" VerticalAlignment="Stretch">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0" Spacing="2">
+                    <TextBlock Text="创建日期"
+                               FontWeight="SemiBold" FontSize="12"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <TextBlock x:Name="CreatedSortIndicator" Text=""
+                               FontSize="10" VerticalAlignment="Center"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+                <Button x:Name="CreatedHeaderBtn" Style="{StaticResource SubtleButtonStyle}"
+                        BorderThickness="0" Opacity="0"
+                        Click="OnSortByCreated"
+                        VerticalAlignment="Stretch" HorizontalAlignment="Stretch"/>
+            </Grid>
+
+            <!-- Created drag handle -->
+            <local:ResizeHandleGrid Grid.Column="6" x:Name="CreatedDragHandle"
+                  VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
+                  PointerPressed="OnColumnDragStarted"
+                  PointerMoved="OnColumnDragDelta"
+                  PointerReleased="OnColumnDragCompleted"
+                  PointerCaptureLost="OnColumnDragCompleted">
+                <Grid Background="Transparent" Width="10" HorizontalAlignment="Center"/>
+            </local:ResizeHandleGrid>
+
+            <!-- Size header -->
+            <Grid Grid.Column="7" VerticalAlignment="Stretch">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0" Spacing="2">
+                    <TextBlock Text="大小"
+                               FontWeight="SemiBold" FontSize="12"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <TextBlock x:Name="SizeSortIndicator" Text=""
+                               FontSize="10" VerticalAlignment="Center"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+                <Button x:Name="SizeHeaderBtn" Style="{StaticResource SubtleButtonStyle}"
+                        BorderThickness="0" Opacity="0"
+                        Click="OnSortBySize"
+                        VerticalAlignment="Stretch" HorizontalAlignment="Stretch"/>
+            </Grid>
+        </Grid>
+
+        <!-- Content ListView with Grouping -->
+        <ListView x:Name="FileListView" Grid.Row="1"
+                  ItemsSource="{Binding Source={StaticResource GroupedSource}}"
+                  SelectionMode="Single"
+                  DoubleTapped="OnItemDoubleTapped"
+                  RightTapped="OnItemRightTapped"
+                  BorderThickness="0"
+                  ScrollViewer.HorizontalScrollMode="Disabled"
+                  ScrollViewer.HorizontalScrollBarVisibility="Hidden">
+
+            <ListView.GroupStyle>
+                <GroupStyle>
+                    <GroupStyle.HeaderTemplate>
+                        <DataTemplate x:DataType="local:TimeGroup">
+                            <Grid Height="32" Background="{ThemeResource CardBackgroundFillColorDefault}"
+                                  BorderBrush="{ThemeResource CardStrokeColorDefault}" BorderThickness="0,0,0,1"
+                                  Padding="12,0,0,0">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="6">
+                                    <Button Style="{StaticResource SubtleButtonStyle}"
+                                            BorderThickness="0" Padding="2"
+                                            Click="{x:Bind ToggleIsExpanded}"
+                                            Width="20" Height="20">
+                                        <FontIcon Glyph="{x:Bind ExpandGlyph, Mode=OneWay}" FontSize="10"
+                                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    </Button>
+                                    <FontIcon Glyph="&#xE8B7;" FontSize="12"
+                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    <TextBlock Text="{x:Bind Key}" FontSize="12" VerticalAlignment="Center"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    <TextBlock VerticalAlignment="Center" FontSize="11"
+                                               Foreground="{ThemeResource TextFillColorTertiaryBrush}">
+                                        <Run Text="(" />
+                                        <Run Text="{x:Bind Items.Count, Mode=OneWay}" />
+                                        <Run Text=")" />
+                                    </TextBlock>
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </GroupStyle.HeaderTemplate>
+                </GroupStyle>
+            </ListView.GroupStyle>
+
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="vm:FileSystemNodeViewModel">
+                    <Grid Height="{Binding ParentRowHeight, ElementName=Root}"
+                          Background="Transparent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="{Binding NameColumnWidth, ElementName=Root}"/>
+                            <ColumnDefinition Width="6"/>
+                            <ColumnDefinition Width="{Binding ModifiedColumnWidth, ElementName=Root}"/>
+                            <ColumnDefinition Width="6"/>
+                            <ColumnDefinition Width="{Binding CreatedColumnWidth, ElementName=Root}"/>
+                            <ColumnDefinition Width="6"/>
+                            <ColumnDefinition Width="{Binding SizeColumnWidth, ElementName=Root}"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Image Grid.Column="0" Source="{Binding Icon}"
+                               Width="20" Height="20" VerticalAlignment="Center"
+                               Margin="6,0,0,0"/>
+
+                        <TextBlock Grid.Column="1" Text="{Binding Name}"
+                                   VerticalAlignment="Center" Margin="6,0,0,0"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                   Visibility="{x:Bind IsNotRenamingVisibility, Mode=OneWay}"/>
+
+                        <TextBox Grid.Column="1" Text="{Binding Name, Mode=OneWay}"
+                                 VerticalAlignment="Center" Margin="6,0,0,0"
+                                 BorderThickness="0" Padding="0,6,0,6"
+                                 Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                 Background="Transparent"
+                                 Visibility="{x:Bind IsRenamingVisibility, Mode=OneWay}"
+                                 GotFocus="OnRenameTextBoxGotFocus"
+                                 LostFocus="OnRenameTextBoxLostFocus"
+                                 KeyDown="OnRenameTextBoxKeyDown"/>
+
+                        <TextBlock Grid.Column="3" Text="{Binding LastModifiedTimeString}"
+                                   VerticalAlignment="Center" Margin="6,0,0,0"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+
+                        <TextBlock Grid.Column="5" Text="{Binding FirstCreatedTimeString}"
+                                   VerticalAlignment="Center" Margin="6,0,0,0"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+
+                        <TextBlock Grid.Column="7" Text="{Binding VisualSize}"
+                                   TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </Grid>
+</UserControl>

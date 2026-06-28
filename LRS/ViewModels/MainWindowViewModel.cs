@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI;
 using LRS.Services;
+using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -25,9 +26,11 @@ namespace LRS.ViewModels
 {
 	public partial class MainWindowViewModel : ViewModelBase
 	{
-		public MainWindowViewModel(IIconProvider iconProvider, Microsoft.UI.Dispatching.DispatcherQueue uiDispatcherQueue, Configs configs)
+		private IFileOperator _fileOperator;
+		public MainWindowViewModel(IIconProvider iconProvider, Microsoft.UI.Dispatching.DispatcherQueue uiDispatcherQueue, Configs configs, IFileOperator fileOperator)
 		{
 			AppConfigs = configs;
+			_fileOperator = fileOperator;
 			CurrentBreadcrumbPath = configs.HomePageFullPath;
 			_uiDispatcherQueue = uiDispatcherQueue;
 			_iconProvider = iconProvider;
@@ -60,13 +63,153 @@ namespace LRS.ViewModels
 			var folder = RootDirectories.FirstOrDefault(); // 取第一个驱动器
 			_ = UpdateCurrentFolderContentAsync(folder);
 			TestString = "Modified by testFunction.";
-			//CurrentFolderContent.Add(new FileNodeViewModel(@"C:\D\", _iconProvider, _appConfigs, _uiDispatcherQueue));
-			//var temp = CurrentFolderContent;
-			//CurrentFolderContent = temp;
 			Debug.WriteLine($"[DebugButton] CurrentFolderContent count is {CurrentFolderContent.Count}");
 			foreach (var item in CurrentFolderContent)
 			{
 				Debug.WriteLine($"[DebugButton]Item: {item.Name}, Type is {item.NodeTypeName}");
+			}
+		}
+
+		[RelayCommand]
+		private async Task Copy(FileSystemNodeViewModel? item)
+		{
+			if (item == null) return;
+			await _fileOperator.CopyToClipBoard(new[] { item.FullPath });
+		}
+
+		[RelayCommand]
+		private async Task Cut(FileSystemNodeViewModel? item)
+		{
+			if (item == null) return;
+			await _fileOperator.CopyToClipBoard(new[] { item.FullPath }, true);
+		}
+
+		[RelayCommand]
+		private async Task Paste()
+		{
+			var (paths, isCut) = await _fileOperator.PasteClipboardFiles();
+			if (paths == null || !paths.Any()) return;
+
+			var destDir = SelectedFolder?.FullPath ?? CurrentBreadcrumbPath;
+			foreach (var srcPath in paths)
+			{
+				var name = Path.GetFileName(srcPath);
+				var destPath = Path.Combine(destDir, name);
+				destPath = GenerateUniquePath(destPath);
+				if (isCut)
+					await _fileOperator.MoveAsync(srcPath, destPath);
+				else
+					await _fileOperator.CopyToAsync(srcPath, destPath);
+			}
+			await RefreshCurrentFolder();
+		}
+
+		private static string GenerateUniquePath(string destPath)
+		{
+			if (!File.Exists(destPath) && !Directory.Exists(destPath))
+				return destPath;
+
+			var dir = Path.GetDirectoryName(destPath) ?? "";
+			var name = Path.GetFileNameWithoutExtension(destPath);
+			var ext = Path.GetExtension(destPath);
+
+			int index = 1;
+			string newPath;
+			do
+			{
+				var suffix = index == 1 ? "" : $" ({index})";
+				newPath = Path.Combine(dir, $"{name} - 副本{suffix}{ext}");
+			}
+			while (File.Exists(newPath) || Directory.Exists(newPath));
+
+			return newPath;
+		}
+
+		[RelayCommand]
+		private async Task Delete(FileSystemNodeViewModel? item)
+		{
+			if (item == null) return;
+			await _fileOperator.DeleteAsync(item.FullPath);
+			await RefreshCurrentFolder();
+		}
+
+		[RelayCommand]
+		private async Task Rename(FileSystemNodeViewModel? item)
+		{
+			if (item == null) return;
+			CancelRename();
+			await _uiDispatcherQueue.EnqueueAsync(() =>
+			{
+				item.IsRenaming = true;
+				_renamingItem = item;
+				RenameFocusRequested?.Invoke(item);
+			});
+		}
+
+		private FileSystemNodeViewModel? _renamingItem;
+
+		public event Action<FileSystemNodeViewModel>? RenameFocusRequested;
+
+		public void CancelRename()
+		{
+			if (_renamingItem != null)
+			{
+				_renamingItem.IsRenaming = false;
+				_renamingItem = null;
+			}
+		}
+
+		public event Action? BreadcrumbRefreshRequested;
+
+		public async Task CommitRenameAsync(FileSystemNodeViewModel item, string newName)
+		{
+			if (string.IsNullOrEmpty(newName)) return;
+			try
+			{
+				await _fileOperator.RenameAsync(item.FullPath, newName);
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine($"[Rename] Failed: {ex.Message}");
+			}
+			_renamingItem = null;
+			await RefreshCurrentFolder();
+		}
+
+		[RelayCommand]
+		private async Task CopyPath(FileSystemNodeViewModel? item)
+		{
+			if (item == null) return;
+			var dataPackage = new Windows.ApplicationModel.DataTransfer.DataPackage();
+			dataPackage.SetText(item.FullPath);
+			Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dataPackage);
+			await Task.CompletedTask;
+		}
+
+		[RelayCommand]
+		private async Task NewFolder()
+		{
+			var destDir = SelectedFolder?.FullPath ?? CurrentBreadcrumbPath;
+			var newPath = GenerateUniquePath(Path.Combine(destDir, "新建文件夹"));
+			Directory.CreateDirectory(newPath);
+			await RefreshCurrentFolder();
+		}
+
+		[RelayCommand]
+		private async Task NewTextDocument()
+		{
+			var destDir = SelectedFolder?.FullPath ?? CurrentBreadcrumbPath;
+			var newPath = GenerateUniquePath(Path.Combine(destDir, "新建文本文档.txt"));
+			File.Create(newPath).Dispose();
+			await RefreshCurrentFolder();
+		}
+
+		private async Task RefreshCurrentFolder()
+		{
+			if (SelectedFolder != null)
+			{
+				await UpdateCurrentFolderContentAsync(SelectedFolder);
+				BreadcrumbRefreshRequested?.Invoke();
 			}
 		}
 		[ObservableProperty] private IPathProvider _pathProvider = new FileSystemPathProvider();
@@ -100,6 +243,9 @@ namespace LRS.ViewModels
 		}
 		private Microsoft.UI.Dispatching.DispatcherQueue _uiDispatcherQueue;
 		[ObservableProperty] private FileSystemNodeViewModel? _selectedFolder;
+
+		public bool IsCurrentFolderSpecial => SelectedFolder?.IsSpecialFolder ?? false;
+
 		partial void OnSelectedFolderChanged(FileSystemNodeViewModel? value)
 		{
 			Debug.WriteLine($"\n----Selected:{value?.Name}\n");
@@ -132,6 +278,8 @@ namespace LRS.ViewModels
 				return;
 			}
 
+			CancelRename();
+
 			// 确保子项已加载（同步等待，确保 Children 已填充）
 			if (!folder.IsLoaded)
 			{
@@ -149,10 +297,7 @@ namespace LRS.ViewModels
 						CurrentFolderContent.Add(item);
 				}
 				CurrentBreadcrumbPath = folder.FullPath;
-				// 以下代码原本用来切掉PathsForBreadcrumbBar的最后一项，现在用不到，遂注释
-				//PathsForBreadcrumbBar = folder.FullPath.Split();
-				//string[] newArray = new string[PathsForBreadcrumbBar.Length - 1];
-				//Array.Copy(PathsForBreadcrumbBar, 0, newArray, 0, PathsForBreadcrumbBar.Length - 1);
+				OnPropertyChanged(nameof(IsCurrentFolderSpecial));
 			});
 		}
 

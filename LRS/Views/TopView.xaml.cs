@@ -31,44 +31,12 @@ namespace LRS.Views
 		{
 			InitializeComponent();
 			DataContext = App.SharedViewModel;
+			App.SharedViewModel.BreadcrumbRefreshRequested += OnBreadcrumbRefreshRequested;
 		}
-		//public TopView()
-		//{
-		//	InitializeComponent();
-		//	DataContext = App.SharedViewModel;
 
-		//	App.SharedViewModel.PropertyChanged += OnCurrentBreadcrumbPathChanged;
-		//}
-		//public void OnCurrentBreadcrumbPathChanged(object sender, PropertyChangedEventArgs e) 
-		//{
-		//	if (e.PropertyName == nameof(MainWindowViewModel.CurrentBreadcrumbPath))
-		//	{
-		//		BBB.SetPath(App.SharedViewModel.CurrentBreadcrumbPath);
-		//	}
-
-		//}
-		//private void Navigate(string fullPath)
-		//{
-		//	LRS.ViewModels.TopViewModel.(fullPath);
-		//	BBB.SetPath(fullPath);
-		//}
-		//private void FsBreadcrumb_NodeSelected(object s, PathNodeEventArgs e)
-		//	=> Navigate(e.Node.FullPath);
-		//private void BBB_UpRequested(object s, PathNodeEventArgs e)
-		//{
-		//	Navigate(e.Node.FullPath);
-		//}
-		//private void BBB_HomeRequested(object s, EventArgs e)
-		//{
-		//	Navigate(App.SharedViewModel.AppConfigs.HomePageFullPath);
-
-		//	DispatcherQueue uiDispatcherQueue = DispatcherQueue.GetForCurrentThread();
-		//	App.SharedViewModel.SelectedFolder = new FileSystemNodeViewModel(App.SharedViewModel.AppConfigs.HomePageFullPath, true, false, App.SharedViewModel.AppConfigs, DispatcherQueue.GetForCurrentThread(), false);
-		//}
-		//private void BBB_BackRequested(object s, EventArgs e)
-		//{
-		//	var prev = TopViewModel.BBB_BackRequestedForViewModel();
-		//	if (prev != null) BBB.SetPath(prev);
-		//}
+		private void OnBreadcrumbRefreshRequested()
+		{
+			DispatcherQueue.TryEnqueue(() => BreadcrumbCtrl.RefreshSegments());
+		}
 	}
 }

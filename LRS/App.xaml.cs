@@ -34,6 +34,7 @@ namespace LRS
     public partial class App : Application
     {
         private Window? _window;
+        public static Window? MainWindow { get; private set; }
         private IHost _host;
 		public static MainWindowViewModel SharedViewModel { get; private set; }
 		public static IServiceProvider Services { get; private set; }
@@ -57,6 +58,7 @@ namespace LRS
             {
                 services.AddSingleton(new Configs());
 				services.AddSingleton<IIconProvider, WindowsIconProvider>();
+				services.AddSingleton<IFileOperator, FileOperator>();
 			}).Build();
             Services = _host.Services;
 			this.UnhandledException += (s, e) =>
@@ -77,10 +79,12 @@ namespace LRS
 			// 在 UI 线程上创建共享 ViewModel
 			var dispatcher = DispatcherQueue.GetForCurrentThread();
 			var configs = Services.GetRequiredService<Configs>();
+			var fileOperator = Services.GetRequiredService<IFileOperator>();
 			var iconProvider = Services.GetRequiredService<IIconProvider>();
-			SharedViewModel = new MainWindowViewModel(iconProvider, dispatcher, configs);
+			SharedViewModel = new MainWindowViewModel(iconProvider, dispatcher, configs, fileOperator);
 
 			_window = new Views.MainWindowView();
+			MainWindow = _window;
 			_window.Activate();
 		}
     }

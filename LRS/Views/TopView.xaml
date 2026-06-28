@@ -14,7 +14,7 @@
     mc:Ignorable="d">
 
 	<Grid>
-		<LRSCtrls:LRSBreadcrumb CurrentPath="{Binding SelectedFolder.FullPath, Mode=OneWay}"
+		<LRSCtrls:LRSBreadcrumb x:Name="BreadcrumbCtrl" CurrentPath="{Binding SelectedFolder.FullPath, Mode=OneWay}"
 								NavigateCommand="{Binding NavigateToPathCommand}"
 								Margin="10,0,10,0"
 								Height="35"

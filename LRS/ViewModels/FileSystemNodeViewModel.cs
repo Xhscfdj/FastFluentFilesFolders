@@ -26,6 +26,7 @@ namespace LRS.ViewModels
 
 		// 基础属性
 		[ObservableProperty] private bool _isPlaceholder = false;
+		[ObservableProperty] private bool _isSpecialFolder = false;
 		[ObservableProperty] private string _name = string.Empty;
 		[ObservableProperty] private string _fullPath = string.Empty;
 		[ObservableProperty] private bool _isDirectory = true;
@@ -39,7 +40,19 @@ namespace LRS.ViewModels
 		[ObservableProperty] private string _lastModifiedTimeString = string.Empty;
 		[ObservableProperty] private string _firstCreatedTimeString = string.Empty;
 		[ObservableProperty] private bool _isSelected = false;
-		
+		[ObservableProperty] private bool _isRenaming = false;
+
+		public Microsoft.UI.Xaml.Visibility IsRenamingVisibility =>
+			IsRenaming ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+		public Microsoft.UI.Xaml.Visibility IsNotRenamingVisibility =>
+			IsRenaming ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+
+		partial void OnIsRenamingChanged(bool value)
+		{
+			OnPropertyChanged(nameof(IsRenamingVisibility));
+			OnPropertyChanged(nameof(IsNotRenamingVisibility));
+		}
+
 		// 树形结构相关（文件夹特有，文件则为空）
 		[ObservableProperty] private ObservableCollection<FileSystemNodeViewModel> _children = [];
 		[ObservableProperty] private string _childrenCountText = string.Empty;
@@ -74,6 +87,10 @@ namespace LRS.ViewModels
 				Children.Add(new PlaceholderNodeViewModel());
 				Name = (fullPath.Length == 3 && fullPath.EndsWith(":\\")) ? fullPath : Path.GetFileName(fullPath.TrimEnd('\\'));
 				Extension = string.Empty;
+				if (ShellIconHelper.IsSpecialFolder(fullPath))
+				{
+					IsSpecialFolder = true;
+				}
 			}
 			else
 			{
@@ -106,23 +123,17 @@ namespace LRS.ViewModels
 			{
 				if (IsDirectory)
 				{
-					await Task.Run(() =>
-					{
-						var dirInfo = new DirectoryInfo(FullPath);
-						LastModifiedTime = dirInfo.LastWriteTimeUtc;
-						FirstCreatedTime = dirInfo.CreationTimeUtc;
-						ExactSize = 0;
-					});
+					var dirInfo = await Task.Run(() => new DirectoryInfo(FullPath));
+					LastModifiedTime = dirInfo.LastWriteTimeUtc;
+					FirstCreatedTime = dirInfo.CreationTimeUtc;
+					ExactSize = 0;
 				}
 				else if (File.Exists(FullPath))
 				{
-					await Task.Run(() =>
-					{
-						var fileInfo = new FileInfo(FullPath);
-						LastModifiedTime = fileInfo.LastWriteTimeUtc;
-						FirstCreatedTime = fileInfo.CreationTimeUtc;
-						ExactSize = fileInfo.Length;
-					});
+					var fileInfo = await Task.Run(() => new FileInfo(FullPath));
+					LastModifiedTime = fileInfo.LastWriteTimeUtc;
+					FirstCreatedTime = fileInfo.CreationTimeUtc;
+					ExactSize = fileInfo.Length;
 				}
 
 				await _uiDispatcherQueue.EnqueueAsync(() =>

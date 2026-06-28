@@ -17,18 +17,17 @@ namespace LRS.ViewModels
         public static readonly string UserConfigPath =
             Path.Combine(UserConfigDir, "user_configs.json");
 
-        public string UserConfigPathToDisplay = "C:C:C:C:C";
+        //public string UserConfigPathToDisplay = "C:C:C:C:C";
         public IConfiguration configuration;
-
         [ObservableProperty] private int _middleFilesHeight = 40;
         [ObservableProperty] private bool _ifUsesWin32APIToGetIcon = true;
         [ObservableProperty] private bool _ifLimitIconLoadingConcurrency = false;
         [ObservableProperty] private int _iconParallelLoadingCount = 30;
         [ObservableProperty] private string _homePageFullPath = "C:\\";
+        [ObservableProperty] private string _defaultOrderMode = "ModifiedDesc";
 
         public Configs()
         {
-            UserConfigPathToDisplay = UserConfigPath;
             EnsureUserConfigExists();
             BuildConfiguration();
             ReadConfigs();
@@ -58,6 +57,7 @@ namespace LRS.ViewModels
             IfUsesWin32APIToGetIcon = configuration.GetValue("Advanced:ifUsesWin32APIToGetIcon", true);
             HomePageFullPath = configuration.GetValue("General:HomePageFullPath", "C:\\")!;
             IconParallelLoadingCount = configuration.GetValue("Performance:IconParallelLoadingCount", 30);
+            DefaultOrderMode = configuration.GetValue("General:DefaultOrderMode", "ModifiedDesc")!;
             if (IconParallelLoadingCount != 0) IfLimitIconLoadingConcurrency = true;
         }
 
@@ -73,7 +73,8 @@ namespace LRS.ViewModels
                $"    \"ifUsesWin32APIToGetIcon\": {IfUsesWin32APIToGetIcon.ToString().ToLower()}\n",
                 "  },\n",
                 "  \"General\": {\n",
-               $"    \"HomePageFullPath\": \"{escapedPath}\"\n",
+               $"    \"HomePageFullPath\": \"{escapedPath}\",\n",
+               $"    \"DefaultOrderMode\": \"{DefaultOrderMode}\"\n",
                 "  },\n",
                 "  \"Performance\": {\n",
                $"    \"IconParallelLoadingCount\": {IconParallelLoadingCount}\n",
