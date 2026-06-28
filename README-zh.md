@@ -10,7 +10,7 @@
 
 ## 咱想要starrrrrrrrr
 球球了!
-喜欢的话,就给个starrrDA☆ZErrrats吧喵~
+喜欢的话,就给个starrr☆rrrats吧喵~
 我会非常,非常,非常开心的喵~
 
 ## 功能特性
