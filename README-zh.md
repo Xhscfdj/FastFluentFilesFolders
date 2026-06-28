@@ -8,6 +8,10 @@
 [![.NET](https://img.shields.io/badge/.NET-8.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue)](https://www.microsoft.com/windows)
 
+## 我要starrrrrrrrr
+球球了!
+喜欢的话,就给个starrrDA☆ZErrrats吧喵~
+
 ## 功能特性
 
 - **文件树侧边栏** -- 以可折叠的树状视图浏览所有驱动器和文件夹，子目录按需懒加载
