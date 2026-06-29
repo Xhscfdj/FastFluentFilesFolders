@@ -19,7 +19,7 @@
 ### 安装方法
 打开Windows Powershell
 `<`和`>`**括起来的内容需根据实际情况替换**
-输入`Import-Certificate -FilePath "你下载的证书文件路径.cer" -CertStoreLocation "Cert:\CurrentUser\TrustedPeople"`
+输入`Import-Certificate -FilePath "<你下载的证书文件路径>" -CertStoreLocation "Cert:\CurrentUser\TrustedPeople"`
 按回车执行这条命令即可.
 
 ## 功能特性
