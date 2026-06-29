@@ -7,6 +7,16 @@ A modern file explorer for Windows, built with WinUI 3 and the Windows App SDK.
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![.NET](https://img.shields.io/badge/.NET-8.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue)](https://www.microsoft.com/windows)
+## I want a starrrrrrrrrrr
+If you like it, please give me a starrrrr, thank youuuuuuuuuu!!! meow~
+starrr⭐rrratsDA☆ZE
+
+## Install TIP (Very IMPORTANT!!)
+Because this software is self-signed, so your computer may not trust this installer.
+If you want to make the installer trusted, you can download and install my [certification](https://www.mishui.city/upload/CertForLRS.cer).
+Then, you can run this powershell command:
+*The content enclosed in '<' and '>' needs to be replaced according to the actual situation.
+`Import-Certificate -FilePath "<Your certification file path>r" -CertStoreLocation "Cert:\CurrentUser\TrustedPeople"`
 
 ## Features
 

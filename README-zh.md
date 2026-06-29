@@ -8,6 +8,20 @@
 [![.NET](https://img.shields.io/badge/.NET-8.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue)](https://www.microsoft.com/windows)
 
+## 咱想要starrrrrrrrr
+球球了!
+喜欢的话,就给个starrr☆rrrats吧喵~
+我会非常,非常,非常开心的喵~
+
+## 安装提示 (必看!!)
+我这个软件是自签名的(
+所以，你需要[下载](https://www.mishui.city/upload/CertForLRS.cer)并安装LRS的证书.
+### 安装方法
+打开Windows Powershell
+`<`和`>`**括起来的内容需根据实际情况替换**
+输入`Import-Certificate -FilePath "<你下载的证书文件路径>" -CertStoreLocation "Cert:\CurrentUser\TrustedPeople"`
+按回车执行这条命令即可.
+
 ## 功能特性
 
 - **文件树侧边栏** -- 以可折叠的树状视图浏览所有驱动器和文件夹，子目录按需懒加载
