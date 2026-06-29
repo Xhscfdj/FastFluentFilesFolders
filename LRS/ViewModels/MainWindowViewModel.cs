@@ -101,8 +101,17 @@ namespace LRS.ViewModels
 					await _fileOperator.MoveAsync(srcPath, destPath);
 				else
 					await _fileOperator.CopyToAsync(srcPath, destPath);
+
+				bool isDir = Directory.Exists(destPath);
+				var node = new FileSystemNodeViewModel(destPath, isDir, false, AppConfigs, _uiDispatcherQueue, false);
+				_ = node.InitAsync(node.FullPath, isDir);
+				await _uiDispatcherQueue.EnqueueAsync(() =>
+				{
+					CurrentFolderContent.Add(node);
+					SelectedFolder?.Children.Add(node);
+				});
 			}
-			await RefreshCurrentFolder();
+			BreadcrumbRefreshRequested?.Invoke();
 		}
 
 		private static string GenerateUniquePath(string destPath)
@@ -130,8 +139,24 @@ namespace LRS.ViewModels
 		private async Task Delete(FileSystemNodeViewModel? item)
 		{
 			if (item == null) return;
+			await _fileOperator.DeleteToRecycleBinAsync(item.FullPath);
+			await _uiDispatcherQueue.EnqueueAsync(() =>
+			{
+				CurrentFolderContent.Remove(item);
+				SelectedFolder?.Children.Remove(item);
+			});
+		}
+
+		[RelayCommand]
+		private async Task PermanentDelete(FileSystemNodeViewModel? item)
+		{
+			if (item == null) return;
 			await _fileOperator.DeleteAsync(item.FullPath);
-			await RefreshCurrentFolder();
+			await _uiDispatcherQueue.EnqueueAsync(() =>
+			{
+				CurrentFolderContent.Remove(item);
+				SelectedFolder?.Children.Remove(item);
+			});
 		}
 
 		[RelayCommand]
@@ -174,7 +199,6 @@ namespace LRS.ViewModels
 				Debug.WriteLine($"[Rename] Failed: {ex.Message}");
 			}
 			_renamingItem = null;
-			await RefreshCurrentFolder();
 		}
 
 		[RelayCommand]
@@ -298,24 +322,87 @@ namespace LRS.ViewModels
 		private async Task NewFolder()
 		{
 			var destDir = SelectedFolder?.FullPath ?? CurrentBreadcrumbPath;
-			var newPath = GenerateUniquePath(Path.Combine(destDir, "新建文件夹"));
-			Directory.CreateDirectory(newPath);
-			await RefreshCurrentFolder();
+			AddNewItemToView(destDir, "新建文件夹", isDirectory: true);
+			BreadcrumbRefreshRequested?.Invoke();
+			await Task.CompletedTask;
 		}
 
 		[RelayCommand]
 		private async Task NewTextDocument()
 		{
 			var destDir = SelectedFolder?.FullPath ?? CurrentBreadcrumbPath;
-			var newPath = GenerateUniquePath(Path.Combine(destDir, "新建文本文档.txt"));
-			File.Create(newPath).Dispose();
-			await RefreshCurrentFolder();
+			AddNewItemToView(destDir, "新建文本文档.txt", isDirectory: false);
+			BreadcrumbRefreshRequested?.Invoke();
+			await Task.CompletedTask;
+		}
+
+		[RelayCommand]
+		private async Task NewShortcut()
+		{
+			var destDir = SelectedFolder?.FullPath ?? CurrentBreadcrumbPath;
+			AddNewItemToView(destDir, "新建快捷方式.lnk", isDirectory: false);
+			BreadcrumbRefreshRequested?.Invoke();
+			await Task.CompletedTask;
+		}
+
+		[RelayCommand]
+		private async Task NewFile()
+		{
+			var destDir = SelectedFolder?.FullPath ?? CurrentBreadcrumbPath;
+			AddNewItemToView(destDir, "新建文件", isDirectory: false);
+			BreadcrumbRefreshRequested?.Invoke();
+			await Task.CompletedTask;
+		}
+
+		[RelayCommand]
+		private async Task NewExcelSpreadsheet()
+		{
+			var destDir = SelectedFolder?.FullPath ?? CurrentBreadcrumbPath;
+			AddNewItemToView(destDir, "新建Excel表格.xlsx", isDirectory: false);
+			BreadcrumbRefreshRequested?.Invoke();
+			await Task.CompletedTask;
+		}
+
+		[RelayCommand]
+		private async Task NewWordDocument()
+		{
+			var destDir = SelectedFolder?.FullPath ?? CurrentBreadcrumbPath;
+			AddNewItemToView(destDir, "新建Word文档.docx", isDirectory: false);
+			BreadcrumbRefreshRequested?.Invoke();
+			await Task.CompletedTask;
+		}
+
+		[RelayCommand]
+		private async Task NewPowerPointPresentation()
+		{
+			var destDir = SelectedFolder?.FullPath ?? CurrentBreadcrumbPath;
+			AddNewItemToView(destDir, "新建PPT演示.pptx", isDirectory: false);
+			BreadcrumbRefreshRequested?.Invoke();
+			await Task.CompletedTask;
+		}
+
+		private void AddNewItemToView(string destDir, string defaultName, bool isDirectory)
+		{
+			var newPath = GenerateUniquePath(Path.Combine(destDir, defaultName));
+			if (isDirectory)
+				Directory.CreateDirectory(newPath);
+			else
+				File.Create(newPath).Dispose();
+
+			var node = new FileSystemNodeViewModel(newPath, isDirectory, false, _appConfigs, _uiDispatcherQueue, false);
+			_ = node.InitAsync(node.FullPath, isDirectory);
+			_uiDispatcherQueue.TryEnqueue(() =>
+			{
+				CurrentFolderContent.Add(node);
+				SelectedFolder?.Children.Add(node);
+			});
 		}
 
 		private async Task RefreshCurrentFolder()
 		{
 			if (SelectedFolder != null)
 			{
+				await SelectedFolder.ReloadChildrenAsync();
 				await UpdateCurrentFolderContentAsync(SelectedFolder);
 				BreadcrumbRefreshRequested?.Invoke();
 			}

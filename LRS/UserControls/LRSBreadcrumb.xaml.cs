@@ -1,15 +1,19 @@
 ﻿using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Windows.ApplicationModel.DataTransfer;
@@ -105,16 +109,84 @@ namespace LRS.UserControls
         public ICommand CopyPathCommand { get; }
 
         private Compositor _compositor;
+        private CancellationTokenSource? _searchCts;
+        private readonly ObservableCollection<SearchResultItem> _searchResults = new();
+        private Flyout _searchFlyout;
+        private TextBox _searchTextBox;
+        private ListView _searchResultsList;
+        private TextBlock _searchStatusText;
+        private Grid _searchContentGrid;
 
         public LRSBreadcrumb()
         {
             this.InitializeComponent();
             CopyPathCommand = new RelayCommand(ExecuteCopyPath);
+            BuildSearchFlyout();
 
             this.Loaded += (s, e) =>
             {
                 _compositor = ElementCompositionPreview.GetElementVisual(this).Compositor;
             };
+        }
+
+        private void BuildSearchFlyout()
+        {
+            _searchTextBox = new TextBox { PlaceholderText = "搜索当前目录...", Margin = new Thickness(8) };
+            _searchTextBox.TextChanged += OnSearchTextChanged;
+            _searchTextBox.KeyDown += OnSearchTextBoxKeyDown;
+
+            _searchResultsList = new ListView
+            {
+                BorderThickness = new Thickness(0),
+                Margin = new Thickness(4, 0, 4, 4),
+                SelectionMode = ListViewSelectionMode.Single,
+                IsItemClickEnabled = true
+            };
+            _searchResultsList.ItemClick += OnSearchResultItemClick;
+
+            var xaml = """
+                <DataTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+                    <Grid Height="32" Background="Transparent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="24"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Grid.Column="0" Glyph="{Binding IconGlyph}" FontSize="14"
+                                  VerticalAlignment="Center" Margin="4,0,0,0"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        <TextBlock Grid.Column="1" Text="{Binding Name}"
+                                   VerticalAlignment="Center" Margin="6,0,0,0"
+                                   TextTrimming="CharacterEllipsis" FontSize="13"/>
+                        <TextBlock Grid.Column="2" Text="{Binding PathPreview}"
+                                   VerticalAlignment="Center" Margin="6,0,4,0" FontSize="11"
+                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                   TextTrimming="CharacterEllipsis"/>
+                    </Grid>
+                </DataTemplate>
+                """;
+            _searchResultsList.ItemTemplate = (DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(xaml);
+
+            _searchStatusText = new TextBlock
+            {
+                Text = "输入关键词开始搜索", Margin = new Thickness(12), FontSize = 12,
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center
+            };
+            _searchStatusText.Foreground = (Brush)Application.Current.Resources["TextFillColorTertiaryBrush"];
+
+            _searchContentGrid = new Grid { MaxHeight = 420 };
+            _searchContentGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Auto) });
+            _searchContentGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            Grid.SetRow(_searchTextBox, 0);
+            Grid.SetRow(_searchResultsList, 1);
+            Grid.SetRow(_searchStatusText, 1);
+            _searchContentGrid.Children.Add(_searchTextBox);
+            _searchContentGrid.Children.Add(_searchResultsList);
+            _searchContentGrid.Children.Add(_searchStatusText);
+
+            _searchFlyout = new Flyout { Content = _searchContentGrid };
+            _searchFlyout.Closing += OnSearchFlyoutClosing;
+            FlyoutBase.SetAttachedFlyout(AddressBarArea, _searchFlyout);
         }
 
         private void OnAddressBarAreaPointerPressed(object sender, PointerRoutedEventArgs e)
@@ -411,6 +483,125 @@ namespace LRS.UserControls
                 NavigateCommand?.Execute(CurrentPath);
         }
 
+        private void OnSearchButtonClick(object sender, RoutedEventArgs e)
+        {
+            _searchContentGrid.Width = AddressBarArea.ActualWidth;
+            _searchResultsList.ItemsSource = _searchResults;
+            _searchTextBox.Text = string.Empty;
+            _searchResults.Clear();
+            _searchStatusText.Visibility = Visibility.Visible;
+            _searchResultsList.Visibility = Visibility.Collapsed;
+
+            FlyoutBase.ShowAttachedFlyout(AddressBarArea);
+        }
+
+        private async void OnSearchTextChanged(object sender, TextChangedEventArgs e)
+        {
+            _searchCts?.Cancel();
+            _searchCts = new CancellationTokenSource();
+            var token = _searchCts.Token;
+            var query = _searchTextBox.Text.Trim();
+
+            if (query.Length == 0)
+            {
+                _searchResults.Clear();
+                _searchStatusText.Text = "输入关键词开始搜索";
+                _searchStatusText.Visibility = Visibility.Visible;
+                _searchResultsList.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            _searchStatusText.Text = "搜索中...";
+            _searchStatusText.Visibility = Visibility.Visible;
+            _searchResultsList.Visibility = Visibility.Collapsed;
+
+            var currentPath = CurrentPath;
+            if (string.IsNullOrEmpty(currentPath) || !Directory.Exists(currentPath))
+                return;
+
+            try
+            {
+                var results = await Task.Run(() =>
+                {
+                    var list = new List<SearchResultItem>();
+                    try
+                    {
+                        foreach (var dir in Directory.EnumerateDirectories(currentPath, "*", SearchOption.AllDirectories))
+                        {
+                            if (token.IsCancellationRequested) break;
+                            var name = Path.GetFileName(dir);
+                            if (name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                var relative = dir.Substring(currentPath.Length).TrimStart('\\');
+                                list.Add(new SearchResultItem { Name = name, FullPath = dir, IsDirectory = true, PathPreview = relative });
+                            }
+                        }
+                        foreach (var file in Directory.EnumerateFiles(currentPath, "*", SearchOption.AllDirectories))
+                        {
+                            if (token.IsCancellationRequested) break;
+                            var name = Path.GetFileName(file);
+                            if (name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                var relative = file.Substring(currentPath.Length).TrimStart('\\');
+                                list.Add(new SearchResultItem { Name = name, FullPath = file, IsDirectory = false, PathPreview = relative });
+                            }
+                            if (list.Count >= 200) break;
+                        }
+                    }
+                    catch { }
+                    return list;
+                }, token);
+
+                if (token.IsCancellationRequested) return;
+
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    _searchResults.Clear();
+                    foreach (var r in results)
+                        _searchResults.Add(r);
+
+                    if (_searchResults.Count == 0)
+                    {
+                        _searchStatusText.Text = "未找到结果";
+                        _searchStatusText.Visibility = Visibility.Visible;
+                        _searchResultsList.Visibility = Visibility.Collapsed;
+                    }
+                    else
+                    {
+                        _searchStatusText.Visibility = Visibility.Collapsed;
+                        _searchResultsList.Visibility = Visibility.Visible;
+                    }
+                });
+            }
+            catch (OperationCanceledException) { }
+        }
+
+        private void OnSearchTextBoxKeyDown(object sender, KeyRoutedEventArgs e)
+        {
+            if (e.Key == Windows.System.VirtualKey.Escape)
+            {
+                e.Handled = true;
+                _searchFlyout.Hide();
+            }
+        }
+
+        private void OnSearchFlyoutClosing(object sender, object e)
+        {
+            _searchCts?.Cancel();
+        }
+
+        private void OnSearchResultItemClick(object sender, ItemClickEventArgs e)
+        {
+            if (e.ClickedItem is SearchResultItem result)
+            {
+                _searchFlyout.Hide();
+                if (result.IsDirectory)
+                    NavigateCommand?.Execute(result.FullPath);
+                else
+                    LRS.ViewModels.MainWindowViewModel.OpenWithDefaultProgram(result.FullPath);
+            }
+        }
+
         private class RelayCommand : ICommand
         {
             private readonly Action _execute;
@@ -450,5 +641,14 @@ namespace LRS.UserControls
         public bool IsLast { get; set; }
         public ICommand NavigateCommand { get; set; }
         public ICommand NavigateSubCommand { get; set; }
+    }
+
+    public class SearchResultItem
+    {
+        public string Name { get; set; } = string.Empty;
+        public string FullPath { get; set; } = string.Empty;
+        public bool IsDirectory { get; set; }
+        public string PathPreview { get; set; } = string.Empty;
+        public string IconGlyph => IsDirectory ? "\uE8B7" : "\uE8A5";
     }
 }

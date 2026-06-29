@@ -111,6 +111,12 @@
     <None Update="Configs\configs.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="Strings\zh-Hans.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Strings\en.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <Page Update="Views\PinnedShortcuts.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>

@@ -33,8 +33,9 @@
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
-			<ColumnDefinition Width="Auto" />
-			<ColumnDefinition Width="*"    />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*"    />
+            <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
@@ -150,7 +151,16 @@
             </ScrollViewer>
         </Grid>
 
-        <Button Grid.Column="5" x:Name="CopyPathButton"
+        <Button Grid.Column="5" x:Name="SearchButton"
+                Width="32" Height="32"
+                ToolTipService.ToolTip="搜索"
+                Style="{StaticResource SubtleButtonStyle}"
+                Click="OnSearchButtonClick"
+                Padding="4">
+            <FontIcon Glyph="&#xE721;" FontSize="14"/>
+        </Button>
+
+        <Button Grid.Column="6" x:Name="CopyPathButton"
                 Width="32" Height="32"
 				Margin="10,0,0,0"
                 ToolTipService.ToolTip="复制路径"

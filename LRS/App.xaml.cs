@@ -38,6 +38,7 @@ namespace LRS
         private IHost _host;
 		public static MainWindowViewModel SharedViewModel { get; private set; }
 		public static IServiceProvider Services { get; private set; }
+        public static LocalizationService LocalizationService { get; private set; }
         private static IServiceProvider ConfigureServices()
         {
 			var services = new ServiceCollection();
@@ -59,8 +60,14 @@ namespace LRS
                 services.AddSingleton(new Configs());
 				services.AddSingleton<IIconProvider, WindowsIconProvider>();
 				services.AddSingleton<IFileOperator, FileOperator>();
+				services.AddSingleton<LocalizationService>();
 			}).Build();
             Services = _host.Services;
+
+            var configs = Services.GetRequiredService<Configs>();
+            var locService = Services.GetRequiredService<LocalizationService>();
+            locService.SetLanguage(configs.Language);
+            LocalizationService = locService;
 			this.UnhandledException += (s, e) =>
 			{
 				Debug.WriteLine($"未处理异常: {e.Exception}");

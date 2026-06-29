@@ -1,9 +1,12 @@
-﻿using LRS.UserControls;
+﻿using LRS.Services;
+using LRS.UserControls;
 using LRS.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using System;
+using WinRT.Interop;
 
 namespace LRS.Views
 {
@@ -39,28 +42,47 @@ namespace LRS.Views
             flyout.PrimaryCommands.Add(ThemedBtn("粘贴",   ThemedIconKey("Icon.Paste"),   OnPasteClick));
             flyout.PrimaryCommands.Add(ThemedBtn("重命名", ThemedIconKey("Icon.Rename"),  OnRenameClick));
             flyout.PrimaryCommands.Add(ThemedBtn("删除",   ThemedIconKey("Icon.Delete"),  OnDeleteClick));
+            flyout.PrimaryCommands.Add(RedBtn("彻底删除", "\uECC9", OnPermanentDeleteClick));
 
             flyout.SecondaryCommands.Add(PlainBtn("打开",     "\uE8E5", OnOpenClick));
             flyout.SecondaryCommands.Add(PlainBtn("打开方式", "\uE8E5", OnOpenWithClick));
             flyout.SecondaryCommands.Add(PlainBtn("复制路径", "\uE8C8", OnCopyPathClick));
             flyout.SecondaryCommands.Add(new AppBarSeparator());
-            flyout.SecondaryCommands.Add(PlainBtn("属性", "\uE90F", OnPropertiesClick));
+			flyout.SecondaryCommands.Add(PlainBtn("属性", "\uE90F", OnPropertiesClick));
+			flyout.SecondaryCommands.Add(new AppBarSeparator());
+			flyout.SecondaryCommands.Add(BuildShowMoreOptionsBtn(isItemMenu: true));
 
-            return flyout;
-        }
+			return flyout;
+		}
 
-        private CommandBarFlyout BuildBaseContextFlyout()
+		private CommandBarFlyout BuildBaseContextFlyout()
         {
             var flyout = new CommandBarFlyout { AlwaysExpanded = true };
 
-            flyout.PrimaryCommands.Add(ThemedBtn("新建文件夹",   ThemedIconKey("Icon.Folder"),   OnNewFolderClick));
-            flyout.PrimaryCommands.Add(ThemedBtn("新建文本文档", ThemedIconKey("Icon.Document"), OnNewTextDocumentClick));
+            var newSubMenu = new MenuFlyout();
+            newSubMenu.Items.Add(SubMenuBtn("文本文档", "\uE7C3", OnNewTextDocumentClick));
+            newSubMenu.Items.Add(SubMenuBtn("快捷方式", "\uE71B", OnNewShortcutClick));
+            newSubMenu.Items.Add(SubMenuBtn("文件",     "\uE7C3", OnNewFileClick));
+            newSubMenu.Items.Add(new MenuFlyoutSeparator());
+            newSubMenu.Items.Add(SubMenuBtn("Excel 表格", "\uE9F9", OnNewExcelClick));
+            newSubMenu.Items.Add(SubMenuBtn("Word 文档",  "\uE89A", OnNewWordClick));
+            newSubMenu.Items.Add(SubMenuBtn("PPT 演示",   "\uE8B4", OnNewPowerPointClick));
 
+            var newBtn = new AppBarButton
+            {
+                Label = "新建",
+                Icon = new FontIcon { Glyph = "\uE710", FontSize = 16 },
+                Flyout = newSubMenu
+            };
+            flyout.SecondaryCommands.Add(newBtn);
+            flyout.SecondaryCommands.Add(PlainBtn("新建文件夹", "\uE8F4", OnNewFolderClick));
             flyout.SecondaryCommands.Add(new AppBarSeparator());
-            flyout.SecondaryCommands.Add(PlainBtn("粘贴", "\uE77F", OnPasteClick));
+			flyout.SecondaryCommands.Add(PlainBtn("粘贴", "\uE77F", OnPasteClick));
+			flyout.SecondaryCommands.Add(new AppBarSeparator());
+			flyout.SecondaryCommands.Add(BuildShowMoreOptionsBtn(isItemMenu: false));
 
-            return flyout;
-        }
+			return flyout;
+		}
 
         private AppBarButton ThemedBtn(string label, string styleKey, RoutedEventHandler? click)
         {
@@ -84,7 +106,115 @@ namespace LRS.Views
             return btn;
         }
 
-        // === Click handlers ===
+        private static AppBarButton RedBtn(string label, string glyph, RoutedEventHandler? click)
+        {
+            var btn = new AppBarButton
+            {
+                Label = label,
+                Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red),
+                Icon = new FontIcon { Glyph = glyph, FontSize = 16, Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red) }
+            };
+            if (click != null) btn.Click += click;
+            return btn;
+        }
+
+		private static MenuFlyoutItem SubMenuBtn(string label, string glyph, RoutedEventHandler? click)
+		{
+			var item = new MenuFlyoutItem
+			{
+				Text = label,
+				Icon = new FontIcon { Glyph = glyph, FontSize = 14 }
+			};
+			if (click != null) item.Click += click;
+			return item;
+		}
+
+		private AppBarButton BuildShowMoreOptionsBtn(bool isItemMenu)
+		{
+			var subMenu = new MenuFlyout();
+			if (isItemMenu)
+				subMenu.Opening += OnItemShowMoreOptionsOpening;
+			else
+				subMenu.Opening += OnBaseShowMoreOptionsOpening;
+
+			return new AppBarButton
+			{
+				Label = "显示更多选项",
+				Icon = new FontIcon { Glyph = "\uE712", FontSize = 16 },
+				Flyout = subMenu
+			};
+		}
+
+		private void OnItemShowMoreOptionsOpening(object? sender, object e)
+		{
+			if (sender is not MenuFlyout flyout) return;
+			flyout.Items.Clear();
+			var item = FileGrid.SelectedItem;
+			if (item == null) return;
+			var hwnd = WindowNative.GetWindowHandle(App.MainWindow!);
+			PopulateNativeContextMenu(flyout, item.FullPath, hwnd);
+		}
+
+		private void OnBaseShowMoreOptionsOpening(object? sender, object e)
+		{
+			if (sender is not MenuFlyout flyout) return;
+			flyout.Items.Clear();
+			var vm = this.DataContext as MainWindowViewModel;
+			var path = vm?.SelectedFolder?.FullPath ?? vm?.CurrentBreadcrumbPath;
+			if (string.IsNullOrEmpty(path)) return;
+			var hwnd = WindowNative.GetWindowHandle(App.MainWindow!);
+			PopulateNativeContextMenu(flyout, path, hwnd);
+		}
+
+		private static void PopulateNativeContextMenu(MenuFlyout flyout, string path, IntPtr hwnd)
+		{
+			try
+			{
+				var items = NativeContextMenuHelper.BuildMenuItems(path, hwnd);
+				if (items.Count == 0)
+				{
+					flyout.Items.Add(new MenuFlyoutItem { Text = "(无可用选项)", IsEnabled = false });
+					return;
+				}
+				foreach (var item in items)
+				{
+					if (item.IsSeparator)
+					{
+						flyout.Items.Add(new MenuFlyoutSeparator());
+					}
+					else
+					{
+						int cmdId = item.CommandId;
+						string capturedPath = path;
+						var menuItem = new MenuFlyoutItem
+						{
+							Text = item.Label,
+							IsEnabled = item.IsEnabled
+						};
+						menuItem.Click += (s, ev) =>
+						{
+							try
+							{
+								var h = WindowNative.GetWindowHandle(App.MainWindow!);
+								NativeContextMenuHelper.InvokeItem(capturedPath, cmdId, h);
+							}
+							catch (Exception ex)
+							{
+								System.Diagnostics.Debug.WriteLine($"[ShowMoreOptions] Invoke error: {ex.Message}");
+							}
+						};
+						flyout.Items.Add(menuItem);
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				System.Diagnostics.Debug.WriteLine($"[ShowMoreOptions] Build error: {ex.Message}");
+				flyout.Items.Add(new MenuFlyoutItem { Text = "(无法加载选项)", IsEnabled = false });
+			}
+		}
+
+		// === Click handlers ===
         private void OnOpenClick(object sender, RoutedEventArgs e)
         {
             var item = FileGrid.SelectedItem;
@@ -106,6 +236,8 @@ namespace LRS.Views
         }
         private void OnDeleteClick(object sender, RoutedEventArgs e)
             => (this.DataContext as MainWindowViewModel)?.DeleteCommand.Execute(FileGrid.SelectedItem);
+        private void OnPermanentDeleteClick(object sender, RoutedEventArgs e)
+            => (this.DataContext as MainWindowViewModel)?.PermanentDeleteCommand.Execute(FileGrid.SelectedItem);
         private void OnCopyPathClick(object sender, RoutedEventArgs e)
             => (this.DataContext as MainWindowViewModel)?.CopyPathCommand.Execute(FileGrid.SelectedItem);
         private void OnPropertiesClick(object sender, RoutedEventArgs e)
@@ -114,5 +246,15 @@ namespace LRS.Views
             => (this.DataContext as MainWindowViewModel)?.NewFolderCommand.Execute(null);
         private void OnNewTextDocumentClick(object sender, RoutedEventArgs e)
             => (this.DataContext as MainWindowViewModel)?.NewTextDocumentCommand.Execute(null);
+        private void OnNewShortcutClick(object sender, RoutedEventArgs e)
+            => (this.DataContext as MainWindowViewModel)?.NewShortcutCommand.Execute(null);
+        private void OnNewFileClick(object sender, RoutedEventArgs e)
+            => (this.DataContext as MainWindowViewModel)?.NewFileCommand.Execute(null);
+        private void OnNewExcelClick(object sender, RoutedEventArgs e)
+            => (this.DataContext as MainWindowViewModel)?.NewExcelSpreadsheetCommand.Execute(null);
+        private void OnNewWordClick(object sender, RoutedEventArgs e)
+            => (this.DataContext as MainWindowViewModel)?.NewWordDocumentCommand.Execute(null);
+        private void OnNewPowerPointClick(object sender, RoutedEventArgs e)
+            => (this.DataContext as MainWindowViewModel)?.NewPowerPointPresentationCommand.Execute(null);
     }
 }

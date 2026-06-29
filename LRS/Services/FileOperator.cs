@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using Windows.ApplicationModel.DataTransfer;
@@ -12,6 +13,29 @@ namespace LRS.Services
 {
 	public class FileOperator : IFileOperator
 	{
+		[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+		private struct SHFILEOPSTRUCT
+		{
+			public IntPtr hwnd;
+			public uint wFunc;
+			[MarshalAs(UnmanagedType.LPWStr)]
+			public string pFrom;
+			[MarshalAs(UnmanagedType.LPWStr)]
+			public string pTo;
+			public ushort fFlags;
+			public bool fAnyOperationsAborted;
+			public IntPtr hNameMappings;
+			[MarshalAs(UnmanagedType.LPWStr)]
+			public string lpszProgressTitle;
+		}
+
+		[DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+		private static extern int SHFileOperation(ref SHFILEOPSTRUCT FileOp);
+
+		private const uint FO_DELETE = 0x0003;
+		private const ushort FOF_ALLOWUNDO = 0x0040;
+		private const ushort FOF_NOCONFIRMATION = 0x0010;
+		private const ushort FOF_SILENT = 0x0004;
 		public async Task CopyToAsync(string sourcePath, string destinationPath, bool overwrite = false)
 		{
 			if (string.IsNullOrEmpty(sourcePath) || string.IsNullOrEmpty(destinationPath))
@@ -98,6 +122,23 @@ namespace LRS.Services
 				{
 					// 如果路径不存在，静默返回（或可选择抛出异常）
 				}
+			});
+		}
+
+		public async Task DeleteToRecycleBinAsync(string path)
+		{
+			if (string.IsNullOrEmpty(path))
+				throw new ArgumentException("路径不能为空");
+
+			await Task.Run(() =>
+			{
+				var fileOp = new SHFILEOPSTRUCT
+				{
+					wFunc = FO_DELETE,
+					pFrom = path + "\0\0",
+					fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION
+				};
+				SHFileOperation(ref fileOp);
 			});
 		}
 

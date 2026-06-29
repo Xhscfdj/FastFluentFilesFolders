@@ -274,6 +274,12 @@ namespace LRS.ViewModels
 		{
 			if (_isLoaded || !IsDirectory) return;
 			_isLoaded = true;
+			await ReloadChildrenAsync();
+		}
+
+		public async Task ReloadChildrenAsync()
+		{
+			if (!IsDirectory) return;
 
 			var subDirs = await Task.Run(() => SafeGetDirs(FullPath));
 			var files = await Task.Run(() => SafeGetFiles(FullPath));

@@ -12,6 +12,7 @@ namespace LRS.Services
 		Task<(IEnumerable<string> FilePaths, bool IsCut)> PasteClipboardFiles();
 		Task CopyToAsync(string from, string to, bool overwrite = false);
 		Task DeleteAsync(string fullPath);
+		Task DeleteToRecycleBinAsync(string fullPath);
 		Task RenameAsync(string fullPath, string newName);
 		Task MoveAsync(string from, string to);
 	}

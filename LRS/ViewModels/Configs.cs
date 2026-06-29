@@ -25,6 +25,7 @@ namespace LRS.ViewModels
         [ObservableProperty] private int _iconParallelLoadingCount = 30;
         [ObservableProperty] private string _homePageFullPath = "C:\\";
         [ObservableProperty] private string _defaultOrderMode = "ModifiedDesc";
+        [ObservableProperty] private string _language = "zh-Hans";
 
         public Configs()
         {
@@ -58,6 +59,7 @@ namespace LRS.ViewModels
             HomePageFullPath = configuration.GetValue("General:HomePageFullPath", "C:\\")!;
             IconParallelLoadingCount = configuration.GetValue("Performance:IconParallelLoadingCount", 30);
             DefaultOrderMode = configuration.GetValue("General:DefaultOrderMode", "ModifiedDesc")!;
+            Language = configuration.GetValue("General:Language", "zh-Hans")!;
             if (IconParallelLoadingCount != 0) IfLimitIconLoadingConcurrency = true;
         }
 
@@ -74,7 +76,8 @@ namespace LRS.ViewModels
                 "  },\n",
                 "  \"General\": {\n",
                $"    \"HomePageFullPath\": \"{escapedPath}\",\n",
-               $"    \"DefaultOrderMode\": \"{DefaultOrderMode}\"\n",
+               $"    \"DefaultOrderMode\": \"{DefaultOrderMode}\",\n",
+               $"    \"Language\": \"{Language}\"\n",
                 "  },\n",
                 "  \"Performance\": {\n",
                $"    \"IconParallelLoadingCount\": {IconParallelLoadingCount}\n",

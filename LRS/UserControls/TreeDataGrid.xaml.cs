@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -16,6 +17,8 @@ using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
+using Windows.System;
+using Windows.Foundation;
 
 namespace LRS.UserControls
 {
@@ -137,6 +140,7 @@ namespace LRS.UserControls
         private int _draggingColumn = -1;
         private double _dragStartX;
         private double _dragStartWidth;
+        private bool _inDragWidthSync;
         private INotifyCollectionChanged? _observedCollection;
         private bool _rebuildPending;
         private int _rebuildGeneration;
@@ -144,6 +148,8 @@ namespace LRS.UserControls
 
         public enum SortMode { None, NameAsc, NameDesc, ModifiedAsc, ModifiedDesc, CreatedAsc, CreatedDesc, SizeAsc, SizeDesc }
         private SortMode _currentSort = SortMode.NameAsc;
+
+        private ScrollViewer? _listViewScrollViewer;
 
         public TreeDataGrid()
         {
@@ -153,6 +159,17 @@ namespace LRS.UserControls
             {
                 if (App.SharedViewModel != null)
                     App.SharedViewModel.RenameFocusRequested += OnRenameFocusRequested;
+                _listViewScrollViewer = FindListViewScrollViewer();
+                AttachHeaderClip();
+                CalculateAndApplyColumnWidths();
+            };
+            this.SizeChanged += (_, _) =>
+            {
+                if (_draggingColumn < 0)
+                {
+                    CalculateAndApplyColumnWidths();
+                    RefreshHeaderClip();
+                }
             };
             this.Unloaded += (_, _) =>
             {
@@ -161,9 +178,49 @@ namespace LRS.UserControls
             };
         }
 
+        private double GetContentAreaWidth()
+        {
+            if (_listViewScrollViewer != null &&
+                _listViewScrollViewer.ComputedVerticalScrollBarVisibility == Visibility.Visible)
+            {
+                return _listViewScrollViewer.ViewportWidth;
+            }
+            return HeaderGrid.ActualWidth;
+        }
+
+        private void AttachHeaderClip()
+        {
+            var clip = new RectangleGeometry();
+            HeaderGrid.Clip = clip;
+            SizeChanged += (s, e) =>
+            {
+                clip.Rect = new Rect(0, 0, GetContentAreaWidth(), HeaderGrid.ActualHeight);
+            };
+            clip.Rect = new Rect(0, 0, GetContentAreaWidth(), HeaderGrid.ActualHeight);
+        }
+
+        private ScrollViewer? FindListViewScrollViewer()
+        {
+            return FindVisualChild<ScrollViewer>(FileListView);
+        }
+
+        private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is T result)
+                    return result;
+                var descendant = FindVisualChild<T>(child);
+                if (descendant != null)
+                    return descendant;
+            }
+            return null;
+        }
+
         private void OnRenameFocusRequested(FileSystemNodeViewModel item)
         {
-            DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
             {
                 var container = FileListView.ContainerFromItem(item);
                 if (container is ListViewItem lvi && lvi.ContentTemplateRoot is Grid grid)
@@ -183,10 +240,10 @@ namespace LRS.UserControls
         {
             if (args.ItemContainer.ContentTemplateRoot is Grid grid && grid.ColumnDefinitions.Count >= 8)
             {
-                grid.ColumnDefinitions[1].Width = NameColumnWidth;
-                grid.ColumnDefinitions[3].Width = ModifiedColumnWidth;
-                grid.ColumnDefinitions[5].Width = CreatedColumnWidth;
-                grid.ColumnDefinitions[7].Width = SizeColumnWidth;
+                grid.ColumnDefinitions[1].Width = NameColDef.Width;
+                grid.ColumnDefinitions[3].Width = ModifiedColDef.Width;
+                grid.ColumnDefinitions[5].Width = CreatedColDef.Width;
+                grid.ColumnDefinitions[7].Width = SizeColDef.Width;
             }
             if (ContextFlyout != null && args.ItemContainer is ListViewItem container)
             {
@@ -197,22 +254,97 @@ namespace LRS.UserControls
         private static void OnColumnWidthChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var ctrl = (TreeDataGrid)d;
-            ctrl.SyncHeaderColumnWidths();
+            if (ctrl._inDragWidthSync) return;
+            ctrl.CalculateAndApplyColumnWidths();
             ctrl.FileListView.InvalidateMeasure();
         }
 
-        private void UpdateAllItemColumns()
+        private void CalculateAndApplyColumnWidths()
         {
+            var contentWidth = GetContentAreaWidth();
+            if (contentWidth <= 0) return;
+            var widths = CalculateColumnWidths(contentWidth);
+            ApplyColumnWidths(widths.Name, widths.Modified, widths.Created, widths.Size);
+        }
+
+        private (double Name, double Modified, double Created, double Size) CalculateColumnWidths(double availableWidth)
+        {
+            const double iconCol = 32;
+            const double spacerCol = 6;
+            const double fixedNonData = iconCol + 3 * spacerCol;
+
+            var specs = new[]
+            {
+                (NameColumnWidth,  4.0),  // (GridLength, star value for fallback)
+                (ModifiedColumnWidth, 2.0),
+                (CreatedColumnWidth, 2.0),
+                (SizeColumnWidth, 1.0)
+            };
+
+            double fixedPixelSum = fixedNonData;
+            double totalStarWeight = 0;
+
+            foreach (var (dp, starVal) in specs)
+            {
+                if (dp.IsAbsolute)
+                    fixedPixelSum += dp.Value;
+                else if (dp.IsStar)
+                    totalStarWeight += dp.Value;
+            }
+
+            var starBudget = Math.Max(0, availableWidth - fixedPixelSum);
+
+            double ToPixel(GridLength dp, double starFallback)
+            {
+                if (dp.IsAbsolute) return dp.Value;
+                if (dp.IsStar && totalStarWeight > 0)
+                    return Math.Max(0, (dp.Value / totalStarWeight) * starBudget);
+                return 0;
+            }
+
+            return (
+                ToPixel(specs[0].Item1, specs[0].Item2),
+                ToPixel(specs[1].Item1, specs[1].Item2),
+                ToPixel(specs[2].Item1, specs[2].Item2),
+                ToPixel(specs[3].Item1, specs[3].Item2)
+            );
+        }
+
+        private void ApplyColumnWidths(double namePx, double modifiedPx, double createdPx, double sizePx)
+        {
+            NameColDef.Width = new GridLength(namePx);
+            ModifiedColDef.Width = new GridLength(modifiedPx);
+            CreatedColDef.Width = new GridLength(createdPx);
+            SizeColDef.Width = new GridLength(sizePx);
+
+            SyncItemsFromHeader();
+        }
+
+        private void RefreshHeaderClip()
+        {
+            if (HeaderGrid.Clip is RectangleGeometry clip)
+            {
+                clip.Rect = new Rect(0, 0, GetContentAreaWidth(), HeaderGrid.ActualHeight);
+            }
+        }
+
+        private void SyncItemsFromHeader()
+        {
+            var nw = NameColDef.Width;
+            var mw = ModifiedColDef.Width;
+            var cw = CreatedColDef.Width;
+            var sw = SizeColDef.Width;
+
             var itemsCount = FileListView.Items.Count;
             for (int i = 0; i < itemsCount; i++)
             {
                 var container = FileListView.ContainerFromIndex(i);
                 if (container is ListViewItem item && item.ContentTemplateRoot is Grid grid && grid.ColumnDefinitions.Count >= 8)
                 {
-                    grid.ColumnDefinitions[1].Width = NameColumnWidth;
-                    grid.ColumnDefinitions[3].Width = ModifiedColumnWidth;
-                    grid.ColumnDefinitions[5].Width = CreatedColumnWidth;
-                    grid.ColumnDefinitions[7].Width = SizeColumnWidth;
+                    grid.ColumnDefinitions[1].Width = nw;
+                    grid.ColumnDefinitions[3].Width = mw;
+                    grid.ColumnDefinitions[5].Width = cw;
+                    grid.ColumnDefinitions[7].Width = sw;
                 }
             }
         }
@@ -237,9 +369,16 @@ namespace LRS.UserControls
             var ctrl = (TreeDataGrid)d;
             ctrl._currentSort = (bool)e.NewValue
                 ? SortMode.NameAsc
-                : SortMode.None;
+                : ParseSortMode(App.SharedViewModel?.AppConfigs?.DefaultOrderMode);
             ctrl.UpdateSortIndicators();
             ctrl.RebuildGroups();
+        }
+
+        public static SortMode ParseSortMode(string? mode)
+        {
+            if (Enum.TryParse<SortMode>(mode, out var result))
+                return result;
+            return SortMode.ModifiedDesc;
         }
 
         private void ObserveSourceCollection()
@@ -258,7 +397,7 @@ namespace LRS.UserControls
             if (_rebuildPending) return;
             _rebuildPending = true;
             var gen = _rebuildGeneration;
-            DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
             {
                 _rebuildPending = false;
                 if (gen != _rebuildGeneration) return;
@@ -412,8 +551,32 @@ namespace LRS.UserControls
 
             var delta = e.GetCurrentPoint(this).Position.X - _dragStartX;
             var newWidth = Math.Max(40, _dragStartWidth + delta);
-            SetColumnWidth(_draggingColumn, new GridLength(newWidth));
-            UpdateAllItemColumns();
+
+            var contentWidth = GetContentAreaWidth();
+            if (contentWidth > 0)
+            {
+                const double fixedSpacers = 32 + 3 * 6;
+                double otherPixelColumns = 0;
+
+                if (_draggingColumn != 1 && NameColumnWidth.IsAbsolute)
+                    otherPixelColumns += NameColumnWidth.Value;
+                if (_draggingColumn != 3 && ModifiedColumnWidth.IsAbsolute)
+                    otherPixelColumns += ModifiedColumnWidth.Value;
+                if (_draggingColumn != 5 && CreatedColumnWidth.IsAbsolute)
+                    otherPixelColumns += CreatedColumnWidth.Value;
+                if (_draggingColumn != 7 && SizeColumnWidth.IsAbsolute)
+                    otherPixelColumns += SizeColumnWidth.Value;
+
+                var maxForDragged = contentWidth - fixedSpacers - otherPixelColumns;
+                newWidth = Math.Min(newWidth, Math.Max(40, maxForDragged));
+            }
+
+            _inDragWidthSync = true;
+            SetColumnGridLength(_draggingColumn, new GridLength(newWidth));
+            _inDragWidthSync = false;
+
+            CalculateAndApplyColumnWidths();
+            RefreshHeaderClip();
             e.Handled = true;
         }
 
@@ -422,10 +585,17 @@ namespace LRS.UserControls
             if (sender is FrameworkElement handle)
                 handle.ReleasePointerCapture(e.Pointer);
             _draggingColumn = -1;
+
+            RefreshHeaderClip();
+            FileListView.InvalidateMeasure();
         }
 
         private double GetColumnWidth(int idx)
         {
+            var colDef = GetHeaderColumnDefinition(idx);
+            if (colDef != null && colDef.ActualWidth > 0)
+                return colDef.ActualWidth;
+
             return idx switch
             {
                 1 => NameColumnWidth.IsStar ? 200 : NameColumnWidth.Value,
@@ -435,19 +605,25 @@ namespace LRS.UserControls
             };
         }
 
-        private void SetColumnWidth(int idx, GridLength width)
+        private ColumnDefinition? GetHeaderColumnDefinition(int idx)
+        {
+            return idx switch
+            {
+                1 => NameColDef,
+                3 => ModifiedColDef,
+                5 => CreatedColDef,
+                7 => SizeColDef,
+                _ => null
+            };
+        }
+
+        private void SetColumnGridLength(int idx, GridLength width)
         {
             switch (idx)
             {
-                case 1:
-                    NameColumnWidth = width;
-                    break;
-                case 3:
-                    ModifiedColumnWidth = width;
-                    break;
-                case 5:
-                    CreatedColumnWidth = width;
-                    break;
+                case 1: NameColumnWidth = width; break;
+                case 3: ModifiedColumnWidth = width; break;
+                case 5: CreatedColumnWidth = width; break;
             }
         }
 
