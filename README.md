@@ -11,7 +11,7 @@ A modern file explorer for Windows, built with WinUI 3 and the Windows App SDK.
 If you like it, please give me a starrrrr, thank youuuuuuuuuu!!! meow~
 starrr⭐rrratsDA☆ZE
 
-## Install TIP
+## Install TIP (Very IMPORTANT!!)
 Because this software is self-signed, so your computer may not trust this installer.
 If you want to make the installer trusted, you can download and install my [certification](https://www.mishui.city/upload/CertForLRS.cer).
 Then, you can run this powershell command:
