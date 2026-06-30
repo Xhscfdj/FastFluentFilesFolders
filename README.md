@@ -16,7 +16,7 @@ Because this software is self-signed, so your computer may not trust this instal
 If you want to make the installer trusted, you can download and install my [certification](https://www.mishui.city/upload/CertForLRS.cer).  
 Then, you can run this powershell command:  
 *The content enclosed in '<' and '>' needs to be replaced according to the actual situation.  
-`Import-Certificate -FilePath "<Your certification file path>r" -CertStoreLocation "Cert:\CurrentUser\TrustedPeople"`  
+`Import-Certificate -FilePath "<Your certification file path>" -CertStoreLocation "Cert:\CurrentUser\TrustedPeople"`  
 
 ## Features
 
