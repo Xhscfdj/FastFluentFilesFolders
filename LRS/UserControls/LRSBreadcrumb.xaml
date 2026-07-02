@@ -134,11 +134,13 @@
                                         <RotateTransform Angle="0"/>
                                     </Button.RenderTransform>
                                     <FontIcon Glyph="&#xE76C;" FontSize="10"/>
-                                    <Button.Flyout>
-                                        <MenuFlyout x:Name="SubFolderFlyout" Opening="OnFlyoutOpening" Closing="OnFlyoutClosing">
+                                     <Button.Flyout>
+                                        <MenuFlyout Opening="OnFlyoutOpening" Closing="OnFlyoutClosing">
                                             <MenuFlyout.MenuFlyoutPresenterStyle>
                                                 <Style TargetType="MenuFlyoutPresenter">
                                                     <Setter Property="MaxHeight" Value="400"/>
+                                                    <Setter Property="MaxWidth" Value="9999"/>
+                                                    <Setter Property="MinWidth" Value="100"/>
                                                 </Style>
                                             </MenuFlyout.MenuFlyoutPresenterStyle>
                                         </MenuFlyout>

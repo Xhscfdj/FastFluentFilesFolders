@@ -31,6 +31,7 @@ New XAML files may need explicit `<Page Update>` entries in the `.csproj`:
 </Page>
 ```
 The `XBindLeakFix` NuGet package is present for known x:Bind memory leaks.
+I removed that package, and we just use "Binding" instead of "x:Bind".
 
 ## UI thread safety
 All UI updates **must** go through `DispatcherQueue`:
@@ -55,6 +56,10 @@ Two implementations of `IIconProvider`:
 - `ShellIconHelper` — Win32 `SHGetFileInfo` with `ConcurrentDictionary` cache (default per `configs.json`)
 
 Selection is per-node based on `Configs.ifUsesWin32APIToGetIcon`.
+
+## Multi-language support
+This project should support Chinese and English.
+Don't forget to support multi-language when adding new things.
 
 ## Key files for navigation
 | Concern | File |

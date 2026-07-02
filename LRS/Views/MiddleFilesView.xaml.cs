@@ -1,12 +1,16 @@
-﻿using LRS.Services;
+﻿using LRS.Helpers;
+using LRS.Services;
 using LRS.UserControls;
 using LRS.ViewModels;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using System;
 using WinRT.Interop;
+using WinUI.TableView;
 
 namespace LRS.Views
 {
@@ -21,13 +25,85 @@ namespace LRS.Views
             this.DataContext = App.SharedViewModel;
             _itemContextFlyout = BuildItemContextFlyout();
             _baseContextFlyout = BuildBaseContextFlyout();
-            FileGrid.ContextFlyout = _itemContextFlyout;
-            FileGrid.BaseContextFlyout = _baseContextFlyout;
+            FileGrid.ContextRequested += OnFileGridContextRequested;
+
+            this.DataContextChanged += (s, e) =>
+            {
+                if (this.DataContext is MainWindowViewModel vm)
+                {
+                    vm.PropertyChanged += OnViewModelPropertyChanged;
+                    UpdateGroupedSource(vm);
+                }
+            };
+            if (this.DataContext is MainWindowViewModel currentVm)
+            {
+                currentVm.PropertyChanged += OnViewModelPropertyChanged;
+                UpdateGroupedSource(currentVm);
+            }
         }
 
-        private void OnTreeDataGridItemInvoked(object sender, FileSystemNodeViewModel item)
+        private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
-            (this.DataContext as MainWindowViewModel)?.OpenItem(item);
+            if (e.PropertyName == nameof(MainWindowViewModel.CurrentFolderContent) ||
+                e.PropertyName == nameof(MainWindowViewModel.IsCurrentFolderSpecial))
+            {
+                if (sender is MainWindowViewModel vm)
+                    UpdateGroupedSource(vm);
+            }
+        }
+
+        private void UpdateGroupedSource(MainWindowViewModel vm)
+        {
+            var items = vm.CurrentFolderContent ?? new();
+            FileGrid.UpdateSource(items, vm.IsCurrentFolderSpecial);
+            if (FileGrid.ItemsSource is GroupedFileList list)
+            {
+                list.SetDispatcher(DispatcherQueue.GetForCurrentThread());
+            }
+        }
+
+        private void OnRowDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+        {
+            if (sender is FrameworkElement element && element.DataContext is FileSystemNodeViewModel item && !item.IsPlaceholder)
+                (this.DataContext as MainWindowViewModel)?.OpenItem(item);
+        }
+
+        private void OnGroupToggleClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is FileSystemNodeViewModel header && header.IsPlaceholder)
+            {
+                if (FileGrid.ItemsSource is GroupedFileList list)
+                    list.ToggleGroup(header);
+            }
+        }
+
+        private void OnFileGridContextRequested(UIElement sender, ContextRequestedEventArgs args)
+        {
+            if (args.TryGetPosition(sender, out var position))
+            {
+                var element = args.OriginalSource as DependencyObject;
+                TableViewRow? row = null;
+                while (element != null)
+                {
+                    if (element is TableViewRow r)
+                    {
+                        row = r;
+                        break;
+                    }
+                    element = VisualTreeHelper.GetParent(element);
+                }
+
+                if (row?.Content is FileSystemNodeViewModel item && !item.IsPlaceholder)
+                {
+                    FileGrid.SelectedItem = item;
+                    _itemContextFlyout.ShowAt(row, new FlyoutShowOptions { Position = position });
+                }
+                else
+                {
+                    _baseContextFlyout.ShowAt(sender, new FlyoutShowOptions { Position = position });
+                }
+                args.Handled = true;
+            }
         }
 
         // Primary:   剪切, 复制, 粘贴, 重命名, 删除  (two-tone themed)
@@ -149,7 +225,7 @@ namespace LRS.Views
 		{
 			if (sender is not MenuFlyout flyout) return;
 			flyout.Items.Clear();
-			var item = FileGrid.SelectedItem;
+			var item = FileGrid.SelectedItem as FileSystemNodeViewModel;
 			if (item == null) return;
 			var hwnd = WindowNative.GetWindowHandle(App.MainWindow!);
 			PopulateNativeContextMenu(flyout, item.FullPath, hwnd);
@@ -217,7 +293,7 @@ namespace LRS.Views
 		// === Click handlers ===
         private void OnOpenClick(object sender, RoutedEventArgs e)
         {
-            var item = FileGrid.SelectedItem;
+            var item = FileGrid.SelectedItem as FileSystemNodeViewModel;
             if (item == null) return;
             (this.DataContext as MainWindowViewModel)?.OpenItem(item);
         }
@@ -256,5 +332,33 @@ namespace LRS.Views
             => (this.DataContext as MainWindowViewModel)?.NewWordDocumentCommand.Execute(null);
         private void OnNewPowerPointClick(object sender, RoutedEventArgs e)
             => (this.DataContext as MainWindowViewModel)?.NewPowerPointPresentationCommand.Execute(null);
+    }
+
+    public class BoolToVisibilityConverter : Microsoft.UI.Xaml.Data.IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+            => value is true ? Visibility.Visible : Visibility.Collapsed;
+        public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
+    }
+
+    public class InvertBoolConverter : Microsoft.UI.Xaml.Data.IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+            => value is bool b ? !b : value;
+        public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
+    }
+
+    public class InvertVisibilityConverter : Microsoft.UI.Xaml.Data.IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+            => value is true ? Visibility.Collapsed : Visibility.Visible;
+        public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
+    }
+
+    public class ExpandGlyphConverter : Microsoft.UI.Xaml.Data.IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+            => value is true ? "\uE96E" : "\uE970";
+        public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
 }

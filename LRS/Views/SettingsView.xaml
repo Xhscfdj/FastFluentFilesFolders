@@ -10,83 +10,115 @@
     xmlns:comCtrls="using:CommunityToolkit.WinUI.Controls"
     xmlns:vm="using:LRS.ViewModels"
     mc:Ignorable="d">
+	<Grid>
+		<Grid.RowDefinitions>
+			<RowDefinition Height="*"    />
+			<RowDefinition Height="Auto" />
+		</Grid.RowDefinitions>
+		<ScrollViewer>
+			<StackPanel Padding="24" Spacing="14" HorizontalAlignment="Stretch">
+				<TextBlock Text="{Binding SettingsTitle}" FontSize="22" FontWeight="Bold" />
+				<!--General-->
+				<TextBlock Text="{Binding GeneralSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
+				<comCtrls:SettingsCard Header="{Binding HomePagePath}">
+					<comCtrls:SettingsCard.HeaderIcon>
+						<FontIcon Glyph="&#xE80F;" />
+					</comCtrls:SettingsCard.HeaderIcon>
+					<TextBox Text="{Binding AppConfigs.HomePageFullPath, Mode=TwoWay}" />
+				</comCtrls:SettingsCard>
 
-    <ScrollViewer>
-        <StackPanel Padding="24" Spacing="14" HorizontalAlignment="Stretch">
-            <TextBlock Text="{Binding SettingsTitle}" FontSize="22" FontWeight="Bold" />
-            <!--General-->
-            <TextBlock Text="{Binding GeneralSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
-            <comCtrls:SettingsCard Header="{Binding HomePagePath}">
-                <comCtrls:SettingsCard.HeaderIcon>
-                    <FontIcon Glyph="&#xE80F;" />
-                </comCtrls:SettingsCard.HeaderIcon>
-                <TextBox Text="{Binding AppConfigs.HomePageFullPath, Mode=TwoWay}" />
-            </comCtrls:SettingsCard>
+				<comCtrls:SettingsCard Header="{Binding LanguageLabel}">
+					<comCtrls:SettingsCard.HeaderIcon>
+						<FontIcon Glyph="&#xE8B1;" />
+					</comCtrls:SettingsCard.HeaderIcon>
+					<ComboBox SelectedIndex="{Binding SelectedLanguageIndex, Mode=TwoWay}">
+						<ComboBoxItem Content="中文" />
+						<ComboBoxItem Content="English" />
+					</ComboBox>
+				</comCtrls:SettingsCard>
 
-            <comCtrls:SettingsCard Header="{Binding LanguageLabel}">
-                <comCtrls:SettingsCard.HeaderIcon>
-                    <FontIcon Glyph="&#xE8B1;" />
-                </comCtrls:SettingsCard.HeaderIcon>
-                <ComboBox SelectedIndex="{Binding SelectedLanguageIndex, Mode=TwoWay}">
-                    <ComboBoxItem Content="中文" />
-                    <ComboBoxItem Content="English" />
-                </ComboBox>
-            </comCtrls:SettingsCard>
+				<comCtrls:SettingsExpander Header="{Binding DefaultSortOrder}">
+					<comCtrls:SettingsExpander.HeaderIcon>
+						<FontIcon Glyph="&#xE8CB;" />
+					</comCtrls:SettingsExpander.HeaderIcon>
+					<comCtrls:SettingsExpander.Items>
+						<comCtrls:SettingsCard Header="{Binding SortBy}">
+							<comCtrls:SettingsCard.HeaderIcon>
+								<FontIcon Glyph="&#xE8CB;" />
+							</comCtrls:SettingsCard.HeaderIcon>
+							<ComboBox SelectedItem="{Binding SelectedOrderModePair, Mode=TwoWay}" ItemsSource="{Binding OrderModePairs}" DisplayMemberPath="Value"/>
+						</comCtrls:SettingsCard>
+					</comCtrls:SettingsExpander.Items>
+				</comCtrls:SettingsExpander>
 
-            <comCtrls:SettingsExpander Header="{Binding DefaultSortOrder}">
-                <comCtrls:SettingsExpander.HeaderIcon>
-                    <FontIcon Glyph="&#xE8CB;" />
-                </comCtrls:SettingsExpander.HeaderIcon>
-                <comCtrls:SettingsExpander.Items>
-                    <comCtrls:SettingsCard Header="{Binding SortBy}">
-                        <comCtrls:SettingsCard.HeaderIcon>
-                            <FontIcon Glyph="&#xE8CB;" />
-                        </comCtrls:SettingsCard.HeaderIcon>
-                        <ComboBox SelectedItem="{Binding SelectedOrderModePair, Mode=TwoWay}" ItemsSource="{Binding OrderModePairs}" DisplayMemberPath="Value"/>
-                    </comCtrls:SettingsCard>
-                </comCtrls:SettingsExpander.Items>
-            </comCtrls:SettingsExpander>
+				<!--Appearance-->
+				<TextBlock Text="{Binding AppearanceSection}" FontSize="16" FontWeight="SemiBold" Margin="0,8,0,0" />
+				<comCtrls:SettingsCard Header="{Binding MiddleFilesHeight}">
+					<comCtrls:SettingsCard.HeaderIcon>
+						<FontIcon Glyph="&#xE752;" />
+					</comCtrls:SettingsCard.HeaderIcon>
+					<ctrls:NumberBox Value="{Binding AppConfigs.MiddleFilesHeight, Mode=TwoWay}"
+									 Minimum="20" Maximum="200"
+									 SpinButtonPlacementMode="Inline" />
+				</comCtrls:SettingsCard>
 
-            <!--Appearance-->
-            <TextBlock Text="{Binding AppearanceSection}" FontSize="16" FontWeight="SemiBold" Margin="0,8,0,0" />
-            <comCtrls:SettingsCard Header="{Binding MiddleFilesHeight}">
-                <comCtrls:SettingsCard.HeaderIcon>
-                    <FontIcon Glyph="&#xE752;" />
-                </comCtrls:SettingsCard.HeaderIcon>
-                <ctrls:NumberBox Value="{Binding AppConfigs.MiddleFilesHeight, Mode=TwoWay}"
-                                 Minimum="20" Maximum="200"
-                                 SpinButtonPlacementMode="Inline" />
-            </comCtrls:SettingsCard>
-            
-            <TextBlock Text="{Binding AdvancedSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
-            <comCtrls:SettingsCard Header="{Binding UseWin32Icon}">
-                <comCtrls:SettingsCard.HeaderIcon>
-                    <FontIcon Glyph="&#xE770;"/>
-                </comCtrls:SettingsCard.HeaderIcon>
-                <ToggleSwitch IsOn="{Binding AppConfigs.IfUsesWin32APIToGetIcon, Mode=TwoWay}" />
-            </comCtrls:SettingsCard>
+				<TextBlock Text="{Binding AdvancedSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
+				<comCtrls:SettingsCard Header="{Binding UseWin32Icon}">
+					<comCtrls:SettingsCard.HeaderIcon>
+						<FontIcon Glyph="&#xE770;"/>
+					</comCtrls:SettingsCard.HeaderIcon>
+					<ToggleSwitch IsOn="{Binding AppConfigs.IfUsesWin32APIToGetIcon, Mode=TwoWay}" />
+				</comCtrls:SettingsCard>
 
-            <TextBlock Text="{Binding PerformanceSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
-            <comCtrls:SettingsCard Header="{Binding IconParallelLoading}">
-                <comCtrls:SettingsCard.HeaderIcon>
-                    <FontIcon Glyph="&#xE8B9;"/>
-                </comCtrls:SettingsCard.HeaderIcon>
-                <ctrls:NumberBox Value="{Binding AppConfigs.IconParallelLoadingCount, Mode=TwoWay}"
-                                 Minimum="1" Maximum="200"
-                                 SpinButtonPlacementMode="Inline" />
-            </comCtrls:SettingsCard>
+				<TextBlock Text="{Binding PerformanceSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
+				<comCtrls:SettingsCard Header="{Binding IconParallelLoading}">
+					<comCtrls:SettingsCard.HeaderIcon>
+						<FontIcon Glyph="&#xE8B9;"/>
+					</comCtrls:SettingsCard.HeaderIcon>
+					<ctrls:NumberBox Value="{Binding AppConfigs.IconParallelLoadingCount, Mode=TwoWay}"
+									 Minimum="1" Maximum="200"
+									 SpinButtonPlacementMode="Inline" />
+				</comCtrls:SettingsCard>
 
-            <TextBlock Text="{Binding DebugSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0"/>
-            <comCtrls:SettingsCard Header="{Binding UserConfigPath}">
-                <comCtrls:SettingsCard.HeaderIcon>
-                    <FontIcon Glyph="&#xE756;" />
-                </comCtrls:SettingsCard.HeaderIcon>
-                <TextBlock Text="{Binding ConfigFilePath}" />
-            </comCtrls:SettingsCard>
+				<TextBlock Text="{Binding DebugSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0"/>
+				<comCtrls:SettingsCard Header="{Binding UserConfigPath}">
+					<comCtrls:SettingsCard.HeaderIcon>
+						<FontIcon Glyph="&#xE756;" />
+					</comCtrls:SettingsCard.HeaderIcon>
+					<TextBlock Text="{Binding ConfigFilePath}" />
+				</comCtrls:SettingsCard>
 
-            <Button x:Name="SaveButton" Click="SaveSettings" Margin="0,12,0,0"
-                    Style="{StaticResource AccentButtonStyle}"
-                    HorizontalAlignment="Left" Content="{Binding SaveSettings}"/>
-        </StackPanel>
-    </ScrollViewer>
+				<TextBlock Text="{Binding AboutSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0"/>
+				<comCtrls:SettingsExpander>
+					<comCtrls:SettingsExpander.Header>
+						<StackPanel>
+							<TextBlock Text="LiveRootStorage" />
+							<TextBlock Text="By Xhscfdj" Foreground="Gray" FontSize="14"/>
+						</StackPanel>
+					</comCtrls:SettingsExpander.Header>
+					<comCtrls:SettingsExpander.HeaderIcon>
+						<FontIcon Glyph="&#xE946;" />
+					</comCtrls:SettingsExpander.HeaderIcon>
+					<comCtrls:SettingsExpander.Items>
+						<HyperlinkButton NavigateUri="https://www.github.com/Xhscfdj/">
+							<StackPanel Orientation="Horizontal">
+								<TextBlock Text="{Binding AuthorTip}" Margin="0,0,10,0" />
+								<TextBlock Text="Xhscfdj" />
+							</StackPanel>
+						</HyperlinkButton>
+						<HyperlinkButton NavigateUri="https://www.github.com/LiveRootStorage">
+							<StackPanel>
+								<TextBlock Text="{Binding RepositoryTip}" Margin="0,0,10,0" />
+								<TextBlock Text="LiveRootStorage" />
+							</StackPanel>
+						</HyperlinkButton>
+						
+					</comCtrls:SettingsExpander.Items>
+				</comCtrls:SettingsExpander>
+			</StackPanel>
+		</ScrollViewer>
+		<Button x:Name="SaveButton" Click="SaveSettings" Margin="0,12,0,0"
+				Grid.Row="1" Style="{StaticResource AccentButtonStyle}"
+                HorizontalAlignment="Left" Content="{Binding SaveSettings}"/>
+	</Grid>
 </Page>

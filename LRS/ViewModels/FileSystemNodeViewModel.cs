@@ -41,6 +41,17 @@ namespace LRS.ViewModels
 		[ObservableProperty] private string _firstCreatedTimeString = string.Empty;
 		[ObservableProperty] private bool _isSelected = false;
 		[ObservableProperty] private bool _isRenaming = false;
+		private string _sortByTime = string.Empty;
+		public string SortByTime
+		{
+			get => _sortByTime;
+			set
+			{
+				_sortByTime = value;
+				OnPropertyChanged();
+			}
+		}
+		public bool IsGroupExpanded { get; set; } = true;
 
 		public Microsoft.UI.Xaml.Visibility IsRenamingVisibility =>
 			IsRenaming ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;

@@ -1,4 +1,4 @@
-{
+﻿{
   "SettingsTitle": "Settings",
   "GeneralSection": "General",
   "HomePagePath": "Home Page Path",
@@ -21,5 +21,8 @@
   "SortModifiedDesc": "Modified Descending",
   "SortModifiedAsc": "Modified Ascending",
   "SortCreatedDesc": "Created Descending",
-  "SortCreatedAsc": "Created Ascending"
+  "SortCreatedAsc": "Created Ascending",
+  "AboutSection": "About",
+  "AuthorTip": "Author:",
+  "RepositoryTip": "Repository:"
 }

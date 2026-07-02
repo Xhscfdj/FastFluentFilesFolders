@@ -184,7 +184,13 @@ namespace LRS.UserControls
             _searchContentGrid.Children.Add(_searchResultsList);
             _searchContentGrid.Children.Add(_searchStatusText);
 
-            _searchFlyout = new Flyout { Content = _searchContentGrid };
+            var searchFlyoutStyle = new Style(typeof(FlyoutPresenter));
+            searchFlyoutStyle.Setters.Add(new Setter(FlyoutPresenter.MaxWidthProperty, 9999.0));
+            _searchFlyout = new Flyout
+            {
+                Content = _searchContentGrid,
+                FlyoutPresenterStyle = searchFlyoutStyle
+            };
             _searchFlyout.Closing += OnSearchFlyoutClosing;
             FlyoutBase.SetAttachedFlyout(AddressBarArea, _searchFlyout);
         }

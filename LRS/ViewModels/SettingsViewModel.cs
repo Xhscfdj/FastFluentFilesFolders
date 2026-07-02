@@ -45,7 +45,10 @@ namespace LRS.ViewModels
         public string UserConfigPath => _loc.GetString("UserConfigPath");
         public string SaveSettings => _loc.GetString("SaveSettings");
         public string LanguageLabel => _loc.GetString("Language");
-        public string ConfigFilePath => ViewModels.Configs.UserConfigPath;
+        public string AboutSection => _loc.GetString("AboutSection");
+        public string AuthorTip => _loc.GetString("AuthorTip");
+        
+		public string ConfigFilePath => ViewModels.Configs.UserConfigPath;
 
         public SettingsViewModel(LocalizationService locService)
         {
