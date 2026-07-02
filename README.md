@@ -32,7 +32,7 @@ Then, you can run this powershell command:
 - **Time-based grouping** -- files grouped by time periods (Today, Yesterday, This Week, etc.)
 - **There will be more functions...**
 ### Performance
-- **Fast and fluent** -- the speed of loading directories which has hundreds even thousands of items. That's because we load the items' info asynchronously.
+- **Fast and fluent** -- the speed of loading directories which has hundreds even thousands of items is very fast(450 items directory doesn't take any time visually). That's because we load the items' info asynchronously.
 
 ## Requirements
 
