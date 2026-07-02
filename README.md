@@ -19,7 +19,7 @@ Then, you can run this powershell command:
 `Import-Certificate -FilePath "<Your certification file path>" -CertStoreLocation "Cert:\CurrentUser\TrustedPeople"`  
 
 ## Features
-
+### Functions
 - **File tree sidebar** -- browse all drives and folders in a collapsible tree view, with lazy-loaded subdirectories
 - **Sortable file list** -- 4-column table (Name, Modified, Created, Size) with click-to-sort column headers and resizable columns
 - **Breadcrumb navigation** -- custom breadcrumb bar with back/forward/up history, editable address bar, and sub-folder flyouts
@@ -30,6 +30,9 @@ Then, you can run this powershell command:
 - **Configurable** -- settings panel for home path, default sort order, row height, and icon provider options
 - **Mica backdrop** -- native Windows 11 materials with title bar integration
 - **Time-based grouping** -- files grouped by time periods (Today, Yesterday, This Week, etc.)
+- **There will be more functions...**
+### Performance
+- **Fast and fluent** -- the speed of loading directories which has hundreds even thousands of items. That's because we load the items' info asynchronously.
 
 ## Requirements
 
