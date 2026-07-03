@@ -12,14 +12,14 @@ If you like it, please give me a starrrrr, thank youuuuuuuuuu!!! meow~
 starrr⭐rrratsDA☆ZE
 
 ## Install TIP (Very IMPORTANT!!)
-Because this software is self-signed, so your computer may not trust this installer.
-If you want to make the installer trusted, you can download and install my [certification](https://www.mishui.city/upload/CertForLRS.cer).
-Then, you can run this powershell command:
-*The content enclosed in '<' and '>' needs to be replaced according to the actual situation.
-`Import-Certificate -FilePath "<Your certification file path>r" -CertStoreLocation "Cert:\CurrentUser\TrustedPeople"`
+Because this software is self-signed, so your computer may not trust this installer.  
+If you want to make the installer trusted, you can download and install my [certification](https://www.mishui.city/upload/CertForLRS.cer).  
+Then, you can run this powershell command:  
+*The content enclosed in '<' and '>' needs to be replaced according to the actual situation.  
+`Import-Certificate -FilePath "<Your certification file path>" -CertStoreLocation "Cert:\CurrentUser\TrustedPeople"`  
 
 ## Features
-
+### Functions
 - **File tree sidebar** -- browse all drives and folders in a collapsible tree view, with lazy-loaded subdirectories
 - **Sortable file list** -- 4-column table (Name, Modified, Created, Size) with click-to-sort column headers and resizable columns
 - **Breadcrumb navigation** -- custom breadcrumb bar with back/forward/up history, editable address bar, and sub-folder flyouts
@@ -30,6 +30,9 @@ Then, you can run this powershell command:
 - **Configurable** -- settings panel for home path, default sort order, row height, and icon provider options
 - **Mica backdrop** -- native Windows 11 materials with title bar integration
 - **Time-based grouping** -- files grouped by time periods (Today, Yesterday, This Week, etc.)
+- **There will be more functions...**
+### Performance
+- **Fast and fluent** -- the speed of loading directories which has hundreds even thousands of items is very fast(450 items directory doesn't take any time visually). That's because we load the items' info asynchronously.
 
 ## Requirements
 
