@@ -1,6 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Configuration;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 
@@ -26,6 +27,9 @@ namespace LRS.ViewModels
         [ObservableProperty] private string _homePageFullPath = "C:\\";
         [ObservableProperty] private string _defaultOrderMode = "ModifiedDesc";
         [ObservableProperty] private string _language = "zh-Hans";
+        [ObservableProperty] private System.Collections.ObjectModel.ObservableCollection<string> _timeGroupedFolders = new();
+        private static readonly string DefaultDownloadsPath =
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
 
         public Configs()
         {
@@ -61,6 +65,9 @@ namespace LRS.ViewModels
             DefaultOrderMode = configuration.GetValue("General:DefaultOrderMode", "ModifiedDesc")!;
             Language = configuration.GetValue("General:Language", "zh-Hans")!;
             if (IconParallelLoadingCount != 0) IfLimitIconLoadingConcurrency = true;
+            var folderArray = configuration.GetSection("Special:TimeGroupedFolders").Get<string[]>();
+            TimeGroupedFolders = new System.Collections.ObjectModel.ObservableCollection<string>(
+                folderArray != null && folderArray.Length > 0 ? folderArray : new[] { DefaultDownloadsPath });
         }
 
         public void SaveConfig()
@@ -81,6 +88,9 @@ namespace LRS.ViewModels
                 "  },\n",
                 "  \"Performance\": {\n",
                $"    \"IconParallelLoadingCount\": {IconParallelLoadingCount}\n",
+                "  },\n",
+                "  \"Special\": {\n",
+               $"    \"TimeGroupedFolders\": [{BuildFoldersJsonArray()}]\n",
                 "  }\n",
                 "}\n");
             File.WriteAllText(UserConfigPath, json);
@@ -89,6 +99,27 @@ namespace LRS.ViewModels
                 ((IConfigurationRoot)configuration).Reload();
                 ReadConfigs();
             }
+        }
+
+        public bool IsTimeGroupedFolder(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            foreach (var f in TimeGroupedFolders)
+            {
+                if (string.Equals(path.TrimEnd('\\'), f.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        private string BuildFoldersJsonArray()
+        {
+            var escaped = new List<string>();
+            foreach (var f in TimeGroupedFolders)
+            {
+                escaped.Add($"\"{f.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"");
+            }
+            return string.Join(",\n      ", escaped);
         }
     }
 }

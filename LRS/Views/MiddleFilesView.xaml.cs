@@ -18,10 +18,13 @@ namespace LRS.Views
     {
         private readonly CommandBarFlyout _itemContextFlyout;
         private readonly CommandBarFlyout _baseContextFlyout;
+        private static MultiLanguageStringsViewModel ML => App.ML;
 
         public MiddleFilesView()
         {
             InitializeComponent();
+            RefreshHeaders();
+            App.ML.PropertyChanged += (_, e) => RefreshHeaders();
             this.DataContext = App.SharedViewModel;
             _itemContextFlyout = BuildItemContextFlyout();
             _baseContextFlyout = BuildBaseContextFlyout();
@@ -109,22 +112,30 @@ namespace LRS.Views
         // Primary:   剪切, 复制, 粘贴, 重命名, 删除  (two-tone themed)
         // Secondary: 打开, 打开方式, 复制路径
 
+        public void RefreshHeaders()
+        {
+            ColName.Header = ML.ColumnName;
+            ColModifiedDate.Header = ML.ColumnModifiedDate;
+            ColCreatedDate.Header = ML.ColumnCreatedDate;
+            ColSize.Header = ML.ColumnSize;
+        }
+
         private CommandBarFlyout BuildItemContextFlyout()
         {
             var flyout = new CommandBarFlyout { AlwaysExpanded = true };
 
-            flyout.PrimaryCommands.Add(ThemedBtn("剪切",   ThemedIconKey("Icon.Cut"),    OnCutClick));
-            flyout.PrimaryCommands.Add(ThemedBtn("复制",   ThemedIconKey("Icon.Copy"),    OnCopyClick));
-            flyout.PrimaryCommands.Add(ThemedBtn("粘贴",   ThemedIconKey("Icon.Paste"),   OnPasteClick));
-            flyout.PrimaryCommands.Add(ThemedBtn("重命名", ThemedIconKey("Icon.Rename"),  OnRenameClick));
-            flyout.PrimaryCommands.Add(ThemedBtn("删除",   ThemedIconKey("Icon.Delete"),  OnDeleteClick));
-            flyout.PrimaryCommands.Add(RedBtn("彻底删除", "\uECC9", OnPermanentDeleteClick));
+            flyout.PrimaryCommands.Add(ThemedBtn(ML.CmdCut,   ThemedIconKey("Icon.Cut"),    OnCutClick));
+            flyout.PrimaryCommands.Add(ThemedBtn(ML.CmdCopy,   ThemedIconKey("Icon.Copy"),    OnCopyClick));
+            flyout.PrimaryCommands.Add(ThemedBtn(ML.CmdPaste,   ThemedIconKey("Icon.Paste"),   OnPasteClick));
+            flyout.PrimaryCommands.Add(ThemedBtn(ML.CmdRename, ThemedIconKey("Icon.Rename"),  OnRenameClick));
+            flyout.PrimaryCommands.Add(ThemedBtn(ML.CmdDelete,   ThemedIconKey("Icon.Delete"),  OnDeleteClick));
+            flyout.PrimaryCommands.Add(RedBtn(ML.CmdPermanentDelete, "\uECC9", OnPermanentDeleteClick));
 
-            flyout.SecondaryCommands.Add(PlainBtn("打开",     "\uE8E5", OnOpenClick));
-            flyout.SecondaryCommands.Add(PlainBtn("打开方式", "\uE8E5", OnOpenWithClick));
-            flyout.SecondaryCommands.Add(PlainBtn("复制路径", "\uE8C8", OnCopyPathClick));
+            flyout.SecondaryCommands.Add(PlainBtn(ML.CmdOpen,     "\uE8E5", OnOpenClick));
+            flyout.SecondaryCommands.Add(PlainBtn(ML.CmdOpenWith, "\uE8E5", OnOpenWithClick));
+            flyout.SecondaryCommands.Add(PlainBtn(ML.CmdCopyPath, "\uE8C8", OnCopyPathClick));
             flyout.SecondaryCommands.Add(new AppBarSeparator());
-			flyout.SecondaryCommands.Add(PlainBtn("属性", "\uE90F", OnPropertiesClick));
+			flyout.SecondaryCommands.Add(PlainBtn(ML.CmdProperties, "\uE90F", OnPropertiesClick));
 			flyout.SecondaryCommands.Add(new AppBarSeparator());
 			flyout.SecondaryCommands.Add(BuildShowMoreOptionsBtn(isItemMenu: true));
 
@@ -136,24 +147,24 @@ namespace LRS.Views
             var flyout = new CommandBarFlyout { AlwaysExpanded = true };
 
             var newSubMenu = new MenuFlyout();
-            newSubMenu.Items.Add(SubMenuBtn("文本文档", "\uE7C3", OnNewTextDocumentClick));
-            newSubMenu.Items.Add(SubMenuBtn("快捷方式", "\uE71B", OnNewShortcutClick));
-            newSubMenu.Items.Add(SubMenuBtn("文件",     "\uE7C3", OnNewFileClick));
+            newSubMenu.Items.Add(SubMenuBtn(ML.NewTextDocument, "\uE7C3", OnNewTextDocumentClick));
+            newSubMenu.Items.Add(SubMenuBtn(ML.NewShortcut, "\uE71B", OnNewShortcutClick));
+            newSubMenu.Items.Add(SubMenuBtn(ML.NewFile,     "\uE7C3", OnNewFileClick));
             newSubMenu.Items.Add(new MenuFlyoutSeparator());
-            newSubMenu.Items.Add(SubMenuBtn("Excel 表格", "\uE9F9", OnNewExcelClick));
-            newSubMenu.Items.Add(SubMenuBtn("Word 文档",  "\uE89A", OnNewWordClick));
-            newSubMenu.Items.Add(SubMenuBtn("PPT 演示",   "\uE8B4", OnNewPowerPointClick));
+            newSubMenu.Items.Add(SubMenuBtn(ML.NewExcelSpreadsheet, "\uE9F9", OnNewExcelClick));
+            newSubMenu.Items.Add(SubMenuBtn(ML.NewWordDocument,  "\uE89A", OnNewWordClick));
+            newSubMenu.Items.Add(SubMenuBtn(ML.NewPowerPointPresentation,   "\uE8B4", OnNewPowerPointClick));
 
             var newBtn = new AppBarButton
             {
-                Label = "新建",
+                Label = ML.CmdNew,
                 Icon = new FontIcon { Glyph = "\uE710", FontSize = 16 },
                 Flyout = newSubMenu
             };
             flyout.SecondaryCommands.Add(newBtn);
-            flyout.SecondaryCommands.Add(PlainBtn("新建文件夹", "\uE8F4", OnNewFolderClick));
+            flyout.SecondaryCommands.Add(PlainBtn(ML.CmdNewFolder, "\uE8F4", OnNewFolderClick));
             flyout.SecondaryCommands.Add(new AppBarSeparator());
-			flyout.SecondaryCommands.Add(PlainBtn("粘贴", "\uE77F", OnPasteClick));
+			flyout.SecondaryCommands.Add(PlainBtn(ML.CmdPaste, "\uE77F", OnPasteClick));
 			flyout.SecondaryCommands.Add(new AppBarSeparator());
 			flyout.SecondaryCommands.Add(BuildShowMoreOptionsBtn(isItemMenu: false));
 
@@ -215,7 +226,7 @@ namespace LRS.Views
 
 			return new AppBarButton
 			{
-				Label = "显示更多选项",
+				Label = ML.CmdShowMoreOptions,
 				Icon = new FontIcon { Glyph = "\uE712", FontSize = 16 },
 				Flyout = subMenu
 			};
@@ -249,7 +260,7 @@ namespace LRS.Views
 				var items = NativeContextMenuHelper.BuildMenuItems(path, hwnd);
 				if (items.Count == 0)
 				{
-					flyout.Items.Add(new MenuFlyoutItem { Text = "(无可用选项)", IsEnabled = false });
+					flyout.Items.Add(new MenuFlyoutItem { Text = ML.MsgNoOptionsAvailable, IsEnabled = false });
 					return;
 				}
 				foreach (var item in items)
@@ -286,7 +297,7 @@ namespace LRS.Views
 			catch (Exception ex)
 			{
 				System.Diagnostics.Debug.WriteLine($"[ShowMoreOptions] Build error: {ex.Message}");
-				flyout.Items.Add(new MenuFlyoutItem { Text = "(无法加载选项)", IsEnabled = false });
+				flyout.Items.Add(new MenuFlyoutItem { Text = ML.MsgCannotLoadOptions, IsEnabled = false });
 			}
 		}
 

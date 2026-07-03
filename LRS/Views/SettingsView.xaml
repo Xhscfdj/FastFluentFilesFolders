@@ -1,6 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Page
     x:Class="LRS.Views.SettingsView"
+    x:Name="SV"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:LRS.Views"
@@ -17,17 +18,17 @@
 		</Grid.RowDefinitions>
 		<ScrollViewer>
 			<StackPanel Padding="24" Spacing="14" HorizontalAlignment="Stretch">
-				<TextBlock Text="{Binding SettingsTitle}" FontSize="22" FontWeight="Bold" />
+				<TextBlock Text="{Binding ML.SettingsTitle}" FontSize="22" FontWeight="Bold" />
 				<!--General-->
-				<TextBlock Text="{Binding GeneralSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
-				<comCtrls:SettingsCard Header="{Binding HomePagePath}">
+				<TextBlock Text="{Binding ML.GeneralSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
+				<comCtrls:SettingsCard Header="{Binding ML.HomePagePath}">
 					<comCtrls:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE80F;" />
 					</comCtrls:SettingsCard.HeaderIcon>
 					<TextBox Text="{Binding AppConfigs.HomePageFullPath, Mode=TwoWay}" />
 				</comCtrls:SettingsCard>
 
-				<comCtrls:SettingsCard Header="{Binding LanguageLabel}">
+				<comCtrls:SettingsCard Header="{Binding ML.LanguageLabel}">
 					<comCtrls:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE8B1;" />
 					</comCtrls:SettingsCard.HeaderIcon>
@@ -37,23 +38,23 @@
 					</ComboBox>
 				</comCtrls:SettingsCard>
 
-				<comCtrls:SettingsExpander Header="{Binding DefaultSortOrder}">
+				<comCtrls:SettingsExpander Header="{Binding ML.DefaultSortOrder}">
 					<comCtrls:SettingsExpander.HeaderIcon>
 						<FontIcon Glyph="&#xE8CB;" />
 					</comCtrls:SettingsExpander.HeaderIcon>
 					<comCtrls:SettingsExpander.Items>
-						<comCtrls:SettingsCard Header="{Binding SortBy}">
+						<comCtrls:SettingsCard Header="{Binding ML.SortBy}">
 							<comCtrls:SettingsCard.HeaderIcon>
 								<FontIcon Glyph="&#xE8CB;" />
 							</comCtrls:SettingsCard.HeaderIcon>
-							<ComboBox SelectedItem="{Binding SelectedOrderModePair, Mode=TwoWay}" ItemsSource="{Binding OrderModePairs}" DisplayMemberPath="Value"/>
+							<ComboBox SelectedItem="{Binding SelectedOrderModeItem, Mode=TwoWay}" ItemsSource="{Binding OrderModeItems}" DisplayMemberPath="Display"/>
 						</comCtrls:SettingsCard>
 					</comCtrls:SettingsExpander.Items>
 				</comCtrls:SettingsExpander>
 
 				<!--Appearance-->
-				<TextBlock Text="{Binding AppearanceSection}" FontSize="16" FontWeight="SemiBold" Margin="0,8,0,0" />
-				<comCtrls:SettingsCard Header="{Binding MiddleFilesHeight}">
+				<TextBlock Text="{Binding ML.AppearanceSection}" FontSize="16" FontWeight="SemiBold" Margin="0,8,0,0" />
+				<comCtrls:SettingsCard Header="{Binding ML.MiddleFilesHeight}">
 					<comCtrls:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE752;" />
 					</comCtrls:SettingsCard.HeaderIcon>
@@ -62,16 +63,16 @@
 									 SpinButtonPlacementMode="Inline" />
 				</comCtrls:SettingsCard>
 
-				<TextBlock Text="{Binding AdvancedSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
-				<comCtrls:SettingsCard Header="{Binding UseWin32Icon}">
+				<TextBlock Text="{Binding ML.AdvancedSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
+				<comCtrls:SettingsCard Header="{Binding ML.UseWin32Icon}">
 					<comCtrls:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE770;"/>
 					</comCtrls:SettingsCard.HeaderIcon>
 					<ToggleSwitch IsOn="{Binding AppConfigs.IfUsesWin32APIToGetIcon, Mode=TwoWay}" />
 				</comCtrls:SettingsCard>
 
-				<TextBlock Text="{Binding PerformanceSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
-				<comCtrls:SettingsCard Header="{Binding IconParallelLoading}">
+				<TextBlock Text="{Binding ML.PerformanceSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
+				<comCtrls:SettingsCard Header="{Binding ML.IconParallelLoading}">
 					<comCtrls:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE8B9;"/>
 					</comCtrls:SettingsCard.HeaderIcon>
@@ -80,15 +81,59 @@
 									 SpinButtonPlacementMode="Inline" />
 				</comCtrls:SettingsCard>
 
-				<TextBlock Text="{Binding DebugSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0"/>
-				<comCtrls:SettingsCard Header="{Binding UserConfigPath}">
+				<TextBlock Text="{Binding ML.DebugSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0"/>
+
+				<comCtrls:SettingsExpander Header="{Binding ML.TimeGroupedFoldersHeader}">
+					<comCtrls:SettingsExpander.HeaderIcon>
+						<FontIcon Glyph="&#xE8B7;" />
+					</comCtrls:SettingsExpander.HeaderIcon>
+					<comCtrls:SettingsExpander.Items>
+						<comCtrls:SettingsCard>
+							<ListView ItemsSource="{Binding TimeGroupedFolders}" Height="120"
+									  SelectionMode="None">
+								<ListView.ItemTemplate>
+									<DataTemplate x:DataType="x:String">
+										<Grid ColumnSpacing="8">
+											<Grid.ColumnDefinitions>
+												<ColumnDefinition Width="*"/>
+												<ColumnDefinition Width="Auto"/>
+											</Grid.ColumnDefinitions>
+											<TextBlock Text="{Binding}" VerticalAlignment="Center"
+													   TextTrimming="CharacterEllipsis"/>
+											<Button Grid.Column="1"
+													Content="&#xE74D;"
+													FontFamily="{StaticResource SymbolThemeFontFamily}"
+													Style="{StaticResource SubtleButtonStyle}"
+													Command="{Binding DataContext.DeleteTimeGroupedFolderCommand, ElementName=SV}"
+													CommandParameter="{Binding}"
+													Width="32" Height="32"/>
+										</Grid>
+									</DataTemplate>
+								</ListView.ItemTemplate>
+							</ListView>
+						</comCtrls:SettingsCard>
+						<comCtrls:SettingsCard>
+							<StackPanel Spacing="8" Orientation="Horizontal">
+								<TextBox Text="{Binding NewTimeGroupedFolderPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+										 PlaceholderText="{Binding ML.TimeGroupedFolderPlaceholder}"
+										 MinWidth="280"/>
+								<Button Command="{Binding AddTimeGroupedFolderCommand}"
+										Content="{Binding ML.AddTimeGroupedFolder}"
+										Style="{StaticResource AccentButtonStyle}"/>
+							</StackPanel>
+						</comCtrls:SettingsCard>
+					</comCtrls:SettingsExpander.Items>
+				</comCtrls:SettingsExpander>
+
+				<TextBlock Text="{Binding ML.DebugSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0"/>
+				<comCtrls:SettingsCard Header="{Binding ML.UserConfigPath}">
 					<comCtrls:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE756;" />
 					</comCtrls:SettingsCard.HeaderIcon>
 					<TextBlock Text="{Binding ConfigFilePath}" />
 				</comCtrls:SettingsCard>
 
-				<TextBlock Text="{Binding AboutSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0"/>
+				<TextBlock Text="{Binding ML.AboutSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0"/>
 				<comCtrls:SettingsExpander>
 					<comCtrls:SettingsExpander.Header>
 						<StackPanel>
@@ -100,25 +145,28 @@
 						<FontIcon Glyph="&#xE946;" />
 					</comCtrls:SettingsExpander.HeaderIcon>
 					<comCtrls:SettingsExpander.Items>
-						<HyperlinkButton NavigateUri="https://www.github.com/Xhscfdj/">
-							<StackPanel Orientation="Horizontal">
-								<TextBlock Text="{Binding AuthorTip}" Margin="0,0,10,0" />
-								<TextBlock Text="Xhscfdj" />
-							</StackPanel>
-						</HyperlinkButton>
-						<HyperlinkButton NavigateUri="https://www.github.com/LiveRootStorage">
-							<StackPanel>
-								<TextBlock Text="{Binding RepositoryTip}" Margin="0,0,10,0" />
-								<TextBlock Text="LiveRootStorage" />
-							</StackPanel>
-						</HyperlinkButton>
-						
+						<comCtrls:SettingsCard>
+							<HyperlinkButton NavigateUri="https://www.github.com/Xhscfdj/">
+								<StackPanel Orientation="Horizontal">
+									<TextBlock Text="{Binding ML.AuthorTip}" Margin="0,0,10,0" />
+									<TextBlock Text="Xhscfdj" />
+								</StackPanel>
+							</HyperlinkButton>
+						</comCtrls:SettingsCard>
+						<comCtrls:SettingsCard>
+							<HyperlinkButton NavigateUri="https://www.github.com/LiveRootStorage">
+								<StackPanel Orientation="Horizontal">
+									<TextBlock Text="{Binding ML.RepositoryTip}" Margin="0,0,10,0" />
+									<TextBlock Text="LiveRootStorage" />
+								</StackPanel>
+							</HyperlinkButton>
+						</comCtrls:SettingsCard>
 					</comCtrls:SettingsExpander.Items>
 				</comCtrls:SettingsExpander>
 			</StackPanel>
 		</ScrollViewer>
-		<Button x:Name="SaveButton" Click="SaveSettings" Margin="0,12,0,0"
+		<Button x:Name="SaveButton" Click="SaveSettings" Margin="14,12,0,0"
 				Grid.Row="1" Style="{StaticResource AccentButtonStyle}"
-                HorizontalAlignment="Left" Content="{Binding SaveSettings}"/>
+                HorizontalAlignment="Left" Content="{Binding ML.SaveSettings}"/>
 	</Grid>
 </Page>

@@ -13,12 +13,14 @@
 		<Grid.ColumnDefinitions>
 			<ColumnDefinition Width="*" />
 		</Grid.ColumnDefinitions>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
-
-        <TreeView Grid.Row="0"
+		<Grid.RowDefinitions>
+			<RowDefinition Height="Auto" />
+			<RowDefinition Height="*" />
+			<RowDefinition Height="Auto" />
+		</Grid.RowDefinitions>
+		
+		<TextBlock Text="{Binding ML.PinnedShortcutsTitle}" FontWeight="SemiBold" Foreground="Gray" Margin="10,0,0,10"/>
+		<TreeView Grid.Row="1"
                   ItemsSource="{Binding RootDirectories}"
                   SelectionChanged="TreeView_SelectionChanged">
             <TreeView.ItemTemplate>
@@ -37,7 +39,7 @@
             </TreeView.ItemTemplate>
         </TreeView>
 
-        <Button Grid.Row="1" Click="ToggleSettings"
+        <Button Grid.Row="2" Click="ToggleSettings"
 				Grid.Column="0"
                 BorderThickness="0" Background="Transparent"
                 Padding="12,8" Margin="4,0,0,4">

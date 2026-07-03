@@ -28,13 +28,15 @@ namespace LRS.ViewModels
 	public partial class MainWindowViewModel : ViewModelBase
 	{
 		private IFileOperator _fileOperator;
-		public MainWindowViewModel(IIconProvider iconProvider, Microsoft.UI.Dispatching.DispatcherQueue uiDispatcherQueue, Configs configs, IFileOperator fileOperator)
+		public MultiLanguageStringsViewModel ML { get; }
+		public MainWindowViewModel(IIconProvider iconProvider, Microsoft.UI.Dispatching.DispatcherQueue uiDispatcherQueue, Configs configs, IFileOperator fileOperator, MultiLanguageStringsViewModel ml)
 		{
 			AppConfigs = configs;
 			_fileOperator = fileOperator;
 			CurrentBreadcrumbPath = configs.HomePageFullPath;
 			_uiDispatcherQueue = uiDispatcherQueue;
 			_iconProvider = iconProvider;
+			ML = ml;
 			NavigateToPathCommand = new RelayCommand<string>(NavigateToPath);
 			NavigateToSubFolderCommand = new RelayCommand<string>(NavigateToPath);
 			GoBackCommand = new RelayCommand(GoBack);
@@ -52,6 +54,7 @@ namespace LRS.ViewModels
 					RootDirectories.Add(new FileSystemNodeViewModel(drive.RootDirectory.FullName, true, false, configs, uiDispatcherQueue, false));
 				}
 			}
+			InitializePinnedShortcuts(configs, uiDispatcherQueue);
 			if (Directory.Exists(configs.HomePageFullPath))
 				NavigateToPath(configs.HomePageFullPath);
 			else
@@ -409,6 +412,7 @@ namespace LRS.ViewModels
 		}
 
 		[ObservableProperty] private string _testString = "hasn't changed";
+		[ObservableProperty] private ObservableCollection<FileSystemNodeViewModel> _pinnedShortcuts = new();
 		// 文件系统相关的属性和方法
 		private readonly IIconProvider _iconProvider;
 		//[ObservableProperty] private string[] _PathsForBreadcrumbBar = ["C:\\"];
@@ -688,6 +692,45 @@ namespace LRS.ViewModels
 				}
 			}
 			return null;
+		}
+
+		private void InitializePinnedShortcuts(Configs configs, Microsoft.UI.Dispatching.DispatcherQueue uiDispatcherQueue)
+		{
+			var pinnedPaths = GetQuickAccessPinnedFolders();
+			foreach (var path in pinnedPaths)
+			{
+				if (!string.IsNullOrEmpty(path) && Directory.Exists(path))
+				{
+					var node = new FileSystemNodeViewModel(path, true, false, configs, uiDispatcherQueue, false);
+					PinnedShortcuts.Add(node);
+				}
+			}
+		}
+
+		private static List<string> GetQuickAccessPinnedFolders()
+		{
+			var result = new List<string>();
+			try
+			{
+				Type shellType = Type.GetTypeFromProgID("Shell.Application", true);
+				dynamic shell = Activator.CreateInstance(shellType);
+				dynamic quickAccess = shell.NameSpace("shell:::{679f85cb-0220-4080-b29b-5540cc05aab6}");
+				if (quickAccess != null)
+				{
+					foreach (dynamic item in quickAccess.Items())
+					{
+						try
+						{
+							string? path = item.Path;
+							if (!string.IsNullOrEmpty(path) && Directory.Exists(path))
+								result.Add(path);
+						}
+						catch { }
+					}
+				}
+			}
+			catch { }
+            return result;
 		}
 	}
 }

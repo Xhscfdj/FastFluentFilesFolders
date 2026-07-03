@@ -250,19 +250,27 @@ namespace LRS.Services
 		{
 			_iconCache.Clear();
 		}
+		public static ViewModels.Configs? Configs { get; set; }
+
 		public static bool IsSpecialFolder(string path)
 		{
 			if (string.IsNullOrWhiteSpace(path)) return false;
 
-			// 去除末尾的目录分隔符（Windows 和 Linux 都兼容）
 			string trimmed = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-			// 取最后一级目录名
 			string folderName = Path.GetFileName(trimmed);
 
-			return string.Equals(folderName, "Documents", StringComparison.OrdinalIgnoreCase) ||
-				   string.Equals(folderName, "Downloads", StringComparison.OrdinalIgnoreCase) ||
-				   string.Equals(folderName, "Desktop", StringComparison.OrdinalIgnoreCase);
+			if (string.Equals(folderName, "Documents", StringComparison.OrdinalIgnoreCase) ||
+			    string.Equals(folderName, "Downloads", StringComparison.OrdinalIgnoreCase) ||
+			    string.Equals(folderName, "Desktop", StringComparison.OrdinalIgnoreCase)   ||
+			    string.Equals(folderName, "Music", StringComparison.OrdinalIgnoreCase) ||
+			    string.Equals(folderName, "Pictures", StringComparison.OrdinalIgnoreCase) ||
+			    string.Equals(folderName, "Videos", StringComparison.OrdinalIgnoreCase))
+				return true;
+
+			if (Configs != null && Configs.IsTimeGroupedFolder(path))
+				return true;
+
+			return false;
 		}
 	}
 }

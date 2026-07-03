@@ -39,6 +39,7 @@ namespace LRS
 		public static MainWindowViewModel SharedViewModel { get; private set; }
 		public static IServiceProvider Services { get; private set; }
         public static LocalizationService LocalizationService { get; private set; }
+        public static MultiLanguageStringsViewModel ML { get; private set; }
         private static IServiceProvider ConfigureServices()
         {
 			var services = new ServiceCollection();
@@ -61,6 +62,7 @@ namespace LRS
 				services.AddSingleton<IIconProvider, WindowsIconProvider>();
 				services.AddSingleton<IFileOperator, FileOperator>();
 				services.AddSingleton<LocalizationService>();
+				services.AddSingleton<MultiLanguageStringsViewModel>();
 			}).Build();
             Services = _host.Services;
 
@@ -68,6 +70,8 @@ namespace LRS
             var locService = Services.GetRequiredService<LocalizationService>();
             locService.SetLanguage(configs.Language);
             LocalizationService = locService;
+            ML = Services.GetRequiredService<MultiLanguageStringsViewModel>();
+            ShellIconHelper.Configs = configs;
 			this.UnhandledException += (s, e) =>
 			{
 				Debug.WriteLine($"未处理异常: {e.Exception}");
@@ -88,7 +92,7 @@ namespace LRS
 			var configs = Services.GetRequiredService<Configs>();
 			var fileOperator = Services.GetRequiredService<IFileOperator>();
 			var iconProvider = Services.GetRequiredService<IIconProvider>();
-			SharedViewModel = new MainWindowViewModel(iconProvider, dispatcher, configs, fileOperator);
+			SharedViewModel = new MainWindowViewModel(iconProvider, dispatcher, configs, fileOperator, ML);
 
 			_window = new Views.MainWindowView();
 			MainWindow = _window;

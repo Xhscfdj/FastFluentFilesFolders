@@ -8,7 +8,7 @@ namespace LRS.Views
     {
         public SettingsView()
         {
-            DataContext = new SettingsViewModel(App.LocalizationService);
+            DataContext = new SettingsViewModel(App.ML);
             InitializeComponent();
         }
 

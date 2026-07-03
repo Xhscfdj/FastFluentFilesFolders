@@ -27,6 +27,7 @@ namespace LRS.ViewModels
 		// 基础属性
 		[ObservableProperty] private bool _isPlaceholder = false;
 		[ObservableProperty] private bool _isSpecialFolder = false;
+		[ObservableProperty] private bool _willSplitToDifferentSorts = false;
 		[ObservableProperty] private string _name = string.Empty;
 		[ObservableProperty] private string _fullPath = string.Empty;
 		[ObservableProperty] private bool _isDirectory = true;
@@ -98,9 +99,10 @@ namespace LRS.ViewModels
 				Children.Add(new PlaceholderNodeViewModel());
 				Name = (fullPath.Length == 3 && fullPath.EndsWith(":\\")) ? fullPath : Path.GetFileName(fullPath.TrimEnd('\\'));
 				Extension = string.Empty;
-				if (ShellIconHelper.IsSpecialFolder(fullPath))
+				IsSpecialFolder = ShellIconHelper.IsSpecialFolder(fullPath);
+				if (_configs != null && _configs.IsTimeGroupedFolder(fullPath))
 				{
-					IsSpecialFolder = true;
+					WillSplitToDifferentSorts = true;
 				}
 			}
 			else
