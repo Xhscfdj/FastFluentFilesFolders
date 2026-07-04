@@ -16,18 +16,30 @@ namespace LRS.UserControls
         public void UpdateSource(ObservableCollection<FileSystemNodeViewModel> items, bool grouped)
         {
             if (_groupedSource != null)
+            {
                 _groupedSource.FlatListChanged -= OnFlatListChanged;
+                _groupedSource = null;
+            }
 
-            var source = new GroupedFileList();
-            _groupedSource = source;
-            source.FlatListChanged += OnFlatListChanged;
-            source.SetItems(items, grouped);
-            ItemsSource = source;
+            if (grouped)
+            {
+                var source = new GroupedFileList();
+                _groupedSource = source;
+                source.FlatListChanged += OnFlatListChanged;
+                source.SetItems(items, grouped);
+                ItemsSource = source;
+            }
+            else
+            {
+                ItemsSource = items;
+            }
         }
 
         private void OnFlatListChanged()
         {
-            Refresh();
+            var source = ItemsSource;
+            ItemsSource = null;
+            ItemsSource = source;
         }
 
         protected override void OnSorting(TableViewSortingEventArgs args)
@@ -65,15 +77,10 @@ namespace LRS.UserControls
                 column.SortDirection = null;
             }
 
-            Refresh();
-            args.Handled = true;
-        }
-
-        public void Refresh()
-        {
-            var source = ItemsSource;
+            var s = ItemsSource;
             ItemsSource = null;
-            ItemsSource = source;
+            ItemsSource = s;
+            args.Handled = true;
         }
     }
 }

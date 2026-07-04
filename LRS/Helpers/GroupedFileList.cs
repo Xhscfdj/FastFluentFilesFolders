@@ -46,8 +46,11 @@ namespace LRS.Helpers
 
             foreach (var item in items)
             {
-                var key = GetTimeGroup(item.LastModifiedTime);
-                item.SortByTime = key;
+                var key = string.IsNullOrEmpty(item.SortByTime)
+                    ? GetTimeGroup(item.LastModifiedTime)
+                    : item.SortByTime;
+                if (!string.IsNullOrEmpty(key))
+                    item.SortByTime = key;
                 if (!_groupChildren.ContainsKey(key))
                     _groupChildren[key] = new List<FileSystemNodeViewModel>();
                 _groupChildren[key].Add(item);

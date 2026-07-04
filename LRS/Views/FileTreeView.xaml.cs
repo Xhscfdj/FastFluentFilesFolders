@@ -31,21 +31,21 @@ namespace LRS.Views
             }
         }
 
-        private void ToggleSettings(object sender, RoutedEventArgs e)
-        {
-            VM.IsSettingsOpen = !VM.IsSettingsOpen;
+        //private void ToggleSettings(object sender, RoutedEventArgs e)
+        //{
+        //    VM.IsSettingsOpen = !VM.IsSettingsOpen;
 
-            if (VM.IsSettingsOpen)
-            {
-                SettingsBtnIcon.Glyph = "\uE72B";
-                SettingsBtnLabel.Text = "返回";
-            }
-            else
-            {
-                SettingsBtnIcon.Glyph = "\uE713";
-                SettingsBtnLabel.Text = "设置";
-            }
-        }
+        //    if (VM.IsSettingsOpen)
+        //    {
+        //        SettingsBtnIcon.Glyph = "\uE72B";
+        //        SettingsBtnLabel.Text = "返回";
+        //    }
+        //    else
+        //    {
+        //        SettingsBtnIcon.Glyph = "\uE713";
+        //        SettingsBtnLabel.Text = "设置";
+        //    }
+        //}
 
         private async void TreeView_SelectionChanged(TreeView sender, TreeViewSelectionChangedEventArgs args)
         {

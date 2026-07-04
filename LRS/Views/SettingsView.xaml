@@ -17,7 +17,7 @@
 			<RowDefinition Height="Auto" />
 		</Grid.RowDefinitions>
 		<ScrollViewer>
-			<StackPanel Padding="24" Spacing="14" HorizontalAlignment="Stretch">
+			<StackPanel Padding="24" Spacing="14" HorizontalAlignment="Stretch" x:Name="SettingsStack">
 				<TextBlock Text="{Binding ML.SettingsTitle}" FontSize="22" FontWeight="Bold" />
 				<!--General-->
 				<TextBlock Text="{Binding ML.GeneralSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
@@ -131,6 +131,54 @@
 						<FontIcon Glyph="&#xE756;" />
 					</comCtrls:SettingsCard.HeaderIcon>
 					<TextBlock Text="{Binding ConfigFilePath}" />
+				</comCtrls:SettingsCard>
+
+				<!-- Plugins Section -->
+				<StackPanel x:Name="PluginsSection" Visibility="Collapsed">
+					<TextBlock Text="{Binding ML.PluginsSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0"/>
+					<StackPanel x:Name="PluginSettingsStack" Spacing="14" />
+				</StackPanel>
+
+				<TextBlock Text="{Binding ML.PluginManagement}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0"/>
+				<comCtrls:SettingsCard Header="{Binding ML.PluginImport}">
+					<comCtrls:SettingsCard.HeaderIcon>
+						<FontIcon Glyph="&#xE8A7;" />
+					</comCtrls:SettingsCard.HeaderIcon>
+					<Button x:Name="ImportPluginBtn" Click="OnImportPluginClick"
+							Style="{StaticResource AccentButtonStyle}"
+							Content="{Binding ML.PluginImportBtn}" />
+				</comCtrls:SettingsCard>
+
+				<comCtrls:SettingsCard x:Name="InstalledPluginsCard"
+									   Header="{Binding ML.PluginInstalled}"
+									   Visibility="Collapsed">
+					<comCtrls:SettingsCard.HeaderIcon>
+						<FontIcon Glyph="&#xE943;" />
+					</comCtrls:SettingsCard.HeaderIcon>
+					<ListView x:Name="InstalledPluginsList" Height="200"
+							  SelectionMode="None">
+						<ListView.ItemTemplate>
+							<DataTemplate x:DataType="x:String">
+								<Grid ColumnSpacing="8">
+									<Grid.ColumnDefinitions>
+										<ColumnDefinition Width="*"/>
+										<ColumnDefinition Width="Auto"/>
+									</Grid.ColumnDefinitions>
+									<StackPanel VerticalAlignment="Center">
+										<TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis"
+												   FontWeight="SemiBold"/>
+									</StackPanel>
+									<Button Grid.Column="1"
+											Content="&#xE74D;"
+											FontFamily="{StaticResource SymbolThemeFontFamily}"
+											Style="{StaticResource SubtleButtonStyle}"
+											Click="OnUninstallPluginClick"
+											Tag="{Binding}"
+											Width="32" Height="32"/>
+								</Grid>
+							</DataTemplate>
+						</ListView.ItemTemplate>
+					</ListView>
 				</comCtrls:SettingsCard>
 
 				<TextBlock Text="{Binding ML.AboutSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0"/>

@@ -86,6 +86,9 @@ namespace LRS.Services
 			if (string.IsNullOrEmpty(sourcePath) || string.IsNullOrEmpty(destinationPath))
 				throw new ArgumentException("路径不能为空");
 
+			if (string.Equals(sourcePath, destinationPath, StringComparison.OrdinalIgnoreCase))
+				return;
+
 			await Task.Run(() =>
 			{
 				if (File.Exists(sourcePath))

@@ -19,6 +19,8 @@ using System.Windows.Input;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.System;
 using LRS.ViewModels;
+using LRS.Extensions;
+using LRS.Extensions.Interfaces;
 
 namespace LRS.UserControls
 {
@@ -126,7 +128,50 @@ namespace LRS.UserControls
             this.Loaded += (s, e) =>
             {
                 _compositor = ElementCompositionPreview.GetElementVisual(this).Compositor;
+                PopulatePluginToolbar();
             };
+        }
+
+        private void PopulatePluginToolbar()
+        {
+            var plugins = App.PluginManager?.GetToolbarPlugins();
+            PluginToolbarItems.Items.Clear();
+            if (plugins == null) return;
+
+            var toolbarItems = new List<object>();
+            bool first = true;
+            foreach (var plugin in plugins)
+            {
+                foreach (var item in plugin.GetToolbarItems())
+                {
+                    if (first && toolbarItems.Count > 0)
+                    {
+                        var sep = new AppBarSeparator { Margin = new Thickness(4, 0, 4, 0) };
+                        toolbarItems.Add(sep);
+                        first = false;
+                    }
+
+                    var btn = new Button
+                    {
+                        Width = 32, Height = 32,
+                        Style = (Style)Application.Current.Resources["SubtleButtonStyle"],
+                        Padding = new Thickness(4),
+                        Tag = item
+                    };
+                    Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(btn, item.ToolTip ?? item.Header);
+                    if (item.Command != null)
+                        btn.Command = item.Command;
+                    if (item.CommandParameter != null)
+                        btn.CommandParameter = item.CommandParameter;
+                    if (item.IconGlyph != null)
+                        btn.Content = new FontIcon { Glyph = item.IconGlyph, FontSize = 14 };
+
+                    toolbarItems.Add(btn);
+                }
+            }
+
+            foreach (var tb in toolbarItems)
+                PluginToolbarItems.Items.Add(tb);
         }
 
         private void BuildSearchFlyout()

@@ -37,6 +37,7 @@
             <ColumnDefinition Width="*"    />
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
@@ -171,5 +172,22 @@
                 Padding="4">
             <FontIcon Glyph="&#xE8C8;" FontSize="16"/>
         </Button>
+
+        <ItemsControl Grid.Column="7" x:Name="PluginToolbarItems" Margin="4,0,0,0">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                    <Button Width="32" Height="32"
+                            Style="{StaticResource SubtleButtonStyle}"
+                            Padding="4">
+                        <FontIcon Glyph="{Binding}" FontSize="14"/>
+                    </Button>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
     </Grid>
 </UserControl>

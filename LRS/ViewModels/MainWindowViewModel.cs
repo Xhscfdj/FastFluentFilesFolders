@@ -195,13 +195,27 @@ namespace LRS.ViewModels
 			if (string.IsNullOrEmpty(newName)) return;
 			try
 			{
+				var oldDir = Path.GetDirectoryName(item.FullPath) ?? "";
+				var newPath = Path.Combine(oldDir, newName);
 				await _fileOperator.RenameAsync(item.FullPath, newName);
+				item.FullPath = newPath;
 			}
 			catch (Exception ex)
 			{
 				Debug.WriteLine($"[Rename] Failed: {ex.Message}");
 			}
 			_renamingItem = null;
+		}
+
+		public void AddItemToCurrentView(string fullPath, bool isDirectory)
+		{
+			var node = new FileSystemNodeViewModel(fullPath, isDirectory, false, _appConfigs, _uiDispatcherQueue, false);
+			_ = node.InitAsync(node.FullPath, isDirectory);
+			_uiDispatcherQueue.TryEnqueue(() =>
+			{
+				CurrentFolderContent.Add(node);
+				SelectedFolder?.Children.Add(node);
+			});
 		}
 
 		[RelayCommand]
@@ -401,7 +415,7 @@ namespace LRS.ViewModels
 			});
 		}
 
-		private async Task RefreshCurrentFolder()
+		public async Task RefreshCurrentFolderAsync()
 		{
 			if (SelectedFolder != null)
 			{
@@ -443,7 +457,7 @@ namespace LRS.ViewModels
 		private Microsoft.UI.Dispatching.DispatcherQueue _uiDispatcherQueue;
 		[ObservableProperty] private FileSystemNodeViewModel? _selectedFolder;
 
-		public bool IsCurrentFolderSpecial => SelectedFolder?.IsSpecialFolder ?? false;
+		public bool IsCurrentFolderSpecial => SelectedFolder?.WillSplitToDifferentSorts ?? false;
 
 		partial void OnSelectedFolderChanged(FileSystemNodeViewModel? value)
 		{

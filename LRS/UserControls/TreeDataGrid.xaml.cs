@@ -663,6 +663,7 @@ namespace LRS.UserControls
                 {
                     item.Name = newName;
                     _ = App.SharedViewModel.CommitRenameAsync(item, newName);
+                    _ = item.RefreshAsync();
                 }
             }
         }
@@ -680,6 +681,7 @@ namespace LRS.UserControls
                     {
                         item.Name = newName;
                         _ = App.SharedViewModel.CommitRenameAsync(item, newName);
+                        _ = item.RefreshAsync();
                     }
                 }
                 else if (e.Key == Windows.System.VirtualKey.Escape)

@@ -149,6 +149,13 @@
     <Page Update="UserControls\ThemedIconResources.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
+    <Page Update="Views\PluginsPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+
+  <ItemGroup>
+    <TrimmerRootDescriptor Include="Extensions\TrimmerRoots.xml" />
   </ItemGroup>
 
   <!--

@@ -1,13 +1,16 @@
 ﻿using LRS.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using System.ComponentModel;
+using System.Diagnostics;
 
 namespace LRS.Views
 {
     public sealed partial class MainWindowView : Window
     {
         private MainWindowViewModel VM => App.SharedViewModel;
+        private string _currentPage = "explorer";
 
         public MainWindowView()
         {
@@ -15,26 +18,65 @@ namespace LRS.Views
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(AppTitleBar);
             VM.PropertyChanged += OnVMPropertyChanged;
-            UpdateRightPanel();
         }
 
         private void OnVMPropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(MainWindowViewModel.IsSettingsOpen))
-                UpdateRightPanel();
+            {
+                if (VM.IsSettingsOpen)
+                    NavigateTo("settings");
+                else
+                    NavigateTo("explorer");
+            }
         }
 
-        private void UpdateRightPanel()
+        private void OnNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
         {
-            if (VM.IsSettingsOpen)
+            var item = args.SelectedItemContainer ?? args.SelectedItem as NavigationViewItem;
+            if (item?.Tag is string tag)
             {
-                MiddleFilesPanel.Visibility = Visibility.Collapsed;
-                SettingsPanelView.Visibility = Visibility.Visible;
+                NavigateTo(tag);
             }
-            else
+        }
+
+        private void OnSettingsNavTapped(object sender, TappedRoutedEventArgs e)
+        {
+            NavigateTo("settings");
+        }
+
+        private void NavigateTo(string pageTag)
+        {
+            if (_currentPage == pageTag) return;
+            _currentPage = pageTag;
+
+            Debug.WriteLine($"[MainWindowView] NavigateTo: {pageTag}");
+
+            ExplorerArea.Visibility = pageTag == "explorer" ? Visibility.Visible : Visibility.Collapsed;
+            PluginsArea.Visibility = pageTag == "plugins" ? Visibility.Visible : Visibility.Collapsed;
+            SettingsStandaloneArea.Visibility = pageTag == "settings" ? Visibility.Visible : Visibility.Collapsed;
+
+            if (pageTag == "explorer")
             {
-                MiddleFilesPanel.Visibility = Visibility.Visible;
-                SettingsPanelView.Visibility = Visibility.Collapsed;
+                VM.IsSettingsOpen = false;
+            }
+            else if (pageTag == "plugins")
+            {
+                PluginsArea.RefreshAll();
+            }
+
+            UpdateNavSelection(pageTag);
+        }
+
+        private void UpdateNavSelection(string pageTag)
+        {
+            foreach (var mi in MainNav.MenuItems)
+            {
+                if (mi is NavigationViewItem navItem && navItem.Tag as string == pageTag)
+                {
+                    MainNav.SelectedItem = navItem;
+                    return;
+                }
             }
         }
     }

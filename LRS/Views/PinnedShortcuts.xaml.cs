@@ -7,6 +7,7 @@ namespace LRS.Views
 	public sealed partial class PinnedShortcuts : Page
 	{
 		private MainWindowViewModel VM => App.SharedViewModel;
+		private MultiLanguageStringsViewModel ML => App.ML;
 
 		public PinnedShortcuts()
 		{

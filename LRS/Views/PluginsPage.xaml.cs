@@ -1,25 +1,42 @@
-﻿using LRS.Extensions;
+using LRS.Extensions;
 using LRS.Extensions.Interfaces;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using LRS.ViewModels;
-using CommunityToolkit.WinUI.Controls;
 using System;
+using System.Diagnostics;
 using System.Linq;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
-using System.Diagnostics;
 
 namespace LRS.Views
 {
-    public sealed partial class SettingsView : Page
+    public sealed partial class PluginsPage : Page
     {
-        public SettingsView()
+        public PluginsPage()
         {
-            DataContext = new SettingsViewModel(App.ML);
             InitializeComponent();
+            RefreshInstalledPlugins();
             LoadPluginSettings();
-            RefreshInstalledPluginsList();
+        }
+
+        public void RefreshAll()
+        {
+            RefreshInstalledPlugins();
+            LoadPluginSettings();
+        }
+
+        private void RefreshInstalledPlugins()
+        {
+            InstalledList.Items.Clear();
+            var manifest = PluginImporter.LoadManifest();
+            foreach (var pkg in manifest.Plugins)
+            {
+                InstalledList.Items.Add($"{pkg.Name}  v{pkg.Version}  ({pkg.Id})");
+            }
+
+            InstalledSection.Visibility = manifest.Plugins.Count > 0
+                ? Visibility.Visible
+                : Visibility.Collapsed;
         }
 
         private void LoadPluginSettings()
@@ -39,26 +56,12 @@ namespace LRS.Views
                 }
             }
 
-            PluginsSection.Visibility = hasItems ? Visibility.Visible : Visibility.Collapsed;
-        }
-
-        private void RefreshInstalledPluginsList()
-        {
-            var list = InstalledPluginsList;
-            list.Items.Clear();
-
-            var manifest = PluginImporter.LoadManifest();
-            foreach (var pkg in manifest.Plugins)
-            {
-                list.Items.Add($"{pkg.Name}  v{pkg.Version}  ({pkg.Id})");
-            }
-
-            InstalledPluginsCard.Visibility = manifest.Plugins.Count > 0
+            PluginSettingsSection.Visibility = hasItems
                 ? Visibility.Visible
                 : Visibility.Collapsed;
         }
 
-        private async void OnImportPluginClick(object sender, RoutedEventArgs e)
+        private async void OnImportClick(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -74,52 +77,50 @@ namespace LRS.Views
                 var file = await picker.PickSingleFileAsync();
                 if (file == null) return;
 
-                ImportPluginBtn.IsEnabled = false;
-                ImportPluginBtn.Content = App.ML.Get("PluginImport.Importing");
+                ImportBtn.IsEnabled = false;
+                ImportBtn.Content = App.ML.Get("PluginImport.Importing");
 
                 var (success, message, package) = await App.PluginManager.ImportAndLoadPluginAsync(file.Path);
 
                 if (success)
                 {
-                    LoadPluginSettings();
-                    RefreshInstalledPluginsList();
-                    ShowMessageDialog(App.ML.Get("PluginImport.ImportSuccessTitle"),
+                    RefreshAll();
+                    await ShowDialogAsync("导入成功",
                         $"{package?.Name ?? ""} v{package?.Version ?? ""}");
                 }
                 else
                 {
-                    ShowMessageDialog(App.ML.Get("PluginImport.ImportFailedTitle"),
-                        App.ML.Get(message));
+                    await ShowDialogAsync("导入失败", App.ML.Get(message));
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[SettingsView] Import error: {ex.Message}");
-                ShowMessageDialog(App.ML.Get("PluginImport.ImportFailedTitle"), ex.Message);
+                Debug.WriteLine($"[PluginsPage] Import error: {ex.Message}");
+                await ShowDialogAsync("导入失败", ex.Message);
             }
             finally
             {
-                ImportPluginBtn.IsEnabled = true;
-                ImportPluginBtn.Content = App.ML.PluginImportBtn;
+                ImportBtn.IsEnabled = true;
+                ImportBtn.Content = App.ML.Get("PluginImportBtn");
             }
         }
 
-        private async void OnUninstallPluginClick(object sender, RoutedEventArgs e)
+        private async void OnUninstallClick(object sender, RoutedEventArgs e)
         {
             if (sender is not Button btn || btn.Tag is not string displayText) return;
 
             var manifest = PluginImporter.LoadManifest();
-            var idx = InstalledPluginsList.Items.IndexOf(displayText);
+            var idx = InstalledList.Items.IndexOf(displayText);
             if (idx < 0 || idx >= manifest.Plugins.Count) return;
 
             var pluginId = manifest.Plugins[idx].Id;
 
             var dialog = new ContentDialog
             {
-                Title = App.ML.Get("PluginImport.UninstallConfirmTitle"),
-                Content = string.Format(App.ML.Get("PluginImport.UninstallConfirmFmt"), displayText),
-                PrimaryButtonText = App.ML.Get("PluginImport.UninstallBtn"),
-                CloseButtonText = App.ML.Get("PluginImport.CancelBtn"),
+                Title = "确认卸载",
+                Content = $"确定要卸载 \"{displayText}\" 吗？",
+                PrimaryButtonText = "卸载",
+                CloseButtonText = "取消",
                 XamlRoot = App.MainWindow!.Content.XamlRoot,
                 DefaultButton = ContentDialogButton.Close
             };
@@ -127,20 +128,11 @@ namespace LRS.Views
             var result = await dialog.ShowAsync();
             if (result != ContentDialogResult.Primary) return;
 
-            var (success, message) = await App.PluginManager.UninstallPluginAsync(pluginId);
-            if (success)
-            {
-                LoadPluginSettings();
-                RefreshInstalledPluginsList();
-            }
-            else
-            {
-                ShowMessageDialog(App.ML.Get("PluginImport.UninstallFailedTitle"),
-                    App.ML.Get(message));
-            }
+            var (success, _) = await App.PluginManager.UninstallPluginAsync(pluginId);
+            if (success) RefreshAll();
         }
 
-        private async void ShowMessageDialog(string title, string message)
+        private async System.Threading.Tasks.Task ShowDialogAsync(string title, string message)
         {
             var dialog = new ContentDialog
             {
@@ -151,11 +143,6 @@ namespace LRS.Views
                 DefaultButton = ContentDialogButton.Close
             };
             await dialog.ShowAsync();
-        }
-
-        private void SaveSettings(object sender, RoutedEventArgs e)
-        {
-            App.SharedViewModel.AppConfigs.SaveConfig();
         }
     }
 }

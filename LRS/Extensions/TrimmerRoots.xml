@@ -1,0 +1,7 @@
+<linker>
+  <assembly fullname="LRS">
+    <type fullname="LRS.Extensions.Interfaces.IExtension" preserve="all" />
+    <type fullname="LRS.Extensions.PluginManager" preserve="all" />
+    <type fullname="LRS.Extensions.Interfaces.ExtensionContext" preserve="all" />
+  </assembly>
+</linker>

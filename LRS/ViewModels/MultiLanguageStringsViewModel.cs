@@ -23,10 +23,13 @@ namespace LRS.ViewModels
             nameof(CmdProperties), nameof(NewTextDocument), nameof(NewShortcut), nameof(NewFile),
             nameof(NewExcelSpreadsheet), nameof(NewWordDocument), nameof(NewPowerPointPresentation),
             nameof(CmdNew), nameof(CmdNewFolder), nameof(CmdShowMoreOptions),
+            nameof(CmdOk), nameof(CmdCancel),
             nameof(MsgNoOptionsAvailable), nameof(MsgCannotLoadOptions),
             nameof(SortNameAsc), nameof(SortNameDesc), nameof(SortSizeDesc), nameof(SortSizeAsc),
             nameof(SortModifiedDesc), nameof(SortModifiedAsc), nameof(SortCreatedDesc), nameof(SortCreatedAsc),
             nameof(TimeGroupedFoldersHeader), nameof(TimeGroupedFolderPlaceholder), nameof(AddTimeGroupedFolder),
+            nameof(PluginsSection),
+            nameof(PluginManagement), nameof(PluginImport), nameof(PluginImportBtn), nameof(PluginInstalled),
         };
 
         public MultiLanguageStringsViewModel(LocalizationService loc)
@@ -89,6 +92,8 @@ namespace LRS.ViewModels
         public string CmdNew => _loc.GetString("CmdNew");
         public string CmdNewFolder => _loc.GetString("CmdNewFolder");
         public string CmdShowMoreOptions => _loc.GetString("CmdShowMoreOptions");
+        public string CmdOk => _loc.GetString("CmdOk");
+        public string CmdCancel => _loc.GetString("CmdCancel");
         public string MsgNoOptionsAvailable => _loc.GetString("MsgNoOptionsAvailable");
         public string MsgCannotLoadOptions => _loc.GetString("MsgCannotLoadOptions");
 
@@ -104,6 +109,13 @@ namespace LRS.ViewModels
         public string TimeGroupedFoldersHeader => _loc.GetString("TimeGroupedFoldersHeader");
         public string TimeGroupedFolderPlaceholder => _loc.GetString("TimeGroupedFolderPlaceholder");
         public string AddTimeGroupedFolder => _loc.GetString("AddTimeGroupedFolder");
+
+        public string PluginsSection => _loc.GetString("PluginsSection");
+
+        public string PluginManagement => _loc.GetString("PluginManagement");
+        public string PluginImport => _loc.GetString("PluginImport");
+        public string PluginImportBtn => _loc.GetString("PluginImportBtn");
+        public string PluginInstalled => _loc.GetString("PluginInstalled");
 
         public void RefreshAll()
         {

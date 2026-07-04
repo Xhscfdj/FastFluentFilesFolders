@@ -38,7 +38,7 @@
                 </DataTemplate>
             </TreeView.ItemTemplate>
         </TreeView>
-
+        <!--
         <Button Grid.Row="2" Click="ToggleSettings"
 				Grid.Column="0"
                 BorderThickness="0" Background="Transparent"
@@ -49,6 +49,6 @@
 					<TextBlock x:Name="SettingsBtnLabel" Text="设置" FontSize="13" HorizontalAlignment="Left"/>
 				</StackPanel>
 			</Button.Content>
-		</Button>
+		</Button>-->
     </Grid>
 </Page>

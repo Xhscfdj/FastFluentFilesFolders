@@ -182,6 +182,13 @@ namespace LRS.ViewModels
 			}
 		}	
 
+		public async Task RefreshAsync()
+		{
+			if (IsPlaceholder) return;
+			await LoadBasicInfoAsync();
+			_ = LoadIconAsync(FullPath, IsDirectory);
+		}
+
 		public async Task LoadIconAsync(string fullPath, bool isDirectory)
 		{
 			try
@@ -318,6 +325,8 @@ namespace LRS.ViewModels
 				Children.Clear();
 				foreach (var item in children)
 				{
+					if (WillSplitToDifferentSorts)
+						item.SortByTime = Helpers.GroupedFileList.GetTimeGroup(item.LastModifiedTime);
 					Children.Add(item);
 				}
 
