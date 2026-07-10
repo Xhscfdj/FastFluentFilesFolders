@@ -30,6 +30,7 @@ Then, you can run this powershell command:
 - **Configurable** -- settings panel for home path, default sort order, row height, and icon provider options
 - **Mica backdrop** -- native Windows 11 materials with title bar integration
 - **Time-based grouping** -- files grouped by time periods (Today, Yesterday, This Week, etc.)
+- **Plugins...** -- Expand the program's functionality with extensions (Plugin dev docs: [docs](https://www.github.com/Xhscfdj/FastFluentFilesFolders/FastFluentFilesFolders/Extensions/PLUGIN_DEV_GUIDE.md)
 - **There will be more functions...**
 ### Performance
 - **Fast and fluent** -- the speed of loading directories which has hundreds even thousands of items is very fast(450 items directory doesn't take any time visually). That's because we load the items' info asynchronously.
