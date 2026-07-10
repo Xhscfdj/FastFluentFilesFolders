@@ -1,8 +1,0 @@
-using System.ComponentModel;
-
-namespace LRS.UserControls.TableView;
-
-/// <summary>
-/// Provides data for the ExportContent event.
-/// </summary>
-public class TableViewExportContentEventArgs : HandledEventArgs { }

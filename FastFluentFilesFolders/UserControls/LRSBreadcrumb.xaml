@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl x:Class="FastFluentFilesFolders.UserControls.LRSBreadcrumb"
+             x:Name="LRSB"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:FastFluentFilesFolders.UserControls"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <local:LastToVisibilityConverter x:Key="LastToVisibilityConverter"/>
+        <Storyboard x:Key="RotateArrowStoryboard" Duration="0:0:0.2">
+            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                             To="180" Duration="0:0:0.2">
+                <DoubleAnimation.EasingFunction>
+                    <QuadraticEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+        <Storyboard x:Key="RotateArrowBackStoryboard" Duration="0:0:0.2">
+            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                             To="0" Duration="0:0:0.2">
+                <DoubleAnimation.EasingFunction>
+                    <QuadraticEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*"    />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Button Grid.Column="0" x:Name="BackButton"
+                Width="32" Height="32"
+                ToolTipService.ToolTip="返回"
+                Command="{Binding GoBackCommand, ElementName=LRSB}"
+                IsEnabled="{Binding CanGoBack, ElementName=LRSB}"
+                Style="{StaticResource SubtleButtonStyle}"
+                Padding="4">
+            <FontIcon Glyph="&#xE72B;" FontSize="14"/>
+        </Button>
+
+        <Button Grid.Column="1" x:Name="ForwardButton"
+                Width="32" Height="32"
+                ToolTipService.ToolTip="前进"
+                Command="{Binding GoForwardCommand, ElementName=LRSB}"
+                IsEnabled="{Binding CanGoForward, ElementName=LRSB}"
+                Style="{StaticResource SubtleButtonStyle}"
+                Padding="4">
+            <FontIcon Glyph="&#xE72A;" FontSize="14"/>
+        </Button>
+
+        <Button Grid.Column="2" x:Name="UpButton"
+                Width="32" Height="32"
+                ToolTipService.ToolTip="向上一级"
+                Command="{Binding GoUpCommand, ElementName=LRSB}"
+                Style="{StaticResource SubtleButtonStyle}"
+                Padding="4">
+            <FontIcon Glyph="&#xE74A;" FontSize="14"/>
+        </Button>
+
+		<Button Grid.Column="3" x:Name="RefreshButton"
+				Width="32" Height="32"
+				Style="{StaticResource SubtleButtonStyle}"
+				ToolTipService.ToolTip="重新加载"
+				Click="OnRefreshClick"
+				Padding="4">
+			<FontIcon Glyph="&#xE72C;" FontSize="14"/>
+		</Button>
+		
+        <Grid Grid.Column="4" x:Name="AddressBarArea" Margin="4,0,0,0" PointerPressed="OnAddressBarAreaPointerPressed">
+			<SystemBackdropElement CornerRadius="16">
+				<SystemBackdropElement.SystemBackdrop>
+					<DesktopAcrylicBackdrop />
+				</SystemBackdropElement.SystemBackdrop>
+			</SystemBackdropElement>
+			<TextBox x:Name="PathTextBox"
+                     VerticalAlignment="Stretch"
+					 CornerRadius="16"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     Visibility="Collapsed"
+                     GotFocus="OnPathTextBoxGotFocus"
+                     LostFocus="OnPathTextBoxLostFocus"
+                     KeyDown="OnPathTextBoxKeyDown"
+                     IsReadOnly="True"
+                     Text="{Binding CurrentPath, ElementName=LRSB, Mode=OneWay}"/>
+
+            <ScrollViewer x:Name="BreadcrumbScrollViewer"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Disabled"
+                          IsHitTestVisible="True"
+                          Background="Transparent">
+                <ItemsControl x:Name="BreadcrumbItemsControl" Margin="10,0,0,0"
+                              ItemsSource="{Binding Segments, ElementName=LRSB}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="local:BreadcrumbSegment">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Stretch" Margin="0,5,0,5">
+                                <Button Command="{Binding NavigateCommand}"
+                                        CommandParameter="{Binding FullPath}"
+                                        Style="{StaticResource SubtleButtonStyle}"
+                                        Content="{Binding DisplayName}"
+                                        BorderThickness="0"
+                                        Padding="6,2"
+                                        VerticalAlignment="Stretch"
+                                        FontSize="13"/>
+                                <Button x:Name="ChevronButton"
+                                        BorderThickness="0"
+                                        VerticalAlignment="Stretch"
+                                        Style="{StaticResource SubtleButtonStyle}"
+                                        Padding="2"
+                                        FontSize="10"
+                                        Tag="{Binding}"
+                                        Click="OnChevronClick"
+                                        Visibility="{Binding IsLast, Converter={StaticResource LastToVisibilityConverter}}">
+                                    <Button.RenderTransform>
+                                        <RotateTransform Angle="0"/>
+                                    </Button.RenderTransform>
+                                    <FontIcon Glyph="&#xE76C;" FontSize="10"/>
+                                     <Button.Flyout>
+                                        <MenuFlyout Opening="OnFlyoutOpening" Closing="OnFlyoutClosing">
+                                            <MenuFlyout.MenuFlyoutPresenterStyle>
+                                                <Style TargetType="MenuFlyoutPresenter">
+                                                    <Setter Property="MaxHeight" Value="400"/>
+                                                    <Setter Property="MaxWidth" Value="9999"/>
+                                                    <Setter Property="MinWidth" Value="100"/>
+                                                </Style>
+                                            </MenuFlyout.MenuFlyoutPresenterStyle>
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                </Button>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
+
+        <Button Grid.Column="5" x:Name="SearchButton"
+                Width="32" Height="32"
+                ToolTipService.ToolTip="搜索"
+                Style="{StaticResource SubtleButtonStyle}"
+                Click="OnSearchButtonClick"
+                Padding="4">
+            <FontIcon Glyph="&#xE721;" FontSize="14"/>
+        </Button>
+
+        <Button Grid.Column="6" x:Name="CopyPathButton"
+                Width="32" Height="32"
+				Margin="10,0,0,0"
+                ToolTipService.ToolTip="复制路径"
+                Command="{Binding CopyPathCommand, ElementName=LRSB}"
+				Style="{StaticResource SubtleButtonStyle}"
+                Padding="4">
+            <FontIcon Glyph="&#xE8C8;" FontSize="16"/>
+        </Button>
+
+        <ItemsControl Grid.Column="7" x:Name="PluginToolbarItems" Margin="4,0,0,0">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                    <Button Width="32" Height="32"
+                            Style="{StaticResource SubtleButtonStyle}"
+                            Padding="4">
+                        <FontIcon Glyph="{Binding}" FontSize="14"/>
+                    </Button>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </Grid>
+</UserControl>

@@ -1,0 +1,7 @@
+<linker>
+  <assembly fullname="FastFluentFilesFolders">
+    <type fullname="FastFluentFilesFolders.Extensions.Interfaces.IExtension" preserve="all" />
+    <type fullname="FastFluentFilesFolders.Extensions.PluginManager" preserve="all" />
+    <type fullname="FastFluentFilesFolders.Extensions.Interfaces.ExtensionContext" preserve="all" />
+  </assembly>
+</linker>

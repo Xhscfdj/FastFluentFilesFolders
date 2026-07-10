@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "FastFluentFilesFolders (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "FastFluentFilesFolders (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

@@ -1,0 +1,89 @@
+﻿<Window
+    x:Class="FastFluentFilesFolders.Views.MainWindowView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:FastFluentFilesFolders.Views"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:FastFluentFilesFolders.ViewModels"
+    xmlns:views="using:FastFluentFilesFolders.Views"
+    xmlns:ctrls="using:Microsoft.UI.Xaml.Controls"
+	xmlns:CTKTCtrls="using:CommunityToolkit.WinUI.Controls" 
+    mc:Ignorable="d">
+    
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+
+    <ctrls:NavigationView x:Name="MainNav" PaneDisplayMode="LeftCompact"
+                          IsBackButtonVisible="Collapsed"
+                          IsSettingsVisible="False"
+                          SelectionChanged="OnNavSelectionChanged">
+        <ctrls:NavigationView.PaneHeader>
+            <StackPanel Orientation="Horizontal" Spacing="4">
+                <FontIcon Glyph="&#xE838;" FontSize="16" />
+                <TextBlock Text="FastFluentFilesFolders" FontSize="14" FontWeight="SemiBold"
+                           VerticalAlignment="Center" Margin="4,0,0,0"/>
+            </StackPanel>
+        </ctrls:NavigationView.PaneHeader>
+
+        <ctrls:NavigationView.MenuItems>
+            <ctrls:NavigationViewItem Icon="Folder" Content="文件浏览" Tag="explorer"/>
+            <ctrls:NavigationViewItem Icon="AllApps" Content="插件" Tag="plugins"/>
+        </ctrls:NavigationView.MenuItems>
+
+        <ctrls:NavigationView.PaneFooter>
+            <ctrls:NavigationViewItem x:Name="SettingsNavItem" Icon="Setting" Content="设置" Tag="settings" Tapped="OnSettingsNavTapped"/>
+        </ctrls:NavigationView.PaneFooter>
+
+        <!-- Content: all areas, visibility toggled -->
+        <Grid>
+            <!-- Explorer Area -->
+            <Grid x:Name="ExplorerArea" Visibility="Visible">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="10" />
+                    <ColumnDefinition Width="7*" />
+                </Grid.ColumnDefinitions>
+
+                <TitleBar x:Name="AppTitleBar" Grid.ColumnSpan="3"
+                      Title="FastFluentFilesFolders" Subtitle="v1.0.0-β">
+                    <TitleBar.IconSource>
+                        <FontIconSource Glyph="&#xE838;"/>
+                    </TitleBar.IconSource>
+                </TitleBar>
+
+                <views:TopView Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"/>
+                
+
+				<ScrollViewer Grid.Row="2" Grid.Column="0"
+							  VerticalScrollBarVisibility="Auto"
+							  VerticalScrollMode="Auto">
+					<StackPanel Orientation="Vertical">
+						<views:PinnedShortcuts />
+						<views:FileTreeView />
+					</StackPanel>
+				</ScrollViewer>
+
+
+                <CTKTCtrls:GridSplitter Grid.Row="2" Grid.Column="1" Grid.RowSpan="1"/>
+
+                <Grid Grid.Row="2" Grid.Column="2">
+                    <views:MiddleFilesView x:Name="MiddleFilesPanel" />
+                    <views:SettingsView x:Name="SettingsPanelView" Visibility="Collapsed" />
+                </Grid>
+            </Grid>
+
+            <!-- Plugins Area -->
+            <views:PluginsPage x:Name="PluginsArea" Visibility="Collapsed" />
+
+            <!-- Settings Standalone Area -->
+            <views:SettingsView x:Name="SettingsStandaloneArea" Visibility="Collapsed" />
+        </Grid>
+    </ctrls:NavigationView>
+</Window>

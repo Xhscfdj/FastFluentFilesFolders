@@ -1,0 +1,10 @@
+﻿{
+  "App": {
+    "Inited": false,
+    "Mode": "Release",
+    "Branch": "master",
+    "RepoURL": "https://github.com/Xhscfdj/LiveRootStorage/",
+    "Author": "Xhscfdj",
+    "Version": "1.0.0-beta"
+  }
+}
