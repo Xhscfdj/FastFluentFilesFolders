@@ -13,6 +13,12 @@ namespace FastFluentFilesFolders.ViewModels
         public string Display { get; set; } = "";
     }
 
+    public class LanguageOption
+    {
+        public string DisplayName { get; set; } = "";
+        public string Value { get; set; } = "";
+    }
+
     public partial class SettingsViewModel : ObservableObject
     {
         private readonly MultiLanguageStringsViewModel _ml;
@@ -35,8 +41,12 @@ namespace FastFluentFilesFolders.ViewModels
         [ObservableProperty]
         private SortModeItem _selectedOrderModeItem;
 
+        private bool _fumoUnlocked;
+
+        public ObservableCollection<LanguageOption> LanguageOptions { get; } = new();
+
         [ObservableProperty]
-        private int _selectedLanguageIndex;
+        private LanguageOption? _selectedLanguage;
 
         [ObservableProperty]
         private string _newTimeGroupedFolderPath = "";
@@ -53,8 +63,11 @@ namespace FastFluentFilesFolders.ViewModels
             var match = _orderModeItems.FirstOrDefault(i => i.Mode.ToString() == modeStr);
             _selectedOrderModeItem = match ?? _orderModeItems.First(i => i.Mode == SortMode.ModifiedDesc);
 
+            LanguageOptions.Add(new LanguageOption { DisplayName = "中文", Value = "zh-Hans" });
+            LanguageOptions.Add(new LanguageOption { DisplayName = "English", Value = "en" });
+
             var configLang = App.SharedViewModel?.AppConfigs?.Language ?? "zh-Hans";
-            _selectedLanguageIndex = configLang == "en" ? 1 : 0;
+            _selectedLanguage = configLang == "en" ? LanguageOptions[1] : LanguageOptions[0];
         }
 
         partial void OnSelectedOrderModeItemChanged(SortModeItem value)
@@ -63,12 +76,24 @@ namespace FastFluentFilesFolders.ViewModels
                 App.SharedViewModel.AppConfigs.DefaultOrderMode = value.Mode.ToString();
         }
 
-        partial void OnSelectedLanguageIndexChanged(int value)
+        partial void OnSelectedLanguageChanged(LanguageOption? value)
         {
-            var lang = value == 1 ? "en" : "zh-Hans";
+            if (value == null) return;
+            var lang = value.Value;
             if (App.SharedViewModel?.AppConfigs != null)
                 App.SharedViewModel.AppConfigs.Language = lang;
             App.LocalizationService.SetLanguage(lang);
+        }
+
+        public void UnlockFumoLanguage()
+        {
+            if (_fumoUnlocked) return;
+            _fumoUnlocked = true;
+
+            LanguageOptions.Add(new LanguageOption { DisplayName = "Fumo语", Value = "fumo" });
+
+            if (SelectedLanguage?.Value != "fumo")
+                SelectedLanguage = LanguageOptions[^1];
         }
 
         [RelayCommand]

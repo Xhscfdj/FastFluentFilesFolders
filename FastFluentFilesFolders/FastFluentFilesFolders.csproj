@@ -152,6 +152,9 @@
     <Page Update="Views\PluginsPage.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
+    <Page Update="Views\ExplorerPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
   </ItemGroup>
 
   <ItemGroup>

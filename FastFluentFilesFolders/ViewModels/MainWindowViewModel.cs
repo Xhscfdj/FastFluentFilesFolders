@@ -9,8 +9,10 @@ using CommunityToolkit.WinUI;
 using FastFluentFilesFolders.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Text;
+using Windows.System;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -255,6 +257,8 @@ namespace FastFluentFilesFolders.ViewModels
 
 		public event Action? BreadcrumbRefreshRequested;
 
+		public void RequestBreadcrumbRefresh() => BreadcrumbRefreshRequested?.Invoke();
+
 		public async Task CommitRenameAsync(FileSystemNodeViewModel item, string newName)
 		{
 			if (string.IsNullOrEmpty(newName)) return;
@@ -395,10 +399,25 @@ namespace FastFluentFilesFolders.ViewModels
 			{
 				Title = "属性",
 				Content = panel,
-				CloseButtonText = "关闭",
+				CloseButtonText = "关闭(C)",
 				DefaultButton = ContentDialogButton.Close,
 				XamlRoot = App.MainWindow.Content.XamlRoot
 			};
+
+			panel.IsTabStop = true;
+			panel.UseSystemFocusVisuals = false;
+			dialog.Opened += (_, _) => panel.Focus(FocusState.Programmatic);
+
+			void OnDialogKeyDown(object _, KeyRoutedEventArgs args)
+			{
+				if (args.Key == VirtualKey.C)
+				{
+					dialog.Hide();
+					args.Handled = true;
+				}
+			}
+			dialog.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(OnDialogKeyDown), true);
+
 			_ = dialog.ShowAsync();
 		}
 

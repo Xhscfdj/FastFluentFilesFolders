@@ -61,6 +61,12 @@ Selection is per-node based on `Configs.ifUsesWin32APIToGetIcon`.
 This project should support Chinese and English.
 Don't forget to support multi-language when adding new things.
 
+## Performance
+Always keep the performance best.
+
+## IMPORTANT(I use Chinese in this part)
+每次文件操作后，保证在Grouped和非Grouped文件夹能立即看到结果，不能不刷新。
+
 ## Key files for navigation
 | Concern | File |
 |---|---|

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Application
     x:Class="FastFluentFilesFolders.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -11,6 +11,6 @@
                 <ResourceDictionary Source="/UserControls/ThemedIconResources.xaml"/>
             </ResourceDictionary.MergedDictionaries>
             <!-- Other app resources here -->
-        </ResourceDictionary>
+		</ResourceDictionary>
     </Application.Resources>
 </Application>

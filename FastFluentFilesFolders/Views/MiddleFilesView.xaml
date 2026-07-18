@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Page
     x:Class="FastFluentFilesFolders.Views.MiddleFilesView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -18,8 +18,13 @@
         <local:InvertBoolConverter x:Key="InvertBoolConverter"/>
         <local:InvertVisibilityConverter x:Key="InvertVisibilityConverter"/>
         <local:ExpandGlyphConverter x:Key="ExpandGlyphConverter"/>
-    </Page.Resources>
+		<Style x:Key="ViewSizeButton" TargetType="Button" BasedOn="{StaticResource SubtleButtonStyle}">
+			<Setter Property="Foreground" Value="{StaticResource AccentAAFillColorSecondaryBrush}" />
+
+		</Style>
+	</Page.Resources>
     <Grid>
+        
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*"/>
@@ -107,11 +112,30 @@
                 <tv:TableViewTemplateColumn x:Name="ColSize" Width="*" CanSort="True" SortMemberPath="ExactSize">
                     <tv:TableViewTemplateColumn.CellTemplate>
                         <DataTemplate x:DataType="vm:FileSystemNodeViewModel">
-                            <TextBlock DoubleTapped="OnRowDoubleTapped"
-                                       Text="{Binding VisualSize}"
-                                       Visibility="{x:Bind IsPlaceholder, Converter={StaticResource InvertVisibilityConverter}, Mode=OneWay}"
-                                       TextAlignment="Right"
-                                       VerticalAlignment="Center"/>
+                            <Grid DoubleTapped="OnRowDoubleTapped">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="1" Text="{Binding VisualSize}"
+                                           Visibility="{Binding SizeTextVisibility, Mode=OneWay}"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"/>
+								<Button Grid.Column="1" Content="{Binding ML.CalculateSize}"
+										Background="Transparent"
+										Foreground="{StaticResource AccentAAFillColorSecondaryBrush}"
+                                        Command="{Binding CalculateSizeCommand}"
+                                        Visibility="{Binding CalculateSizeButtonVisibility, Mode=OneWay}"
+                                        x:Name="ViewSizeButton"
+                                        Padding="6,2" VerticalAlignment="Center">
+									<Button.Resources>
+										<StaticResource x:Key="ButtonForeground" ResourceKey="AccentAAFillColorSecondaryBrush"/>
+										<StaticResource x:Key="ButtonForegroundPointerOver" ResourceKey="AccentAAFillColorSecondaryBrush"/>
+										<StaticResource x:Key="ButtonForegroundPressed" ResourceKey="AccentAAFillColorSecondaryBrush"/>
+										<StaticResource x:Key="ButtonForegroundDisabled" ResourceKey="AccentAAFillColorSecondaryBrush"/>
+									</Button.Resources>
+								</Button>
+							</Grid>
                         </DataTemplate>
                     </tv:TableViewTemplateColumn.CellTemplate>
                 </tv:TableViewTemplateColumn>

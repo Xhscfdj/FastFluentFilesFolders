@@ -1,11 +1,15 @@
 using FastFluentFilesFolders.Helpers;
 using FastFluentFilesFolders.ViewModels;
+using Microsoft.UI.Input;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Input;
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using WinUI.TableView;
 using SD = WinUI.TableView.SortDirection;
+using VirtualKey = Windows.System.VirtualKey;
 
 namespace FastFluentFilesFolders.UserControls
 {
@@ -40,6 +44,20 @@ namespace FastFluentFilesFolders.UserControls
             var source = ItemsSource;
             ItemsSource = null;
             ItemsSource = source;
+        }
+
+        protected override void OnKeyDown(KeyRoutedEventArgs e)
+        {
+            if (e.Key == VirtualKey.Enter)
+            {
+                var isAltDown = ((int)InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Menu) & 1) != 0;
+                if (isAltDown)
+                {
+                    return;
+                }
+            }
+
+            base.OnKeyDown(e);
         }
 
         protected override void OnSorting(TableViewSortingEventArgs args)

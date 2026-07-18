@@ -1,7 +1,8 @@
-using FastFluentFilesFolders.ViewModels;
+﻿using FastFluentFilesFolders.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using System;
 using System.ComponentModel;
 using System.Diagnostics;
 
@@ -52,17 +53,23 @@ namespace FastFluentFilesFolders.Views
 
             Debug.WriteLine($"[MainWindowView] NavigateTo: {pageTag}");
 
-            ExplorerArea.Visibility = pageTag == "explorer" ? Visibility.Visible : Visibility.Collapsed;
-            PluginsArea.Visibility = pageTag == "plugins" ? Visibility.Visible : Visibility.Collapsed;
-            SettingsStandaloneArea.Visibility = pageTag == "settings" ? Visibility.Visible : Visibility.Collapsed;
-
             if (pageTag == "explorer")
             {
                 VM.IsSettingsOpen = false;
+                ContentFrame.Visibility = Visibility.Collapsed;
+                ExplorerArea.Visibility = Visibility.Visible;
             }
             else if (pageTag == "plugins")
             {
-                PluginsArea.RefreshAll();
+                ExplorerArea.Visibility = Visibility.Collapsed;
+                ContentFrame.Visibility = Visibility.Visible;
+                ContentFrame.Navigate(typeof(PluginsPage));
+            }
+            else if (pageTag == "settings")
+            {
+                ExplorerArea.Visibility = Visibility.Collapsed;
+                ContentFrame.Visibility = Visibility.Visible;
+                ContentFrame.Navigate(typeof(SettingsView));
             }
 
             UpdateNavSelection(pageTag);

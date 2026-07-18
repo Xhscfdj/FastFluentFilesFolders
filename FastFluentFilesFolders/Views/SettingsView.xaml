@@ -10,7 +10,10 @@
     xmlns:ctrls="using:Microsoft.UI.Xaml.Controls"
     xmlns:comCtrls="using:CommunityToolkit.WinUI.Controls"
     xmlns:vm="using:FastFluentFilesFolders.ViewModels"
-    mc:Ignorable="d">
+    mc:Ignorable="d"
+    NavigationCacheMode="Required"
+    IsTabStop="True"
+    KeyDown="OnSettingsViewKeyDown">
 	<Grid>
 		<Grid.RowDefinitions>
 			<RowDefinition Height="*"    />
@@ -32,10 +35,9 @@
 					<comCtrls:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE8B1;" />
 					</comCtrls:SettingsCard.HeaderIcon>
-					<ComboBox SelectedIndex="{Binding SelectedLanguageIndex, Mode=TwoWay}">
-						<ComboBoxItem Content="中文" />
-						<ComboBoxItem Content="English" />
-					</ComboBox>
+					<ComboBox ItemsSource="{Binding LanguageOptions}"
+							  SelectedItem="{Binding SelectedLanguage, Mode=TwoWay}"
+							  DisplayMemberPath="DisplayName" />
 				</comCtrls:SettingsCard>
 
 				<comCtrls:SettingsExpander Header="{Binding ML.DefaultSortOrder}">

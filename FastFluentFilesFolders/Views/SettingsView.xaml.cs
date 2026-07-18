@@ -2,11 +2,14 @@ using FastFluentFilesFolders.Extensions;
 using FastFluentFilesFolders.Extensions.Interfaces;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Navigation;
 using FastFluentFilesFolders.ViewModels;
 using CommunityToolkit.WinUI.Controls;
 using System;
 using System.Linq;
 using Windows.Storage.Pickers;
+using Windows.System;
 using WinRT.Interop;
 using System.Diagnostics;
 
@@ -14,12 +17,49 @@ namespace FastFluentFilesFolders.Views
 {
     public sealed partial class SettingsView : Page
     {
+        private int _fumoKeyIndex;
+
         public SettingsView()
         {
             DataContext = new SettingsViewModel(App.ML);
             InitializeComponent();
             LoadPluginSettings();
             RefreshInstalledPluginsList();
+        }
+
+        protected override void OnNavigatedTo(NavigationEventArgs e)
+        {
+            base.OnNavigatedTo(e);
+            LoadPluginSettings();
+            RefreshInstalledPluginsList();
+
+            if (DataContext is SettingsViewModel vm &&
+                App.LocalizationService.CurrentLanguage == "fumo")
+                vm.UnlockFumoLanguage();
+        }
+
+        private void OnSettingsViewKeyDown(object sender, KeyRoutedEventArgs e)
+        {
+            var key = e.Key;
+            if (key < VirtualKey.A || key > VirtualKey.Z) return;
+
+            var ch = (char)('a' + (key - VirtualKey.A));
+            var expected = "fumo";
+
+            if (_fumoKeyIndex < expected.Length && ch == expected[_fumoKeyIndex])
+            {
+                _fumoKeyIndex++;
+                if (_fumoKeyIndex == expected.Length)
+                {
+                    _fumoKeyIndex = 0;
+                    if (DataContext is SettingsViewModel vm)
+                        vm.UnlockFumoLanguage();
+                }
+            }
+            else
+            {
+                _fumoKeyIndex = ch == expected[0] ? 1 : 0;
+            }
         }
 
         private void LoadPluginSettings()

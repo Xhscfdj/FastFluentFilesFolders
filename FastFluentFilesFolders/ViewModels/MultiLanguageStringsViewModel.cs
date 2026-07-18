@@ -16,6 +16,7 @@ namespace FastFluentFilesFolders.ViewModels
             nameof(UserConfigPath), nameof(SaveSettings), nameof(LanguageLabel), nameof(AboutSection),
             nameof(AuthorTip), nameof(RepositoryTip),
             nameof(ColumnName), nameof(ColumnModifiedDate), nameof(ColumnCreatedDate), nameof(ColumnSize),
+            nameof(CalculateSize),
             nameof(ItemCountSuffix),
             nameof(PinnedShortcutsTitle),
             nameof(CmdCut), nameof(CmdCopy), nameof(CmdPaste), nameof(CmdRename), nameof(CmdDelete),
@@ -69,6 +70,7 @@ namespace FastFluentFilesFolders.ViewModels
         public string ColumnModifiedDate => _loc.GetString("ColumnModifiedDate");
         public string ColumnCreatedDate => _loc.GetString("ColumnCreatedDate");
         public string ColumnSize => _loc.GetString("ColumnSize");
+        public string CalculateSize => _loc.GetString("CalculateSize");
         public string ItemCountSuffix => _loc.GetString("ItemCountSuffix");
 
         public string PinnedShortcutsTitle => _loc.GetString("PinnedShortcuts");
@@ -82,6 +84,7 @@ namespace FastFluentFilesFolders.ViewModels
         public string CmdOpen => _loc.GetString("CmdOpen");
         public string CmdOpenWith => _loc.GetString("CmdOpenWith");
         public string CmdCopyPath => _loc.GetString("CmdCopyPath");
+        public string GoHome => _loc.GetString("GoHome");
         public string CmdProperties => _loc.GetString("CmdProperties");
         public string NewTextDocument => _loc.GetString("NewTextDocument");
         public string NewShortcut => _loc.GetString("NewShortcut");

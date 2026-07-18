@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI;
 //using Isg.Collections;
 using FastFluentFilesFolders.Services;
@@ -27,6 +28,10 @@ namespace FastFluentFilesFolders.ViewModels
 		private bool _isLazyLoad;
 		private bool _hasBasicInfo;
 
+		// 限制“缓存未命中”时的图标解码并发，防止阻塞式 Shell 调用耗尽线程池而卡顿
+		private static readonly System.Threading.SemaphoreSlim _iconLoadGate =
+			new(Math.Max(2, Environment.ProcessorCount / 2), Math.Max(2, Environment.ProcessorCount / 2));
+
 		// 基础属性
 		[ObservableProperty] private bool _isPlaceholder = false;
 		[ObservableProperty] private bool _isSpecialFolder = false;
@@ -35,7 +40,23 @@ namespace FastFluentFilesFolders.ViewModels
 		[ObservableProperty] private string _fullPath = string.Empty;
 		[ObservableProperty] private bool _isDirectory = true;
 		[ObservableProperty] private string _extension = string.Empty;
-		[ObservableProperty] private ImageSource? _icon;
+		// 图标按需加载：仅当虚拟化列表/树将该行实体化并读取 Icon 时才触发加载，
+		// 避免一次性为整个文件夹的所有项加载图标导致卡顿
+		private ImageSource? _icon;
+		private bool _iconRequested;
+		public ImageSource? Icon
+		{
+			get
+			{
+				if (!_iconRequested && !IsPlaceholder && IconProvider != null && _uiDispatcherQueue != null)
+				{
+					_iconRequested = true;
+					_uiDispatcherQueue.TryEnqueue(() => _ = LoadIconAsync(FullPath, IsDirectory));
+				}
+				return _icon;
+			}
+			set => SetProperty(ref _icon, value);
+		}
 		[ObservableProperty] private MainIconProvider _iconProvider;
 		[ObservableProperty] private long _exactSize = 0;
 		[ObservableProperty] private string _visualSize = "0B";
@@ -46,6 +67,7 @@ namespace FastFluentFilesFolders.ViewModels
 		[ObservableProperty] private bool _isSelected = false;
 		[ObservableProperty] private bool _isRenaming = false;
 		[ObservableProperty] private bool _isCutPending = false;
+		[ObservableProperty] private bool _isSizeCalculated = false;
 
 		// 压缩包预览相关：当节点位于压缩包内部时为 true
 		[ObservableProperty] private bool _isArchiveEntry = false;
@@ -69,6 +91,23 @@ namespace FastFluentFilesFolders.ViewModels
 			IsRenaming ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 		public Microsoft.UI.Xaml.Visibility IsNotRenamingVisibility =>
 			IsRenaming ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+
+		// 多语言（供 DataTemplate 内按钮等直接绑定使用）
+		public MultiLanguageStringsViewModel? ML => App.ML;
+
+		// 文件夹显示“计算大小”按钮；文件或已计算完成的文件夹显示大小文本
+		public Microsoft.UI.Xaml.Visibility CalculateSizeButtonVisibility =>
+			(!IsPlaceholder && IsDirectory && !IsSizeCalculated)
+				? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+		public Microsoft.UI.Xaml.Visibility SizeTextVisibility =>
+			(!IsPlaceholder && (!IsDirectory || IsSizeCalculated))
+				? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+		partial void OnIsSizeCalculatedChanged(bool value)
+		{
+			OnPropertyChanged(nameof(CalculateSizeButtonVisibility));
+			OnPropertyChanged(nameof(SizeTextVisibility));
+		}
 
 		public double CutOpacity => IsCutPending ? 0.4 : 1.0;
 
@@ -317,6 +356,7 @@ namespace FastFluentFilesFolders.ViewModels
 			try
 			{
 				if (IconProvider == null) return;
+				_iconRequested = true;
 
 				// 快速路径：命中缓存直接赋值，省去线程切换与重复解码
 				if (IconProvider.TryGetCachedIcon(fullPath, isDirectory, out var cached) && cached != null)
@@ -329,11 +369,22 @@ namespace FastFluentFilesFolders.ViewModels
 				}
 
 				ImageSource? icon = null;
-				await Task.Run( async () =>
+				// 慢速路径（缓存未命中）：SHGetFileInfo/快捷方式解析等是阻塞式 Shell 调用，
+				// 大量并发会耗尽线程池、拖慢导航与其它后台任务，导致界面卡顿。
+				// 用共享信号量限制真正的解码并发数。
+				await _iconLoadGate.WaitAsync();
+				try
 				{
-					var task = IconProvider.GetIconAsync(fullPath, isDirectory, _uiDispatcherQueue, 32);
-					if (task != null) icon = await task;
-				});
+					await Task.Run( async () =>
+					{
+						var task = IconProvider.GetIconAsync(fullPath, isDirectory, _uiDispatcherQueue, 32);
+						if (task != null) icon = await task;
+					});
+				}
+				finally
+				{
+					_iconLoadGate.Release();
+				}
 				if (icon != null)
 				{
 					_uiDispatcherQueue.TryEnqueue(() => Icon = icon);
@@ -357,6 +408,44 @@ namespace FastFluentFilesFolders.ViewModels
 				len /= 1024;
 			}
 			return $"{len:0.##} {sizes[order]}";
+		}
+
+		// 递归计算文件夹总大小（以 Byte 为单位）
+		public long ViewDirSize(string fullPath)
+		{
+			long total = 0;
+			try
+			{
+				foreach (var file in SafeGetFiles(fullPath))
+				{
+					try { total += new FileInfo(file).Length; }
+					catch (Exception ex) { Debug.WriteLine($"[ViewDirSize] file error {file}: {ex.Message}"); }
+				}
+				foreach (var subDir in SafeGetDirs(fullPath))
+				{
+					total += ViewDirSize(subDir);
+				}
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine($"[ViewDirSize] {fullPath}: {ex.Message}");
+			}
+			return total;
+		}
+
+		// 点击“计算大小”按钮：后台计算文件夹大小并格式化显示到表格
+		[RelayCommand]
+		private async Task CalculateSizeAsync()
+		{
+			if (IsPlaceholder || !IsDirectory) return;
+			var myPath = FullPath;
+			long size = await Task.Run(() => ViewDirSize(myPath));
+			await _uiDispatcherQueue.EnqueueAsync(() =>
+			{
+				ExactSize = size;
+				VisualSize = FormatFileSize(size);
+				IsSizeCalculated = true;
+			});
 		}
 
 		// 安全枚举方法（已有）
@@ -514,8 +603,6 @@ namespace FastFluentFilesFolders.ViewModels
 				var actualCount = Children.Count(c => !c.IsPlaceholder);
 				ChildrenCountText = actualCount > 0 ? $"[{actualCount}]" : "[?]";
 			});
-
-			_ = LoadIconsBatchedAsync(allNodes);
 		}
 
 		private async Task ReloadArchiveChildrenAsync()
@@ -561,34 +648,8 @@ namespace FastFluentFilesFolders.ViewModels
 				var actualCount = Children.Count(c => !c.IsPlaceholder);
 				ChildrenCountText = actualCount > 0 ? $"[{actualCount}]" : "[?]";
 			});
-
-			_ = LoadIconsBatchedAsync(allNodes);
 		}
 
-
-		private async Task LoadIconsBatchedAsync(List<FileSystemNodeViewModel> nodes)
-		{
-			int maxConcurrency = App.SharedViewModel?.AppConfigs?.IconParallelLoadingCount ?? 30;
-			if (maxConcurrency <= 0) maxConcurrency = 30;
-			var semaphore = new System.Threading.SemaphoreSlim(maxConcurrency, maxConcurrency);
-
-			await Task.Run(async () =>
-			{
-				var tasks = nodes.Select(async node =>
-				{
-					await semaphore.WaitAsync();
-					try
-					{
-						await node.LoadIconAsync(node.FullPath, node.IsDirectory);
-					}
-					finally
-					{
-						semaphore.Release();
-					}
-				});
-				await Task.WhenAll(tasks);
-			});
-		}
 
 		// 启动异步统计子项数量（用于显示括号）
 		private async Task StartAsyncCount()

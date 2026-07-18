@@ -649,10 +649,18 @@ namespace FastFluentFilesFolders.Views
 
         private void OnFileGridKeyDown(object sender, KeyRoutedEventArgs e)
         {
+            var isAltDown = ((int)Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Menu) & 1) != 0;
+
+            if (isAltDown && e.Key == VirtualKey.Enter)
+            {
+                e.Handled = true;
+                OnPropertiesClick(sender, e);
+                return;
+            }
+
             if (e.Handled) return;
 
             var isCtrlDown = ((int)Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control) & 1) != 0;
-            var isAltDown = ((int)Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Menu) & 1) != 0;
 
             if (isCtrlDown && !isAltDown)
             {
@@ -675,11 +683,6 @@ namespace FastFluentFilesFolders.Views
                         _ = PermanentDeleteWithConfirmAsync();
                         break;
                 }
-            }
-            else if (isAltDown && !isCtrlDown && e.Key == VirtualKey.Enter)
-            {
-                e.Handled = true;
-                OnPropertiesClick(sender, e);
             }
             else if (!isCtrlDown && !isAltDown && e.Key == VirtualKey.Delete)
             {

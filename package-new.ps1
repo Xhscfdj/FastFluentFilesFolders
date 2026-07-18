@@ -1,13 +1,13 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    LRS MSIX packaging script - build 3 platforms, create .msix, sign, bundle
+    FastFluentFilesFolders MSIX packaging script - build 3 platforms, create .msix, sign, bundle
 .PARAMETER Version
     版本号（格式 x.y.z.w），不指定则从 Package.appxmanifest 读取并更新
 .PARAMETER Configuration
     编译配置，默认 Release
 .PARAMETER OutputDir
-    输出目录，默认脚本所在目录下的 LRS\AppPackages
+    输出目录，默认脚本所在目录下的 FastFluentFilesFolders\AppPackages
 .PARAMETER CertificatePath
     用于签名的 .pfx 证书文件路径（可选）
 .PARAMETER CertificatePassword
@@ -16,14 +16,14 @@
 param(
     [string]$Version,
     [string]$Configuration = "Release",
-    [string]$OutputDir = "$PSScriptRoot\LRS\AppPackages",
+    [string]$OutputDir = "$PSScriptRoot\FastFluentFilesFolders\AppPackages",
     [string]$CertificatePath,
     [string]$CertificatePassword
 )
 
 $ErrorActionPreference = "Stop"
-$ProjectDir = "$PSScriptRoot\LRS"
-$Csproj     = "$ProjectDir\LRS.csproj"
+$ProjectDir = "$PSScriptRoot\FastFluentFilesFolders"
+$Csproj     = "$ProjectDir\FastFluentFilesFolders.csproj"
 $Manifest   = "$ProjectDir\Package.appxmanifest"
 
 # ---- Read version from Package.appxmanifest if not specified ----
@@ -36,10 +36,10 @@ if (-not $Version) {
     $appx.Package.Identity.Version = $Version
     $appx.Save($Manifest)
 }
-$VersionDir = "LRS_$($Version)_Test"
-$BundleName = "LRS_$($Version)_x86_x64_arm64.msixbundle"
+$VersionDir = "FastFluentFilesFolders_$($Version)_Test"
+$BundleName = "FastFluentFilesFolders_$($Version)_x86_x64_arm64.msixbundle"
 
-Write-Host "== LRS Packaging Script ==" -ForegroundColor Cyan
+Write-Host "== FastFluentFilesFolders Packaging Script ==" -ForegroundColor Cyan
 Write-Host "Version: $Version | Config: $Configuration | Output: $OutputDir\$VersionDir" -ForegroundColor Gray
 
 # ---- Check SDK ----
@@ -124,7 +124,7 @@ Write-Host "`n[2/4] Creating .msix packages..." -ForegroundColor Yellow
 $MsixFiles = @()
 foreach ($p in $Platforms) {
     $bin  = "$ProjectDir\bin\$($p.Name)\$Configuration\net8.0-windows10.0.19041.0\$($p.RID)"
-    $msix = "$bin\LRS_$($Version)_$($p.Name).msix"
+    $msix = "$bin\FastFluentFilesFolders_$($Version)_$($p.Name).msix"
     Remove-Item -Path "$bin\*.msix" -Force -ErrorAction SilentlyContinue
 
     if (-not (Test-Path "$bin\AppxManifest.xml")) { throw "AppxManifest.xml not found in: $bin" }

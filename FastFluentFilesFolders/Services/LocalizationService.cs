@@ -22,6 +22,8 @@ namespace FastFluentFilesFolders.Services
 
         public string GetString(string key)
         {
+            if (CurrentLanguage == "fumo")
+                return "fumo";
             return _strings.TryGetValue(key, out var value) ? value : key;
         }
 
@@ -36,6 +38,12 @@ namespace FastFluentFilesFolders.Services
 
         private void LoadStrings()
         {
+            if (CurrentLanguage == "fumo")
+            {
+                _strings = new Dictionary<string, string>();
+                return;
+            }
+
             var fileName = CurrentLanguage == "en" ? "en.json" : "zh-Hans.json";
             var filePath = Path.Combine(StringsDir, fileName);
 

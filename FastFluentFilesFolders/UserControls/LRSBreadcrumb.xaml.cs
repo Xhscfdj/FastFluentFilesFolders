@@ -50,6 +50,10 @@ namespace FastFluentFilesFolders.UserControls
             DependencyProperty.Register(nameof(GoUpCommand), typeof(ICommand), typeof(LRSBreadcrumb),
                 new PropertyMetadata(null));
 
+        public static readonly DependencyProperty HomePathProperty =
+            DependencyProperty.Register(nameof(HomePath), typeof(string), typeof(LRSBreadcrumb),
+                new PropertyMetadata(string.Empty));
+
         public static readonly DependencyProperty CanGoBackProperty =
             DependencyProperty.Register(nameof(CanGoBack), typeof(bool), typeof(LRSBreadcrumb),
                 new PropertyMetadata(false));
@@ -93,6 +97,12 @@ namespace FastFluentFilesFolders.UserControls
         {
             get => (ICommand)GetValue(GoUpCommandProperty);
             set => SetValue(GoUpCommandProperty, value);
+        }
+
+        public string HomePath
+        {
+            get => (string)GetValue(HomePathProperty);
+            set => SetValue(HomePathProperty, value);
         }
 
         public bool CanGoBack

@@ -148,13 +148,12 @@ namespace FastFluentFilesFolders.Extensions.Extensions
                     }
                 });
 
+                await NotifyItemCreatedAsync(outputPath, false);
+
                 await ShowMessageAsync(
                     _ctx!.GetString("ArchivePlugin.Success"),
                     string.Format(_ctx.GetString("ArchivePlugin.CompressSuccessFmt"),
                         Path.GetFileName(outputPath)));
-
-                _ = _ctx.UIDispatcherQueue.EnqueueAsync(() =>
-                    App.SharedViewModel.AddItemToCurrentView(outputPath, false));
             }
             catch (Exception ex)
             {
@@ -187,12 +186,11 @@ namespace FastFluentFilesFolders.Extensions.Extensions
                     }
                 });
 
+                await NotifyItemCreatedAsync(destDir, true);
+
                 await ShowMessageAsync(
                     _ctx!.GetString("ArchivePlugin.Success"),
                     string.Format(_ctx.GetString("ArchivePlugin.ExtractSuccessFmt"), destDir));
-
-                _ = _ctx.UIDispatcherQueue.EnqueueAsync(async () =>
-                    await App.SharedViewModel.RefreshCurrentFolderAsync());
             }
             catch (Exception ex)
             {
@@ -241,17 +239,49 @@ namespace FastFluentFilesFolders.Extensions.Extensions
                     }
                 });
 
+                await NotifyItemCreatedAsync(destDir, true);
+
                 await ShowMessageAsync(
                     _ctx!.GetString("ArchivePlugin.Success"),
                     string.Format(_ctx.GetString("ArchivePlugin.ExtractSuccessFmt"), destDir));
-
-                _ = _ctx.UIDispatcherQueue.EnqueueAsync(async () =>
-                    await App.SharedViewModel.RefreshCurrentFolderAsync());
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[ArchivePlugin] Extract failed: {ex.Message}");
                 await ShowMessageAsync(_ctx!.GetString("ArchivePlugin.Failed"), ex.Message);
+            }
+        }
+
+        private async Task NotifyItemCreatedAsync(string createdPath, bool isDirectory)
+        {
+            try
+            {
+                var vm = App.SharedViewModel;
+                var parentDir = Path.GetDirectoryName(createdPath);
+                if (string.IsNullOrEmpty(parentDir)) return;
+
+                var currentDir = vm.SelectedFolder?.FullPath ?? vm.CurrentBreadcrumbPath;
+                if (!string.IsNullOrEmpty(currentDir) &&
+                    string.Equals(
+                        Path.TrimEndingDirectorySeparator(parentDir),
+                        Path.TrimEndingDirectorySeparator(currentDir),
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    await _ctx!.UIDispatcherQueue.EnqueueAsync(() =>
+                    {
+                        vm.AddItemToCurrentView(createdPath, isDirectory);
+                        vm.RequestBreadcrumbRefresh();
+                    });
+                    return;
+                }
+
+                var parentNode = vm.FindNodeByPath(parentDir);
+                if (parentNode != null)
+                    await parentNode.ReloadChildrenAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ArchivePlugin] View update failed: {ex.Message}");
             }
         }
 
@@ -274,11 +304,12 @@ namespace FastFluentFilesFolders.Extensions.Extensions
             };
 
             using var process = Process.Start(psi)!;
+            var stdOutTask = process.StandardOutput.ReadToEndAsync();
+            var stdErrTask = process.StandardError.ReadToEndAsync();
             process.WaitForExit();
             if (process.ExitCode != 0)
             {
-                var err = process.StandardError.ReadToEnd();
-                throw new InvalidOperationException($"7z compress failed: {err}");
+                throw new InvalidOperationException($"7z compress failed: {stdErrTask.Result}");
             }
         }
 
@@ -298,11 +329,12 @@ namespace FastFluentFilesFolders.Extensions.Extensions
             };
 
             using var process = Process.Start(psi)!;
+            var stdOutTask = process.StandardOutput.ReadToEndAsync();
+            var stdErrTask = process.StandardError.ReadToEndAsync();
             process.WaitForExit();
             if (process.ExitCode != 0)
             {
-                var err = process.StandardError.ReadToEnd();
-                throw new InvalidOperationException($"7z extract failed: {err}");
+                throw new InvalidOperationException($"7z extract failed: {stdErrTask.Result}");
             }
         }
 
@@ -402,6 +434,8 @@ namespace FastFluentFilesFolders.Extensions.Extensions
                         RedirectStandardError = true
                     };
                     using var process = Process.Start(psi)!;
+                    var stdOutTask = process.StandardOutput.ReadToEndAsync();
+                    var stdErrTask = process.StandardError.ReadToEndAsync();
                     process.WaitForExit();
                     if (process.ExitCode != 0) return null;
                 }
@@ -459,6 +493,7 @@ namespace FastFluentFilesFolders.Extensions.Extensions
                     StandardOutputEncoding = System.Text.Encoding.UTF8
                 };
                 using var process = Process.Start(psi)!;
+                var stdErrTask = process.StandardError.ReadToEndAsync();
                 var output = process.StandardOutput.ReadToEnd();
                 process.WaitForExit();
 

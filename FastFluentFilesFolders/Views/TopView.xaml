@@ -23,7 +23,8 @@
 								GoForwardCommand="{Binding GoForwardCommand}"
 								GoUpCommand="{Binding GoUpCommand}"
 								CanGoBack="{Binding CanGoBack}"
-								CanGoForward="{Binding CanGoForward}">
+								CanGoForward="{Binding CanGoForward}"
+								HomePath="{Binding AppConfigs.HomePageFullPath}">
 		</LRSCtrls:LRSBreadcrumb>
 	</Grid>
 </Page>
