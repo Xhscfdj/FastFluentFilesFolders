@@ -8,7 +8,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:ctrls="using:Microsoft.UI.Xaml.Controls"
-    xmlns:comCtrls="using:CommunityToolkit.WinUI.Controls"
+    xmlns:ccl="using:CommunityToolkit.WinUI.Controls"
     xmlns:vm="using:FastFluentFilesFolders.ViewModels"
     mc:Ignorable="d"
     NavigationCacheMode="Required"
@@ -21,76 +21,76 @@
 		</Grid.RowDefinitions>
 		<ScrollViewer>
 			<StackPanel Padding="24" Spacing="14" HorizontalAlignment="Stretch" x:Name="SettingsStack">
-				<TextBlock Text="{Binding ML.SettingsTitle}" FontSize="22" FontWeight="Bold" />
+				<TextBlock Text="{Binding ML.SettingsTitle}"  Style="{StaticResource TitleTextBlockStyle}"/>
 				<!--General-->
-				<TextBlock Text="{Binding ML.GeneralSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
-				<comCtrls:SettingsCard Header="{Binding ML.HomePagePath}">
-					<comCtrls:SettingsCard.HeaderIcon>
+				<TextBlock Text="{Binding ML.GeneralSection}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,12,0,0" />
+				<ccl:SettingsCard Header="{Binding ML.HomePagePath}">
+					<ccl:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE80F;" />
-					</comCtrls:SettingsCard.HeaderIcon>
+					</ccl:SettingsCard.HeaderIcon>
 					<TextBox Text="{Binding AppConfigs.HomePageFullPath, Mode=TwoWay}" />
-				</comCtrls:SettingsCard>
+				</ccl:SettingsCard>
 
-				<comCtrls:SettingsCard Header="{Binding ML.LanguageLabel}">
-					<comCtrls:SettingsCard.HeaderIcon>
+				<ccl:SettingsCard Header="{Binding ML.LanguageLabel}">
+					<ccl:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE8B1;" />
-					</comCtrls:SettingsCard.HeaderIcon>
+					</ccl:SettingsCard.HeaderIcon>
 					<ComboBox ItemsSource="{Binding LanguageOptions}"
 							  SelectedItem="{Binding SelectedLanguage, Mode=TwoWay}"
 							  DisplayMemberPath="DisplayName" />
-				</comCtrls:SettingsCard>
+				</ccl:SettingsCard>
 
-				<comCtrls:SettingsExpander Header="{Binding ML.DefaultSortOrder}">
-					<comCtrls:SettingsExpander.HeaderIcon>
+				<ccl:SettingsExpander Header="{Binding ML.DefaultSortOrder}">
+					<ccl:SettingsExpander.HeaderIcon>
 						<FontIcon Glyph="&#xE8CB;" />
-					</comCtrls:SettingsExpander.HeaderIcon>
-					<comCtrls:SettingsExpander.Items>
-						<comCtrls:SettingsCard Header="{Binding ML.SortBy}">
-							<comCtrls:SettingsCard.HeaderIcon>
+					</ccl:SettingsExpander.HeaderIcon>
+					<ccl:SettingsExpander.Items>
+						<ccl:SettingsCard Header="{Binding ML.SortBy}">
+							<ccl:SettingsCard.HeaderIcon>
 								<FontIcon Glyph="&#xE8CB;" />
-							</comCtrls:SettingsCard.HeaderIcon>
+							</ccl:SettingsCard.HeaderIcon>
 							<ComboBox SelectedItem="{Binding SelectedOrderModeItem, Mode=TwoWay}" ItemsSource="{Binding OrderModeItems}" DisplayMemberPath="Display"/>
-						</comCtrls:SettingsCard>
-					</comCtrls:SettingsExpander.Items>
-				</comCtrls:SettingsExpander>
+						</ccl:SettingsCard>
+					</ccl:SettingsExpander.Items>
+				</ccl:SettingsExpander>
 
 				<!--Appearance-->
-				<TextBlock Text="{Binding ML.AppearanceSection}" FontSize="16" FontWeight="SemiBold" Margin="0,8,0,0" />
-				<comCtrls:SettingsCard Header="{Binding ML.MiddleFilesHeight}">
-					<comCtrls:SettingsCard.HeaderIcon>
+				<TextBlock Text="{Binding ML.AppearanceSection}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+				<ccl:SettingsCard Header="{Binding ML.MiddleFilesHeight}">
+					<ccl:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE752;" />
-					</comCtrls:SettingsCard.HeaderIcon>
+					</ccl:SettingsCard.HeaderIcon>
 					<ctrls:NumberBox Value="{Binding AppConfigs.MiddleFilesHeight, Mode=TwoWay}"
 									 Minimum="20" Maximum="200"
 									 SpinButtonPlacementMode="Inline" />
-				</comCtrls:SettingsCard>
+				</ccl:SettingsCard>
 
-				<TextBlock Text="{Binding ML.AdvancedSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
-				<comCtrls:SettingsCard Header="{Binding ML.UseWin32Icon}">
-					<comCtrls:SettingsCard.HeaderIcon>
+				<TextBlock Text="{Binding ML.AdvancedSection}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,12,0,0" />
+				<ccl:SettingsCard Header="{Binding ML.UseWin32Icon}">
+					<ccl:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE770;"/>
-					</comCtrls:SettingsCard.HeaderIcon>
+					</ccl:SettingsCard.HeaderIcon>
 					<ToggleSwitch IsOn="{Binding AppConfigs.IfUsesWin32APIToGetIcon, Mode=TwoWay}" />
-				</comCtrls:SettingsCard>
+				</ccl:SettingsCard>
 
-				<TextBlock Text="{Binding ML.PerformanceSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" />
-				<comCtrls:SettingsCard Header="{Binding ML.IconParallelLoading}">
-					<comCtrls:SettingsCard.HeaderIcon>
+				<TextBlock Text="{Binding ML.PerformanceSection}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,12,0,0" />
+				<ccl:SettingsCard Header="{Binding ML.IconParallelLoading}">
+					<ccl:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE8B9;"/>
-					</comCtrls:SettingsCard.HeaderIcon>
+					</ccl:SettingsCard.HeaderIcon>
 					<ctrls:NumberBox Value="{Binding AppConfigs.IconParallelLoadingCount, Mode=TwoWay}"
 									 Minimum="1" Maximum="200"
 									 SpinButtonPlacementMode="Inline" />
-				</comCtrls:SettingsCard>
+				</ccl:SettingsCard>
 
-				<TextBlock Text="{Binding ML.DebugSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0"/>
+				<TextBlock Text="{Binding ML.DebugSection}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,12,0,0"/>
 
-				<comCtrls:SettingsExpander Header="{Binding ML.TimeGroupedFoldersHeader}">
-					<comCtrls:SettingsExpander.HeaderIcon>
+				<ccl:SettingsExpander Header="{Binding ML.TimeGroupedFoldersHeader}">
+					<ccl:SettingsExpander.HeaderIcon>
 						<FontIcon Glyph="&#xE8B7;" />
-					</comCtrls:SettingsExpander.HeaderIcon>
-					<comCtrls:SettingsExpander.Items>
-						<comCtrls:SettingsCard>
+					</ccl:SettingsExpander.HeaderIcon>
+					<ccl:SettingsExpander.Items>
+						<ccl:SettingsCard>
 							<ListView ItemsSource="{Binding TimeGroupedFolders}" Height="120"
 									  SelectionMode="None">
 								<ListView.ItemTemplate>
@@ -113,8 +113,8 @@
 									</DataTemplate>
 								</ListView.ItemTemplate>
 							</ListView>
-						</comCtrls:SettingsCard>
-						<comCtrls:SettingsCard>
+						</ccl:SettingsCard>
+						<ccl:SettingsCard>
 							<StackPanel Spacing="8" Orientation="Horizontal">
 								<TextBox Text="{Binding NewTimeGroupedFolderPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
 										 PlaceholderText="{Binding ML.TimeGroupedFolderPlaceholder}"
@@ -123,17 +123,17 @@
 										Content="{Binding ML.AddTimeGroupedFolder}"
 										Style="{StaticResource AccentButtonStyle}"/>
 							</StackPanel>
-						</comCtrls:SettingsCard>
-					</comCtrls:SettingsExpander.Items>
-				</comCtrls:SettingsExpander>
+						</ccl:SettingsCard>
+					</ccl:SettingsExpander.Items>
+				</ccl:SettingsExpander>
 
-				<TextBlock Text="{Binding ML.DebugSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0"/>
-				<comCtrls:SettingsCard Header="{Binding ML.UserConfigPath}">
-					<comCtrls:SettingsCard.HeaderIcon>
+				<TextBlock Text="{Binding ML.DebugSection}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,12,0,0"/>
+				<ccl:SettingsCard Header="{Binding ML.UserConfigPath}">
+					<ccl:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE756;" />
-					</comCtrls:SettingsCard.HeaderIcon>
+					</ccl:SettingsCard.HeaderIcon>
 					<TextBlock Text="{Binding ConfigFilePath}" />
-				</comCtrls:SettingsCard>
+				</ccl:SettingsCard>
 
 				<!-- Plugins Section -->
 				<StackPanel x:Name="PluginsSection" Visibility="Collapsed">
@@ -141,22 +141,22 @@
 					<StackPanel x:Name="PluginSettingsStack" Spacing="14" />
 				</StackPanel>
 
-				<TextBlock Text="{Binding ML.PluginManagement}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0"/>
-				<comCtrls:SettingsCard Header="{Binding ML.PluginImport}">
-					<comCtrls:SettingsCard.HeaderIcon>
+				<TextBlock Text="{Binding ML.PluginManagement}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,12,0,0"/>
+				<ccl:SettingsCard Header="{Binding ML.PluginImport}">
+					<ccl:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE8A7;" />
-					</comCtrls:SettingsCard.HeaderIcon>
+					</ccl:SettingsCard.HeaderIcon>
 					<Button x:Name="ImportPluginBtn" Click="OnImportPluginClick"
 							Style="{StaticResource AccentButtonStyle}"
 							Content="{Binding ML.PluginImportBtn}" />
-				</comCtrls:SettingsCard>
+				</ccl:SettingsCard>
 
-				<comCtrls:SettingsCard x:Name="InstalledPluginsCard"
+				<ccl:SettingsCard x:Name="InstalledPluginsCard"
 									   Header="{Binding ML.PluginInstalled}"
 									   Visibility="Collapsed">
-					<comCtrls:SettingsCard.HeaderIcon>
+					<ccl:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE943;" />
-					</comCtrls:SettingsCard.HeaderIcon>
+					</ccl:SettingsCard.HeaderIcon>
 					<ListView x:Name="InstalledPluginsList" Height="200"
 							  SelectionMode="None">
 						<ListView.ItemTemplate>
@@ -181,41 +181,41 @@
 							</DataTemplate>
 						</ListView.ItemTemplate>
 					</ListView>
-				</comCtrls:SettingsCard>
+				</ccl:SettingsCard>
 
-				<TextBlock Text="{Binding ML.AboutSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0"/>
-				<comCtrls:SettingsExpander>
-					<comCtrls:SettingsExpander.Header>
+				<TextBlock Text="{Binding ML.AboutSection}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,12,0,0"/>
+				<ccl:SettingsExpander>
+					<ccl:SettingsExpander.Header>
 						<StackPanel>
-							<TextBlock Text="LiveRootStorage" />
+							<TextBlock Text="FastFluentFilesFolders" />
 							<TextBlock Text="By Xhscfdj" Foreground="Gray" FontSize="14"/>
 						</StackPanel>
-					</comCtrls:SettingsExpander.Header>
-					<comCtrls:SettingsExpander.Content>
+					</ccl:SettingsExpander.Header>
+					<ccl:SettingsExpander.Content>
 						<TextBlock Text="1.0.0-beta" />
-					</comCtrls:SettingsExpander.Content>
-					<comCtrls:SettingsExpander.HeaderIcon>
+					</ccl:SettingsExpander.Content>
+					<ccl:SettingsExpander.HeaderIcon>
 						<FontIcon Glyph="&#xE946;" />
-					</comCtrls:SettingsExpander.HeaderIcon>
-					<comCtrls:SettingsExpander.Items>
-						<comCtrls:SettingsCard>
+					</ccl:SettingsExpander.HeaderIcon>
+					<ccl:SettingsExpander.Items>
+						<ccl:SettingsCard>
 							<HyperlinkButton NavigateUri="https://www.github.com/Xhscfdj/">
 								<StackPanel Orientation="Horizontal">
 									<TextBlock Text="{Binding ML.AuthorTip}" Margin="0,0,10,0" />
 									<TextBlock Text="Xhscfdj" />
 								</StackPanel>
 							</HyperlinkButton>
-						</comCtrls:SettingsCard>
-						<comCtrls:SettingsCard>
-							<HyperlinkButton NavigateUri="https://www.github.com/LiveRootStorage">
+						</ccl:SettingsCard>
+						<ccl:SettingsCard>
+							<HyperlinkButton NavigateUri="https://www.github.com/Xhscfdj/FastFluentFilesFolders">
 								<StackPanel Orientation="Horizontal">
 									<TextBlock Text="{Binding ML.RepositoryTip}" Margin="0,0,10,0" />
-									<TextBlock Text="LiveRootStorage" />
+									<TextBlock Text="FastFluentFilesFolders" />
 								</StackPanel>
 							</HyperlinkButton>
-						</comCtrls:SettingsCard>
-					</comCtrls:SettingsExpander.Items>
-				</comCtrls:SettingsExpander>
+						</ccl:SettingsCard>
+					</ccl:SettingsExpander.Items>
+				</ccl:SettingsExpander>
 			</StackPanel>
 		</ScrollViewer>
 		<Button x:Name="SaveButton" Click="SaveSettings" Margin="14,12,0,0"

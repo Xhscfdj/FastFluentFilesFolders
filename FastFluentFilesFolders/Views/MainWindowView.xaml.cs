@@ -1,8 +1,6 @@
 ﻿using FastFluentFilesFolders.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
-using System;
 using System.ComponentModel;
 using System.Diagnostics;
 
@@ -34,16 +32,17 @@ namespace FastFluentFilesFolders.Views
 
         private void OnNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
         {
+            if (args.IsSettingsSelected)
+            {
+                NavigateTo("settings");
+                return;
+            }
+
             var item = args.SelectedItemContainer ?? args.SelectedItem as NavigationViewItem;
             if (item?.Tag is string tag)
             {
                 NavigateTo(tag);
             }
-        }
-
-        private void OnSettingsNavTapped(object sender, TappedRoutedEventArgs e)
-        {
-            NavigateTo("settings");
         }
 
         private void NavigateTo(string pageTag)
@@ -77,6 +76,12 @@ namespace FastFluentFilesFolders.Views
 
         private void UpdateNavSelection(string pageTag)
         {
+            if (pageTag == "settings")
+            {
+                MainNav.SelectedItem = MainNav.SettingsItem;
+                return;
+            }
+
             foreach (var mi in MainNav.MenuItems)
             {
                 if (mi is NavigationViewItem navItem && navItem.Tag as string == pageTag)

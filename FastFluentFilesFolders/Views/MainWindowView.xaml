@@ -17,7 +17,7 @@
 
     <ctrls:NavigationView x:Name="MainNav" PaneDisplayMode="LeftCompact"
                           IsBackButtonVisible="Collapsed"
-                          IsSettingsVisible="False"
+                          IsSettingsVisible="True"
                           SelectionChanged="OnNavSelectionChanged">
         <ctrls:NavigationView.PaneHeader>
             <StackPanel Orientation="Horizontal" Spacing="4">
@@ -31,10 +31,6 @@
             <ctrls:NavigationViewItem Icon="Folder" Content="文件浏览" Tag="explorer"/>
             <ctrls:NavigationViewItem Icon="AllApps" Content="插件" Tag="plugins"/>
         </ctrls:NavigationView.MenuItems>
-
-        <ctrls:NavigationView.PaneFooter>
-            <ctrls:NavigationViewItem x:Name="SettingsNavItem" Icon="Setting" Content="设置" Tag="settings" Tapped="OnSettingsNavTapped"/>
-        </ctrls:NavigationView.PaneFooter>
 
         <Grid>
             <Grid.RowDefinitions>
