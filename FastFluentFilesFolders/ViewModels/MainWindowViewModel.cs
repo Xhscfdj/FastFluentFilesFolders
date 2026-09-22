@@ -1,8 +1,3 @@
-//using System;
-//using System.Collections.Generic;
-//using System.Linq;
-//using System.Text;
-//using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI;
@@ -10,12 +5,6 @@ using FastFluentFilesFolders.Helpers;
 using FastFluentFilesFolders.Models;
 using FastFluentFilesFolders.Services;
 using FastFluentFilesFolders.Views;
-//using Microsoft.UI.Xaml;
-//using Microsoft.UI.Xaml.Controls;
-//using Microsoft.UI.Xaml.Input;
-//using Microsoft.UI.Xaml.Media;
-//using Microsoft.UI.Text;
-//using Windows.System;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -61,36 +50,377 @@ namespace FastFluentFilesFolders.ViewModels
 			if (configs.IconParallelLoadingCount > 0)
 				IconLoadSemaphore = new(configs.IconParallelLoadingCount, configs.IconParallelLoadingCount);
 
-			foreach (var drive in DriveInfo.GetDrives())
+			// 侧栏根：此电脑(含全部磁盘) → 网络 → Linux(WSL) → 回收站 → 云盘
+			BuildSidebarRoots(configs, uiDispatcherQueue);
+			StartDriveWatcher();
+			// 关键：驱动器枚举/卷标读取绝不能在 UI 线程做——U 盘/坏盘上 IsReady/VolumeLabel
+			// 可能一直阻塞，导致窗口在拔盘前都出不来。
+			_ = InitializeDriveCacheAsync();
+
+			// 注意：此处不要立即选中“此电脑”。构造函数执行期间 App.SharedViewModel 尚未赋值，
+			// 会令“此电脑”子项（磁盘）枚举拿到空快照并被标记为已加载，之后一直显示为空。
+			// 首次选中改到 DeferredInitializeAsync（App.SharedViewModel 已就绪）后执行。
+		}
+
+		// ======================= 侧栏位置 =======================
+		private FileSystemNodeViewModel? _thisPcNode;
+		private readonly object _driveLock = new();
+		private readonly List<FileSystemNodeViewModel> _driveNodes = new();
+		private readonly HashSet<string> _knownDriveRoots = new(StringComparer.OrdinalIgnoreCase);
+		private Microsoft.UI.Dispatching.DispatcherQueueTimer? _driveTimer;
+
+		// 驱动器刷新：同一时刻只允许一个刷新任务（防止 U 盘卡住时每 2 秒堆积一个卡死线程）
+		private int _driveRefreshBusy;
+
+		// 已知“探测很慢/卡住”的盘：短时间内不再重复探测，直接用类型名回退显示
+		private readonly Dictionary<string, DateTime> _slowDriveProbeUtc = new(StringComparer.OrdinalIgnoreCase);
+		private static readonly TimeSpan DriveProbeTimeout = TimeSpan.FromSeconds(2);
+		private static readonly TimeSpan SlowDriveRetryInterval = TimeSpan.FromSeconds(30);
+
+		private sealed record DriveEntry(string Root, string DisplayName);
+
+		private void BuildSidebarRoots(Configs configs, Microsoft.UI.Dispatching.DispatcherQueue uiDispatcherQueue)
+		{
+			// 此电脑（所有磁盘的入口）
+			_thisPcNode = FileSystemNodeViewModel.CreateVirtualRoot(
+				FileSystemNodeViewModel.ThisPcClsidPath, ML.TreeThisPC, FileNodeKind.ThisPc, configs, uiDispatcherQueue);
+			_thisPcNode.Parent = null;
+
+			var roots = new List<FileSystemNodeViewModel> { _thisPcNode };
+
+			// 网络
+			roots.Add(FileSystemNodeViewModel.CreateVirtualRoot(
+				FileSystemNodeViewModel.NetworkClsidPath, ML.TreeNetwork, FileNodeKind.Network, configs, uiDispatcherQueue));
+
+			// Linux（WSL：\wsl$ / \wsl.localhost）
+			var wslRoot = Services.ShellLocations.PickWslRootPath();
+			roots.Add(FileSystemNodeViewModel.CreateVirtualRoot(
+				wslRoot, ML.TreeLinux, FileNodeKind.Wsl, configs, uiDispatcherQueue));
+
+			// 回收站（叶子节点：内容在表格中查看）
+			roots.Add(FileSystemNodeViewModel.CreateVirtualRoot(
+				FileSystemNodeViewModel.RecycleBinClsidPath, ML.TreeRecycleBin, FileNodeKind.RecycleBin,
+				configs, uiDispatcherQueue, keepPlaceholder: false));
+
+			// 云盘（自动检测常见云盘；一个都没有时整组隐藏）
+			var cloudRoots = Services.CloudDriveDetector.DetectCloudRoots();
+			if (cloudRoots.Count > 0)
 			{
-				if (drive.IsReady)
+				var cloudGroup = FileSystemNodeViewModel.CreateVirtualRoot(
+					FileSystemNodeViewModel.CloudGroupPath, ML.TreeCloudDrives, FileNodeKind.CloudGroup, configs, uiDispatcherQueue);
+				// 用检测到的首个云盘目录图标作为分组图标（如 OneDrive 云图标）
+				cloudGroup.IconSourcePath = Services.ShellIconHelper.BuildShellItemIconPath(cloudRoots[0].Path);
+				roots.Add(cloudGroup);
+			}
+
+			RootDirectories = new System.Collections.ObjectModel.ObservableCollection<FileSystemNodeViewModel>(roots);
+		}
+
+		/// <summary>
+		/// 刷新驱动器缓存。只能从后台线程调用：U 盘/坏盘上的 IsReady/VolumeLabel
+		/// 可能长时间阻塞，放在 UI 线程会导致窗口在拔盘前都无法显示。
+		/// </summary>
+		private void RefreshDriveCache()
+		{
+			// 保持既有驱动器节点实例不变（树/表格引用了它们），只做 增/删/改名 差异
+			var desired = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+			foreach (var entry in EnumerateDriveEntries(k => ML[k]))
+				desired[entry.Root] = entry.DisplayName;
+
+			lock (_driveLock)
+			{
+				// 移除已消失的盘
+				for (int i = _driveNodes.Count - 1; i >= 0; i--)
 				{
-					RootDirectories.Add(new FileSystemNodeViewModel(drive.RootDirectory.FullName, true, false, configs, uiDispatcherQueue, true));
+					if (!desired.ContainsKey(_driveNodes[i].FullPath))
+						_driveNodes.RemoveAt(i);
+				}
+
+				// 新增盘 + 卷标变化时更新显示名
+				foreach (var kv in desired)
+				{
+					var existing = _driveNodes.FirstOrDefault(n => string.Equals(n.FullPath, kv.Key, StringComparison.OrdinalIgnoreCase));
+					if (existing == null)
+					{
+						_driveNodes.Add(FileSystemNodeViewModel.CreateDriveNode(kv.Key, kv.Value, AppConfigs!, _uiDispatcherQueue));
+					}
+					else if (!string.Equals(existing.Name, kv.Value, StringComparison.Ordinal))
+					{
+						existing.Name = kv.Value;
+					}
+				}
+
+				_driveNodes.Sort((a, b) => string.Compare(a.FullPath, b.FullPath, StringComparison.OrdinalIgnoreCase));
+				_knownDriveRoots.Clear();
+				_knownDriveRoots.UnionWith(desired.Keys);
+			}
+		}
+
+		/// <summary>
+		/// 枚举驱动器。每个盘的 IsReady/VolumeLabel 探测单独限时（2 秒），
+		/// 超时或失败的盘用“类型名 (X:)”降级显示，避免一块坏盘拖死整个列表。
+		/// </summary>
+		private List<DriveEntry> EnumerateDriveEntries(Func<string, string> ml)
+		{
+			var entries = new List<DriveEntry>();
+			DriveInfo[] drives;
+			try
+			{
+				drives = DriveInfo.GetDrives();
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine($"[DriveWatcher] 枚举驱动器失败: {ex.Message}");
+				return entries;
+			}
+
+			var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			foreach (var drive in drives)
+			{
+				try
+				{
+					var root = drive.RootDirectory.FullName;
+					if (!seen.Add(root)) continue;
+
+					bool skipProbe;
+					lock (_driveLock)
+					{
+						skipProbe = _slowDriveProbeUtc.TryGetValue(root, out var at) &&
+						            DateTime.UtcNow - at < SlowDriveRetryInterval;
+					}
+
+					string? displayName = skipProbe ? null : ProbeDriveDisplayName(drive, ml, root);
+					if (displayName == null)
+					{
+						if (!skipProbe)
+						{
+							lock (_driveLock) _slowDriveProbeUtc[root] = DateTime.UtcNow;
+						}
+						displayName = BuildFallbackDriveName(drive, root, ml);
+					}
+					else
+					{
+						lock (_driveLock) _slowDriveProbeUtc.Remove(root);
+					}
+
+					entries.Add(new DriveEntry(root, displayName));
+				}
+				catch (Exception ex)
+				{
+					Debug.WriteLine($"[DriveWatcher] 读取驱动器信息失败: {ex.Message}");
+				}
+			}
+			return entries;
+		}
+
+		private string? ProbeDriveDisplayName(DriveInfo drive, Func<string, string> ml, string root)
+		{
+			string? displayName = null;
+			var probe = Task.Run(() =>
+			{
+				try
+				{
+					if (!drive.IsReady) return;
+					displayName = Services.ShellLocations.FormatDriveDisplayName(drive, ml);
+				}
+				catch (Exception ex)
+				{
+					Debug.WriteLine($"[DriveWatcher] 读取驱动器信息失败 {root}: {ex.Message}");
+				}
+			});
+
+			if (probe.Wait(DriveProbeTimeout))
+				return displayName;
+
+			Debug.WriteLine($"[DriveWatcher] 驱动器探测超时，降级显示: {root}");
+			return null;
+		}
+
+		private static string BuildFallbackDriveName(DriveInfo drive, string root, Func<string, string> ml)
+		{
+			string key;
+			try
+			{
+				key = drive.DriveType switch
+				{
+					DriveType.Fixed => "Drive.LocalDisk",
+					DriveType.Removable => "Drive.Removable",
+					DriveType.Network => "Drive.Network",
+					DriveType.CDRom => "Drive.CD",
+					DriveType.Ram => "Drive.Ram",
+					_ => "Drive.Unknown"
+				};
+			}
+			catch
+			{
+				key = "Drive.Unknown";
+			}
+
+			var letter = root.TrimEnd('\\', '/');
+			return $"{ml(key)} ({letter})";
+		}
+
+		private bool TryBeginDriveRefresh() => Interlocked.CompareExchange(ref _driveRefreshBusy, 1, 0) == 0;
+
+		private void EndDriveRefresh() => Interlocked.Exchange(ref _driveRefreshBusy, 0);
+
+		/// <summary>启动时的首次驱动器枚举：全程后台执行，完成后回 UI 线程补齐“此电脑”子项。</summary>
+		private async Task InitializeDriveCacheAsync()
+		{
+			if (_thisPcNode == null || _uiDispatcherQueue == null) return;
+			if (!TryBeginDriveRefresh()) return;
+
+			try
+			{
+				var added = await Task.Run(() =>
+				{
+					RefreshDriveCache();
+					lock (_driveLock) return _knownDriveRoots.ToList();
+				});
+
+				if (added.Count == 0) return;
+				await _uiDispatcherQueue.EnqueueAsync(() => ApplyDriveDiffOnUi(added, new List<string>()));
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine($"[DriveWatcher] 初始化驱动器失败: {ex.Message}");
+			}
+			finally
+			{
+				EndDriveRefresh();
+			}
+		}
+
+		/// <summary>供目录树节点取当前全部驱动器（同一批实例，避免刷新时反复重建）。</summary>
+		public IReadOnlyList<FileSystemNodeViewModel> DriveNodeSnapshot()
+		{
+			lock (_driveLock)
+				return _driveNodes.ToList();
+		}
+
+		public FileSystemNodeViewModel? GetDriveNodeByPath(string rootPath)
+		{
+			lock (_driveLock)
+				return _driveNodes.FirstOrDefault(n => string.Equals(n.FullPath, rootPath, StringComparison.OrdinalIgnoreCase));
+		}
+
+		/// <summary>U盘/光盘等插入、拔出时的简单轮询监听（每 2 秒对比一次盘符集合）。</summary>
+		private void StartDriveWatcher()
+		{
+			if (_driveTimer != null || _uiDispatcherQueue == null) return;
+			_driveTimer = _uiDispatcherQueue.CreateTimer();
+			_driveTimer.Interval = TimeSpan.FromSeconds(2);
+			_driveTimer.Tick += (_, _) => { _ = PollDrivesChangedAsync(); };
+			_driveTimer.Start();
+		}
+
+		private async Task PollDrivesChangedAsync()
+		{
+			// 单飞：若上一轮刷新仍卡在某块盘上，本轮直接跳过，避免每 2 秒堆积一个卡死线程
+			if (!TryBeginDriveRefresh()) return;
+
+			try
+			{
+				// IsReady/VolumeLabel 对不健康网络盘/U 盘可能阻塞，轮询放到后台线程
+				var previous = new HashSet<string>(_knownDriveRoots, StringComparer.OrdinalIgnoreCase);
+				var added = new List<string>();
+				var removed = new List<string>();
+				await Task.Run(() =>
+				{
+					RefreshDriveCache();
+					lock (_driveLock)
+					{
+						added.Clear();
+						removed.Clear();
+						added.AddRange(_knownDriveRoots.Except(previous));
+						removed.AddRange(previous.Except(_knownDriveRoots));
+					}
+				});
+
+				if (added.Count == 0 && removed.Count == 0) return;
+				if (_thisPcNode == null || _uiDispatcherQueue == null) return;
+
+				await _uiDispatcherQueue.EnqueueAsync(() => ApplyDriveDiffOnUi(added, removed));
+			}
+			finally
+			{
+				EndDriveRefresh();
+			}
+		}
+
+		private void ApplyDriveDiffOnUi(List<string> added, List<string> removed)
+		{
+			// 已展开过“此电脑”时同步树子节点
+			var driveNodes = DriveNodeSnapshot();
+			foreach (var d in driveNodes)
+				d.Parent = _thisPcNode;
+
+			if (_thisPcNode!.IsLoaded)
+			{
+				foreach (var n in driveNodes)
+				{
+					if (!_thisPcNode.Children.Contains(n))
+						_thisPcNode.Children.Add(n);
+				}
+				foreach (var r in removed)
+				{
+					var gone = _thisPcNode.Children.FirstOrDefault(c => string.Equals(c.FullPath, r, StringComparison.OrdinalIgnoreCase));
+					if (gone != null)
+						_thisPcNode.Children.Remove(gone);
 				}
 			}
 
-			if (RootDirectories.Count > 0)
-				SelectedFolder = RootDirectories[0];
+			// 当前正停留的盘被拔出时退回“此电脑”（含盘下任意深度的子路径/独立节点）
+			if (removed.Count > 0)
+			{
+				var sel = SelectedFolder;
+				while (sel != null && sel != _thisPcNode)
+				{
+					if (sel.NodeKind == FileNodeKind.Drive &&
+						removed.Any(r => string.Equals(r, sel.FullPath, StringComparison.OrdinalIgnoreCase)))
+					{
+						SelectedFolder = _thisPcNode;
+						break;
+					}
+					sel = sel.Parent;
+				}
+
+				if (SelectedFolder != null && SelectedFolder != _thisPcNode &&
+					removed.Any(r => SelectedFolder.FullPath.StartsWith(r, StringComparison.OrdinalIgnoreCase)))
+				{
+					SelectedFolder = _thisPcNode;
+				}
+			}
+
+			// 表格正在展示“此电脑”时刷新表格内容
+			if (ReferenceEquals(SelectedFolder, _thisPcNode))
+			{
+				_displayedFolderNode = null;
+				_ = UpdateCurrentFolderContentAsync(_thisPcNode, version: null);
+			}
 		}
 
 		public async Task DeferredInitializeAsync()
 		{
 			try
 			{
-				var pinnedPaths = await Task.Run(() => GetQuickAccessPinnedFolders());
+				// 所有磁盘存在性检查都放后台：U 盘/网络盘上 Directory.Exists 可能长时间阻塞，
+				// 放在 UI 线程会让启动界面卡在加载遮罩。
+				var pinnedPaths = await Task.Run(() =>
+					QuickAccessHelper.GetPinnedFolderPaths()
+						.Where(p => !string.IsNullOrEmpty(p) && Directory.Exists(p))
+						.ToList());
+				var startPath = await Task.Run(GetStartupPath);
+
 				await _uiDispatcherQueue.EnqueueAsync(() =>
 				{
 					foreach (var path in pinnedPaths)
-					{
-						if (!string.IsNullOrEmpty(path) && Directory.Exists(path))
-						{
-							PinnedShortcuts.Add(new FileSystemNodeViewModel(path, true, false, AppConfigs, _uiDispatcherQueue, true));
-						}
-					}
+						PinnedShortcuts.Add(new FileSystemNodeViewModel(path, true, false, AppConfigs, _uiDispatcherQueue, true));
 
-					var startPath = GetStartupPath();
-					if (!string.IsNullOrEmpty(startPath) && Directory.Exists(startPath))
+					if (!string.IsNullOrEmpty(startPath))
 						NavigateToPath(startPath);
+					else if (RootDirectories.Count > 0)
+						SelectedFolder = RootDirectories[0];
 				});
 			}
 			catch (Exception ex)
@@ -110,7 +440,7 @@ namespace FastFluentFilesFolders.ViewModels
 		{
 			if (!string.IsNullOrEmpty(AppConfigs.LastVisitedPath) && Directory.Exists(AppConfigs.LastVisitedPath))
 				return AppConfigs.LastVisitedPath;
-			if (!string.IsNullOrEmpty(AppConfigs.HomePageFullPath))
+			if (!string.IsNullOrEmpty(AppConfigs.HomePageFullPath) && Directory.Exists(AppConfigs.HomePageFullPath))
 				return AppConfigs.HomePageFullPath;
 			return string.Empty;
 		}
@@ -128,23 +458,86 @@ namespace FastFluentFilesFolders.ViewModels
 			}
 		}
 
+		/// <summary>把操作岛条目交给页面（FileOperationReporter 已在 MiddleFilesView 订阅）。</summary>
+		private void ReportOperationToIsland(FileOperationItem item)
+		{
+			_uiDispatcherQueue.TryEnqueue(() => FileOperationReporter.ReportOperation(item));
+		}
+
+		private FileOperationItem CreateReportedOperation(string text, string iconGlyph, int fileCount = 0)
+		{
+			var item = new FileOperationItem
+			{
+				Text = text,
+				IconGlyph = iconGlyph,
+				FileCount = fileCount,
+				Progress = 0,
+				Process = "0%",
+				RemainTime = "...",
+				SizeText = "0 B",
+				State = FileOperationState.InProgress
+			};
+			ReportOperationToIsland(item);
+			return item;
+		}
+
+		private void ReportClipboardFailure(string operationLabel)
+		{
+			var item = new FileOperationItem
+			{
+				Text = $"{operationLabel} {ML.FileOpFailed}",
+				FileCount = 0,
+				Progress = 0,
+				Process = ML.FileOpFailed,
+				RemainTime = "0",
+				SizeText = "0 B",
+				State = FileOperationState.Error,
+				IconGlyph = "\uE74D",
+				ErrorMessage = ML.FileOpClipboardFailed
+			};
+			ReportOperationToIsland(item);
+		}
+
 		[RelayCommand]
 		private async Task Copy(IReadOnlyList<FileSystemNodeViewModel>? items)
 		{
 			if (items == null || items.Count == 0) return;
-			ClearCutPending();
-			await _fileOperator.CopyToClipBoard(items.Select(i => i.FullPath));
+			// 压缩包内部条目、虚拟位置等没有真实可复制的磁盘路径，直接不处理
+			if (items.Any(i => !IsWritableItem(i))) return;
+
+			int added = await _fileOperator.CopyToClipBoard(items.Select(i => i.FullPath));
+			if (added == 0)
+			{
+				ReportClipboardFailure(ML.CmdCopy);
+				return;
+			}
+			await _uiDispatcherQueue.EnqueueAsync(ClearCutPending);
 		}
 
 		[RelayCommand]
 		private async Task Cut(IReadOnlyList<FileSystemNodeViewModel>? items)
 		{
 			if (items == null || items.Count == 0) return;
-			ClearCutPending();
-			_cutItems = items.ToList();
-			foreach (var item in _cutItems)
-				item.IsCutPending = true;
-			await _fileOperator.CopyToClipBoard(items.Select(i => i.FullPath), true);
+			// 搜索视图里的“剪切”来源目录不明确，禁用；虚拟位置/压缩包条目同样禁用。
+			if (IsSearchMode) return;
+			if (items.Any(i => !IsWritableItem(i))) return;
+
+			// 先尝试把新内容真正写入剪贴板，成功后才更新“待剪切”标记，
+			// 避免写入失败时界面出现半透明但剪贴板内容不是这些文件的状态。
+			int added = await _fileOperator.CopyToClipBoard(items.Select(i => i.FullPath), cut: true);
+			if (added == 0)
+			{
+				ReportClipboardFailure(ML.CmdCut);
+				return;
+			}
+
+			await _uiDispatcherQueue.EnqueueAsync(() =>
+			{
+				ClearCutPending();
+				_cutItems = items.ToList();
+				foreach (var item in _cutItems)
+					item.IsCutPending = true;
+			});
 		}
 
 		private List<FileSystemNodeViewModel> _cutItems = new();
@@ -156,26 +549,43 @@ namespace FastFluentFilesFolders.ViewModels
 			_cutItems.Clear();
 		}
 
+		/// <summary>仅清除“已真正移动成功”的剪切项（批量粘贴部分失败时保留失败项的待剪切标记）。</summary>
+		private void ClearCutPendingFor(FileSystemNodeViewModel item)
+		{
+			if (_cutItems.Remove(item))
+				item.IsCutPending = false;
+		}
+
 		[RelayCommand]
 		private async Task Paste(FileOperationItem? op)
 		{
+			FileOperationItem? pasteOp = null;
 			await _pasteLock.WaitAsync();
 			try
 			{
 				var targetOverride = _pasteTargetOverride;
 				_pasteTargetOverride = null;
+
+				// M4 防护：搜索视图目标不明确；回收站/此电脑/网络/压缩包内部等虚拟位置不可写入。
+				if (IsSearchMode) return;
+				var destFolderPath = targetOverride ?? SelectedFolder?.FullPath ?? CurrentBreadcrumbPath;
+				if (!IsWritableFolderPath(destFolderPath)) return;
+
 				var (paths, isCut) = await _fileOperator.PasteClipboardFiles();
 				if (paths == null || !paths.Any())
 				{
-					CompleteOperation(op, 0, 0);
+					// 空剪贴板/无有效内容：不再伪造一张“成功”卡。
+					if (op != null)
+						FailOperation(op, new InvalidOperationException(ML.FileOpClipboardEmpty));
 					return;
 				}
 
-				_uiDispatcherQueue.TryEnqueue(() => { if (op != null) op.IconGlyph = isCut ? "\uE8AB" : "\uE8C8"; });
-
 				var pathList = paths.ToList();
-				var destDir = targetOverride ?? SelectedFolder?.FullPath ?? CurrentBreadcrumbPath;
+				pasteOp = op ?? CreateReportedOperation(ML.CmdPaste, "\uE77F");
+				_uiDispatcherQueue.TryEnqueue(() => pasteOp.IconGlyph = isCut ? "\uE8AB" : "\uE8C8");
+
 				// 目标路径必须为绝对路径（支持地址栏输入 ../xxx 之类的相对路径后粘贴）
+				var destDir = targetOverride ?? SelectedFolder?.FullPath ?? CurrentBreadcrumbPath;
 				if (!string.IsNullOrEmpty(destDir))
 				{
 					if (SelectedFolder != null && !Path.IsPathRooted(destDir))
@@ -185,84 +595,125 @@ namespace FastFluentFilesFolders.ViewModels
 				}
 				if (string.IsNullOrEmpty(destDir) || !Directory.Exists(destDir))
 				{
-					FailOperation(op, new DirectoryNotFoundException($"目标文件夹不存在: {destDir}"));
+					FailOperation(pasteOp, new DirectoryNotFoundException($"目标文件夹不存在: {destDir}"));
 					return;
 				}
 
 				// 统计待粘贴项的文件总数与总大小，让操作岛显示真实的文件个数与大小
 				var (totalFiles, totalBytes) = await _fileOperator.GetTransferStatsAsync(pathList);
-				UpdateOperationProgress(op, 0, totalFiles, 0, totalBytes);
+				UpdateOperationProgress(pasteOp, 0, totalFiles, 0, totalBytes);
 
-				if (isCut && _cutItems.Count > 0)
+				// 剪切并粘贴回“全部来源都在同一目标目录”：本质是原地粘贴，不产生移动。
+				if (isCut && _cutItems.Count > 0 &&
+					_cutItems.All(i =>
+					{
+						var srcDir = Path.GetDirectoryName(i.FullPath) ?? "";
+						return string.Equals(srcDir, destDir, StringComparison.OrdinalIgnoreCase);
+					}))
 				{
-					var srcDir = Path.GetDirectoryName(_cutItems[0].FullPath) ?? "";
-					if (string.Equals(srcDir, destDir, StringComparison.OrdinalIgnoreCase))
-					{
-						await _uiDispatcherQueue.EnqueueAsync(() =>
-						{
-							foreach (var item in _cutItems)
-								item.IsCutPending = false;
-							_cutItems.Clear();
-						});
-						CompleteOperation(op, totalFiles, totalBytes);
-						return;
-					}
-
-					await _uiDispatcherQueue.EnqueueAsync(() =>
-					{
-						foreach (var item in _cutItems)
-						{
-							CurrentFolderContent.Remove(item);
-							SelectedFolder?.Children.Remove(item);
-						}
-						ClearCutPending();
-					});
+					await _uiDispatcherQueue.EnqueueAsync(() => ClearCutPending());
+					CompleteOperation(pasteOp, totalFiles, totalBytes);
+					return;
 				}
 
-				var newNodes = new List<(FileSystemNodeViewModel Node, string SourcePath)>();
-				foreach (var srcPath in pathList)
+				// 先规划每一项的目标路径并检测同名冲突（剪切才弹确认框；复制维持自动改名）。
+				var plans = BuildPastePlans(pathList, destDir, isCut);
+				var conflictPlans = plans.Where(p => p.Conflict).ToList();
+				if (isCut && conflictPlans.Count > 0)
 				{
-					var name = Path.GetFileName(srcPath);
-					if (string.IsNullOrEmpty(name))
-						name = Path.GetFileName(srcPath.TrimEnd('\\', '/'));
-					if (string.IsNullOrEmpty(name))
-					{
-						FailOperation(op, new ArgumentException($"无法确定要粘贴的项目的名称: {srcPath}"));
-						return;
-					}
-					var destPath = Path.Combine(destDir, name);
-					if (!isCut)
-						destPath = GenerateUniquePath(destPath);
-					if (isCut)
-						await _fileOperator.MoveAsync(srcPath, destPath);
-					else
-						await _fileOperator.CopyToAsync(srcPath, destPath, false,
-							p => UpdateOperationProgress(op, p.CompletedFiles, totalFiles, p.CompletedBytes, totalBytes));
-
-					bool isDir = Directory.Exists(destPath);
-					var node = new FileSystemNodeViewModel(destPath, isDir, false, AppConfigs, _uiDispatcherQueue, false);
-					_ = node.InitAsync(node.FullPath, isDir);
-					PrepareNodeForGroupedView(node);
-					newNodes.Add((node, srcPath));
+					var conflictNames = conflictPlans
+						.Select(p => p.Name)
+						.Distinct(StringComparer.CurrentCultureIgnoreCase)
+						.ToList();
+					var policy = await ResolveFileConflictsAsync(conflictNames);
+					ApplyConflictPolicy(plans, policy);
 				}
 
-				CompleteOperation(op, totalFiles, totalBytes);
+				var createdNodes = new List<FileSystemNodeViewModel>();
+				var movedSourcePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+				var errors = new List<string>();
+				int skipped = 0;
+
+				// 逐项执行。成功项才进 createdNodes/movedSourcePaths，
+				// 失败项记录错误并继续，避免“第一项失败导致整批半途而废”。
+				foreach (var plan in plans)
+				{
+					if (plan.Skip)
+					{
+						skipped++;
+						continue;
+					}
+
+					try
+					{
+						if (isCut)
+							await _fileOperator.MoveAsync(plan.SourcePath, plan.DestPath, plan.Overwrite,
+								p => UpdateOperationProgress(pasteOp, p.CompletedFiles, totalFiles, p.CompletedBytes, totalBytes));
+						else
+							await _fileOperator.CopyToAsync(plan.SourcePath, plan.DestPath, false,
+								p => UpdateOperationProgress(pasteOp, p.CompletedFiles, totalFiles, p.CompletedBytes, totalBytes));
+
+						bool isDir = Directory.Exists(plan.DestPath);
+						var node = new FileSystemNodeViewModel(plan.DestPath, isDir, false, AppConfigs, _uiDispatcherQueue, false);
+						_ = node.InitAsync(node.FullPath, isDir);
+						PrepareNodeForGroupedView(node);
+						createdNodes.Add(node);
+						if (isCut)
+							movedSourcePaths.Add(plan.SourcePath);
+					}
+					catch (Exception ex)
+					{
+						Debug.WriteLine($"[Paste] 单项失败: {plan.SourcePath}: {ex.Message}");
+						errors.Add(ex.Message);
+					}
+				}
+
+				if (skipped > 0)
+					Debug.WriteLine($"[Paste] 已按用户选择跳过 {skipped} 个同名项");
 
 				await _uiDispatcherQueue.EnqueueAsync(() =>
 				{
-					foreach (var (node, _) in newNodes)
+					// 1) 新文件加到“目标目录”而不是“当前正在看的目录”。
+					//    目标目录正好是当前展示目录 → 加到表格与树缓存；
+					//    否则只让目标目录缓存失效，回访时重新读盘。
+					ApplyPastedNodesToFolder(destDir, createdNodes);
+
+					// 2) 剪切：只有真正移动成功的项才从视图/源目录缓存移除，
+					//    失败的项保留（且仍带待剪切标记，可继续粘贴到别处）。
+					if (isCut)
 					{
-						CurrentFolderContent.Add(node);
-						SelectedFolder?.Children.Add(node);
+						var loadedFolderNodes = CollectLoadedDirectoryNodes();
+						foreach (var item in _cutItems.ToList())
+						{
+							if (movedSourcePaths.Contains(item.FullPath))
+							{
+								RemoveItemFromCurrentView(item);
+								RemoveNodeFromAllFolderCaches(item, loadedFolderNodes);
+								ClearCutPendingFor(item);
+							}
+						}
 					}
+
+					NotifyViewCountChanged();
 				});
 
-				BreadcrumbRefreshRequested?.Invoke();
+				if (errors.Count == 0)
+				{
+					CompleteOperation(pasteOp, totalFiles, totalBytes);
+					BreadcrumbRefreshRequested?.Invoke();
+				}
+				else
+				{
+					var summary = errors.Count == 1
+						? errors[0]
+						: $"{errors.Count} {ML.FileOpFailed}: {errors[0]}";
+					FailOperation(pasteOp, new IOException(summary));
+				}
 			}
 			catch (Exception ex)
 			{
 				Debug.WriteLine($"[Paste] 粘贴失败: {ex}");
-				FailOperation(op, ex);
+				FailOperation(pasteOp, ex);
 			}
 			finally
 			{
@@ -321,9 +772,12 @@ namespace FastFluentFilesFolders.ViewModels
 			});
 		}
 
-		private static string GenerateUniquePath(string destPath)
+		private static string GenerateUniquePath(string destPath, ISet<string>? reserved = null)
 		{
-			if (!File.Exists(destPath) && !Directory.Exists(destPath))
+			bool Taken(string p)
+				=> File.Exists(p) || Directory.Exists(p) || (reserved?.Contains(p) ?? false);
+
+			if (!Taken(destPath))
 				return destPath;
 
 			var dir = Path.GetDirectoryName(destPath) ?? "";
@@ -337,60 +791,348 @@ namespace FastFluentFilesFolders.ViewModels
 				newPath = Path.Combine(dir, $"{name} ({index}){ext}");
 				index++;
 			}
-			while (File.Exists(newPath) || Directory.Exists(newPath));
+			while (Taken(newPath));
 
 			return newPath;
 		}
 
-		[RelayCommand]
-		private async Task Delete(IReadOnlyList<FileSystemNodeViewModel>? items)
+		/// <summary>一次粘贴里单项的最终计划（目标路径、是否冲突、是否跳过、是否覆盖）。</summary>
+		private sealed class PastePlanItem
 		{
-			if (items == null || items.Count == 0) return;
-			foreach (var item in items)
-				await _fileOperator.DeleteToRecycleBinAsync(item.FullPath);
-			await _uiDispatcherQueue.EnqueueAsync(() =>
+			public required string SourcePath { get; init; }
+			public required string Name { get; init; }
+			public required string DestPath { get; set; }
+			public bool Conflict { get; set; }
+			public bool IntraBatchDuplicate { get; set; }
+			public bool Skip { get; set; }
+			public bool Overwrite { get; set; }
+		}
+
+		/// <summary>同名冲突询问入口：由视图弹 ContentDialog，返回用户选择（无视图时默认跳过）。</summary>
+		public event Func<IReadOnlyList<string>, Task<FileConflictResolution>>? ConflictResolutionRequested;
+
+		private async Task<FileConflictResolution> ResolveFileConflictsAsync(IReadOnlyList<string> names)
+		{
+			var handler = ConflictResolutionRequested;
+			if (handler == null)
+				return FileConflictResolution.Skip;
+			return await handler(names);
+		}
+
+		/// <summary>
+		/// 规划粘贴目标：复制沿用自动改名；剪切检测目标目录里的同名项与本批内部的重名。
+		/// </summary>
+		private static List<PastePlanItem> BuildPastePlans(IReadOnlyList<string> pathList, string destDir, bool isCut)
+		{
+			var plans = new List<PastePlanItem>(pathList.Count);
+			var claimed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+			foreach (var srcPath in pathList)
 			{
-				foreach (var item in items)
+				var name = Path.GetFileName(srcPath);
+				if (string.IsNullOrEmpty(name))
+					name = Path.GetFileName(srcPath.TrimEnd('\\', '/'));
+				if (string.IsNullOrEmpty(name))
+					throw new ArgumentException($"无法确定要粘贴的项目的名称: {srcPath}");
+
+				var baseDest = Path.Combine(destDir, name);
+				string destPath;
+				bool conflict = false;
+				bool intraBatch = false;
+
+				if (isCut)
 				{
-					if (IsSearchMode)
-						SearchResults.Remove(item);
-					else
-					{
-						CurrentFolderContent.Remove(item);
-						SelectedFolder?.Children.Remove(item);
-					}
+					destPath = baseDest;
+					bool diskConflict = File.Exists(destPath) || Directory.Exists(destPath);
+					intraBatch = !claimed.Add(destPath);
+					conflict = diskConflict || intraBatch;
 				}
-				if (IsSearchMode)
+				else
 				{
-					OnPropertyChanged(nameof(SearchResults));
-					OnPropertyChanged(nameof(DisplayedItemCount));
+					// 复制：不打扰用户，自动生成唯一名（同时避开本批内已经占用的名字）
+					destPath = GenerateUniquePath(baseDest, claimed);
+					claimed.Add(destPath);
 				}
-			});
+
+				plans.Add(new PastePlanItem
+				{
+					SourcePath = srcPath,
+					Name = name,
+					DestPath = destPath,
+					Conflict = conflict,
+					IntraBatchDuplicate = intraBatch
+				});
+			}
+
+			return plans;
+		}
+
+		/// <summary>
+		/// 应用用户对本次全部冲突项的选择：
+		/// Replace = 覆盖/合并；Skip = 跳过；KeepBoth = 自动改名。
+		/// 同一批内部重名（两个不同来源同名）强制走 KeepBoth，避免后一项覆盖前一项。
+		/// </summary>
+		private static void ApplyConflictPolicy(List<PastePlanItem> plans, FileConflictResolution policy)
+		{
+			var claimed = new HashSet<string>(plans.Select(p => p.DestPath), StringComparer.OrdinalIgnoreCase);
+
+			foreach (var plan in plans.Where(p => p.Conflict))
+			{
+				if (policy == FileConflictResolution.Skip)
+				{
+					plan.Skip = true;
+					continue;
+				}
+
+				if (policy == FileConflictResolution.KeepBoth || plan.IntraBatchDuplicate)
+				{
+					plan.DestPath = GenerateUniquePath(plan.DestPath, claimed);
+					claimed.Add(plan.DestPath);
+					plan.Overwrite = false;
+				}
+				else
+				{
+					plan.Overwrite = true;
+				}
+			}
+		}
+
+		// ======================= 视图/目录缓存一致性工具 =======================
+
+		private static bool PathEquals(string? a, string? b)
+		{
+			if (string.IsNullOrWhiteSpace(a) || string.IsNullOrWhiteSpace(b))
+				return false;
+			return string.Equals(
+				a.TrimEnd('\\', '/'), b.TrimEnd('\\', '/'),
+				StringComparison.OrdinalIgnoreCase);
+		}
+
+		/// <summary>
+		/// 从集合中移除指定路径的节点（优先按引用移除，并且会把所有同路径的残留项一起清掉，
+		/// 便于“替换/合并”后清掉旧节点，避免同一路径出现两行）。
+		/// </summary>
+		private static int RemoveNodeByFullPath(
+			ObservableCollection<FileSystemNodeViewModel>? collection,
+			FileSystemNodeViewModel? preferred,
+			string fullPath)
+		{
+			if (collection == null || collection.Count == 0) return 0;
+
+			int removed = 0;
+			if (preferred != null && collection.Remove(preferred))
+				removed++;
+
+			for (int i = collection.Count - 1; i >= 0; i--)
+			{
+				if (string.Equals(collection[i].FullPath, fullPath, StringComparison.OrdinalIgnoreCase))
+				{
+					collection.RemoveAt(i);
+					removed++;
+				}
+			}
+			return removed;
+		}
+
+		/// <summary>把“当前正在展示的表格/搜索结果/当前目录子项”里的节点按引用优先、路径兜底移除。</summary>
+		private void RemoveItemFromCurrentView(FileSystemNodeViewModel item)
+		{
+			if (item == null) return;
+			var path = item.FullPath;
+			if (IsSearchMode)
+				RemoveNodeByFullPath(SearchResults, item, path);
+			else
+				RemoveNodeByFullPath(CurrentFolderContent, item, path);
+			RemoveNodeByFullPath(SelectedFolder?.Children, item, path);
+		}
+
+		/// <summary>收集所有“已加载”的目录节点（含侧栏根、固定栏、各标签页与当前目录），UI 线程调用。</summary>
+		private List<FileSystemNodeViewModel> CollectLoadedDirectoryNodes()
+		{
+			var result = new List<FileSystemNodeViewModel>();
+			var seen = new HashSet<FileSystemNodeViewModel>();
+
+			void Visit(FileSystemNodeViewModel? node)
+			{
+				if (node == null || node.IsPlaceholder || !node.IsDirectory) return;
+				if (!seen.Add(node)) return;
+				if (node.IsLoaded)
+					result.Add(node);
+				foreach (var child in node.Children.ToArray())
+				{
+					if (child.IsDirectory)
+						Visit(child);
+				}
+			}
+
+			foreach (var root in RootDirectories) Visit(root);
+			foreach (var p in PinnedShortcuts) Visit(p);
+			foreach (var tab in Tabs) Visit(tab.FolderNode);
+			Visit(SelectedFolder);
+			return result;
+		}
+
+		/// <summary>
+		/// 把指定真实路径的节点从所有“已加载目录缓存”中按路径移除。
+		/// 这样即使该文件曾以不同实例被缓存在多个标签页/目录树分支里，
+		/// 回访时也不会出现幽灵行（无需整目录释放、不影响当前树展开状态）。
+		/// </summary>
+		private void RemoveNodeFromAllFolderCaches(FileSystemNodeViewModel item)
+			=> RemoveNodeFromAllFolderCaches(item, CollectLoadedDirectoryNodes());
+
+		private void RemoveNodeFromAllFolderCaches(FileSystemNodeViewModel item, IReadOnlyList<FileSystemNodeViewModel> loadedFolders)
+		{
+			if (item == null || item.IsPlaceholder) return;
+			var parentPath = Path.GetDirectoryName(item.FullPath);
+			if (string.IsNullOrEmpty(parentPath)) return;
+
+			foreach (var folder in loadedFolders)
+			{
+				if (!PathEquals(folder.FullPath, parentPath)) continue;
+				RemoveNodeByFullPath(folder.Children, folder.Children.Contains(item) ? item : null, item.FullPath);
+			}
+		}
+
+		/// <summary>
+		/// 目标目录不是当前展示目录时，把其缓存标记为“需重读磁盘”。
+		/// 只释放非当前节点，避免打断正在展示的目录树/表格。
+		/// </summary>
+		private void InvalidateFolderByPath(string folderPath)
+		{
+			if (string.IsNullOrWhiteSpace(folderPath) || IsVirtualRootToken(folderPath)) return;
+			var selected = SelectedFolder;
+			foreach (var node in CollectLoadedDirectoryNodes())
+			{
+				if (ReferenceEquals(node, selected)) continue;
+				if (PathEquals(node.FullPath, folderPath))
+					node.ReleaseChildren();
+			}
+		}
+
+		/// <summary>
+		/// 把粘贴产物放入目标目录：目标目录 == 当前展示目录时直接加表格与树；
+		/// 目标目录已作为其它标签页/树分支加载时直接更新其 Children；
+		/// 否则只使目标目录缓存失效（回访时读盘得到正确内容）。
+		/// 替换/合并时目标目录里可能已有同路径旧节点，必须先按路径移除再加新节点，否则会出现两行。
+		/// </summary>
+		private void ApplyPastedNodesToFolder(string destDir, List<FileSystemNodeViewModel> nodes)
+		{
+			if (nodes == null || nodes.Count == 0) return;
+
+			if (!IsSearchMode && SelectedFolder != null && PathEquals(SelectedFolder.FullPath, destDir))
+			{
+				foreach (var node in nodes)
+				{
+					// 先清掉旧节点（引用/路径都可能与新建节点不同实例）
+					RemoveNodeByFullPath(CurrentFolderContent, null, node.FullPath);
+					RemoveNodeByFullPath(SelectedFolder.Children, null, node.FullPath);
+
+					if (!CurrentFolderContent.Contains(node))
+						CurrentFolderContent.Add(node);
+					node.Parent = SelectedFolder;
+					if (!SelectedFolder.Children.Contains(node))
+						SelectedFolder.Children.Add(node);
+				}
+				return;
+			}
+
+			// 非当前但已加载的目标目录（例如另一标签页正打开、或目录树已展开）：
+			// 直接补进它的 Children，保持展开状态并让回访立即可见。
+			var loadedDest = CollectLoadedDirectoryNodes()
+				.FirstOrDefault(f => f.IsDirectory && PathEquals(f.FullPath, destDir));
+			if (loadedDest != null && loadedDest.IsLoaded)
+			{
+				foreach (var node in nodes)
+				{
+					RemoveNodeByFullPath(loadedDest.Children, null, node.FullPath);
+					node.Parent = loadedDest;
+					if (!loadedDest.Children.Contains(node))
+						loadedDest.Children.Add(node);
+				}
+				return;
+			}
+
+			InvalidateFolderByPath(destDir);
+		}
+
+		/// <summary>增删条目后刷新底部“共 N 项”计数（普通视图与搜索视图都生效）。</summary>
+		private void NotifyViewCountChanged()
+		{
+			if (IsSearchMode)
+			{
+				// 搜索视图的表格是对 SearchResults 的独立快照，改动后必须通知视图重建一次。
+				OnPropertyChanged(nameof(SearchResults));
+			}
+			OnPropertyChanged(nameof(DisplayedItemCount));
 		}
 
 		[RelayCommand]
+		private async Task Delete(IReadOnlyList<FileSystemNodeViewModel>? items)
+			=> await RunDeleteAsync(items, toRecycleBin: true);
+
+		[RelayCommand]
 		private async Task PermanentDelete(IReadOnlyList<FileSystemNodeViewModel>? items)
+			=> await RunDeleteAsync(items, toRecycleBin: false);
+
+		/// <summary>
+		/// 删除/彻底删除统一入口：先为每个待删项建 InProgress 操作岛卡，
+		/// 磁盘删除成功才移除 UI 行并置 Successful，失败保留行并显示具体错误。
+		/// </summary>
+		private async Task RunDeleteAsync(IReadOnlyList<FileSystemNodeViewModel>? items, bool toRecycleBin)
 		{
 			if (items == null || items.Count == 0) return;
-			foreach (var item in items)
-				await _fileOperator.DeleteAsync(item.FullPath);
+			var list = items.Where(i => !i.IsPlaceholder).ToList();
+			if (list.Count == 0) return;
+
+			// M4 防护：压缩包内部条目、驱动器根、虚拟位置没有可删除的真实路径。
+			if (list.Any(i => !IsWritableItem(i))) return;
+
+			var paths = list.Select(i => i.FullPath).ToList();
+			var opsByPath = new Dictionary<string, FileOperationItem>(StringComparer.OrdinalIgnoreCase);
+			foreach (var item in list)
+			{
+				var text = $"{(toRecycleBin ? ML.CmdDelete : ML.CmdPermanentDelete)} {item.Name}";
+				var op = CreateReportedOperation(text, "\uE74D", fileCount: 1);
+				opsByPath[item.FullPath] = op;
+			}
+
+			var results = await _fileOperator.DeleteManyAsync(paths, toRecycleBin);
+
 			await _uiDispatcherQueue.EnqueueAsync(() =>
 			{
-				foreach (var item in items)
+				var loadedFolderNodes = CollectLoadedDirectoryNodes();
+				for (int i = 0; i < list.Count; i++)
 				{
-					if (IsSearchMode)
-						SearchResults.Remove(item);
-					else
+					var item = list[i];
+					var result = i < results.Count ? results[i] : new FileOperationResult(item.FullPath, false, ML.FileOpFailed);
+					if (opsByPath.TryGetValue(item.FullPath, out var op))
 					{
-						CurrentFolderContent.Remove(item);
-						SelectedFolder?.Children.Remove(item);
+						if (result.Success)
+						{
+							op.Progress = 100;
+							op.Process = "100%";
+							op.FileCount = 1;
+							op.RemainTime = "0";
+							op.SizeText = "0 B / 0 B";
+							op.State = FileOperationState.Successful;
+
+							// 磁盘删除成功后才移除 UI 行，并同步清理所有已加载目录缓存中的旧节点，
+							// 避免回访该目录时出现“文件已删但还在列表”的幽灵项。
+							RemoveItemFromCurrentView(item);
+							RemoveNodeFromAllFolderCaches(item, loadedFolderNodes);
+						}
+						else
+						{
+							op.Progress = 0;
+							op.Process = ML.FileOpFailed;
+							op.RemainTime = "0";
+							op.ErrorMessage = result.ErrorMessage ?? ML.FileOpFailed;
+							op.State = FileOperationState.Error;
+						}
 					}
 				}
-				if (IsSearchMode)
-				{
-					OnPropertyChanged(nameof(SearchResults));
-					OnPropertyChanged(nameof(DisplayedItemCount));
-				}
+
+				NotifyViewCountChanged();
 			});
 		}
 
@@ -398,6 +1140,8 @@ namespace FastFluentFilesFolders.ViewModels
 		private async Task Rename(FileSystemNodeViewModel? item)
 		{
 			if (item == null) return;
+			// 压缩包内部条目/虚拟位置不可重命名
+			if (!IsWritableItem(item)) return;
 			CancelRename();
 			await _uiDispatcherQueue.EnqueueAsync(() =>
 			{
@@ -450,7 +1194,12 @@ namespace FastFluentFilesFolders.ViewModels
 			_uiDispatcherQueue.TryEnqueue(() =>
 			{
 				CurrentFolderContent.Add(node);
-				SelectedFolder?.Children.Add(node);
+				if (SelectedFolder != null)
+				{
+					node.Parent = SelectedFolder;
+					SelectedFolder.Children.Add(node);
+				}
+				NotifyViewCountChanged();
 			});
 		}
 
@@ -609,6 +1358,12 @@ namespace FastFluentFilesFolders.ViewModels
 
 		private async Task AddNewItemToViewAsync(string destDir, string defaultName, bool isDirectory)
 		{
+			// 回收站/此电脑/网络/压缩包内部等虚拟位置、以及搜索结果视图不允许新建
+			if (IsSearchMode || !IsWritableFolderPath(destDir))
+			{
+				Debug.WriteLine($"[NewItem] 目标不可写: {destDir}");
+				return;
+			}
 			var newPath = GenerateUniquePath(Path.Combine(destDir, defaultName));
 			if (isDirectory)
 				Directory.CreateDirectory(newPath);
@@ -620,7 +1375,12 @@ namespace FastFluentFilesFolders.ViewModels
 			await _uiDispatcherQueue.EnqueueAsync(() =>
 			{
 				CurrentFolderContent.Add(node);
-				SelectedFolder?.Children.Add(node);
+				if (SelectedFolder != null)
+				{
+					node.Parent = SelectedFolder;
+					SelectedFolder.Children.Add(node);
+				}
+				NotifyViewCountChanged();
 			});
 			_ = node.InitAsync(node.FullPath, isDirectory);
 		}
@@ -805,6 +1565,7 @@ namespace FastFluentFilesFolders.ViewModels
 				else
 				{
 					CurrentFolderContent.Clear();
+					NotifyViewCountChanged();
 				}
 			}
 			finally
@@ -838,9 +1599,11 @@ namespace FastFluentFilesFolders.ViewModels
 			return newNode;
 		}
 
-		private static string GetTabTitle(string path)
+		private string GetTabTitle(string path)
 		{
 			if (string.IsNullOrEmpty(path)) return string.Empty;
+			var sidebarName = GetSidebarDisplayName(path);
+			if (sidebarName != null) return sidebarName;
 			if (ArchiveHelper.IsArchiveVirtualPath(path, out var archiveFile, out var relative))
 				path = string.IsNullOrEmpty(relative) ? archiveFile : relative;
 			var name = Path.GetFileName(path.TrimEnd('\\'));
@@ -1003,6 +1766,258 @@ namespace FastFluentFilesFolders.ViewModels
 			get => _rootDirectories;
 			set => _rootDirectories = value;
 		}
+
+		/// <summary>是否为侧栏虚拟位置路径（CLSID 或云盘分组占位路径，不含真实盘符）。</summary>
+		public bool IsVirtualRootToken(string path)
+		{
+			if (string.IsNullOrEmpty(path)) return false;
+			if (path.StartsWith("::{", StringComparison.OrdinalIgnoreCase)) return true;
+			return string.Equals(path, FileSystemNodeViewModel.CloudGroupPath, StringComparison.OrdinalIgnoreCase);
+		}
+
+		// ======================= 可写位置判断（M4 防护） =======================
+
+		/// <summary>真实、可访问、非虚拟位置、非压缩包内部的目录才允许写入（粘贴/新建等）。</summary>
+		public bool IsWritableFolderPath(string? path)
+		{
+			if (string.IsNullOrWhiteSpace(path)) return false;
+			if (IsVirtualRootToken(path)) return false;
+			if (path.StartsWith("::{", StringComparison.OrdinalIgnoreCase)) return false;
+			if (ArchiveHelper.IsArchiveVirtualPath(path, out _, out _)) return false;
+			if (!Path.IsPathRooted(path)) return false;
+			return Directory.Exists(path);
+		}
+
+		private bool IsWritableFolderNode(FileSystemNodeViewModel? folder)
+		{
+			if (folder == null || folder.IsPlaceholder || folder.IsArchiveEntry) return false;
+
+			switch (folder.NodeKind)
+			{
+				case FileNodeKind.ThisPc:
+				case FileNodeKind.Network:
+				case FileNodeKind.Wsl:
+				case FileNodeKind.CloudGroup:
+				case FileNodeKind.RecycleBin:
+					return false;
+			}
+			return IsWritableFolderPath(folder.FullPath);
+		}
+
+		/// <summary>可作为复制/剪切/删除/重命名对象的真实条目（排除压缩包条目、回收站条目、驱动器根、虚拟位置）。</summary>
+		public bool IsWritableItem(FileSystemNodeViewModel? item)
+		{
+			if (item == null || item.IsPlaceholder) return false;
+			if (item.IsRecycleEntry || item.IsArchiveEntry) return false;
+			if (item.NodeKind == FileNodeKind.Drive) return false;
+			if (IsVirtualRootToken(item.FullPath)) return false;
+			return File.Exists(item.FullPath) || Directory.Exists(item.FullPath);
+		}
+
+		/// <summary>当前所在位置是否允许粘贴/新建（供工具栏与菜单判断）。</summary>
+		public bool IsCurrentLocationWritable => !IsSearchMode && IsWritableFolderNode(SelectedFolder);
+
+		/// <summary>当前是否允许执行粘贴（搜索视图与虚拟位置都禁止）。</summary>
+		public bool IsPasteAllowed => !IsSearchMode &&
+			IsWritableFolderPath(_pasteTargetOverride ?? SelectedFolder?.FullPath ?? CurrentBreadcrumbPath);
+
+		/// <summary>路径正好是某个侧栏根的 CLSID/路径时，返回该根的显示名（面包屑/标签标题用）。</summary>
+		public string? GetSidebarDisplayName(string path)
+		{
+			if (string.IsNullOrEmpty(path)) return null;
+			foreach (var root in RootDirectories)
+			{
+				if (string.Equals(root.FullPath, path, StringComparison.OrdinalIgnoreCase))
+					return root.Name;
+			}
+			return null;
+		}
+
+		private FileSystemNodeViewModel? FindSidebarRoot(string path)
+		{
+			if (string.IsNullOrEmpty(path)) return null;
+			foreach (var root in RootDirectories)
+			{
+				if (string.Equals(root.FullPath, path, StringComparison.OrdinalIgnoreCase))
+					return root;
+			}
+			return null;
+		}
+
+		// ======================= 回收站操作 =======================
+		/// <summary>当前表格是否正在展示回收站内容（决定右键菜单与工具栏分流）。</summary>
+		public bool IsRecycleBinFolder => SelectedFolder?.NodeKind == FileNodeKind.RecycleBin;
+
+		private static Services.RecycleBinEntry BuildRecycleEntry(FileSystemNodeViewModel item)
+		{
+			return new Services.RecycleBinEntry
+			{
+				Name = item.Name,
+				IsDirectory = item.IsDirectory,
+				OriginalFullPath = item.FullPath,
+				OriginalLocation = item.RecycleOriginalLocation,
+				Size = item.ExactSize,
+				ModifiedUtc = item.LastModifiedTime,
+				Index = item.RecycleEntryIndex
+			};
+		}
+
+		/// <summary>在超时前等待条件成立（用于校验还原/彻底删除是否真正生效）。</summary>
+		private static async Task<bool> WaitUntilAsync(Func<bool> predicate, int timeoutMs = 2500, int stepMs = 150)
+		{
+			var sw = System.Diagnostics.Stopwatch.StartNew();
+			while (sw.ElapsedMilliseconds < timeoutMs)
+			{
+				bool ok;
+				try { ok = predicate(); }
+				catch { ok = false; }
+				if (ok) return true;
+				await Task.Delay(stepMs);
+			}
+			return false;
+		}
+
+		/// <summary>还原单个回收站条目：建操作岛卡，按“原位置是否真的出现文件”判定成功。</summary>
+		public async Task RestoreRecycleItemAsync(FileSystemNodeViewModel item)
+		{
+			if (item == null || !item.IsRecycleEntry) return;
+
+			var entry = BuildRecycleEntry(item);
+			var op = CreateReportedOperation($"{ML.RecycleRestore} {item.Name}", "\uE8E5", fileCount: 1);
+
+			// 原位置已有同名项：明确报错交给用户处理，不静默覆盖
+			var targetPath = string.IsNullOrEmpty(entry.OriginalLocation)
+				? null
+				: Path.Combine(entry.OriginalLocation, entry.Name);
+			if (!string.IsNullOrEmpty(targetPath) &&
+				(File.Exists(targetPath) || Directory.Exists(targetPath)))
+			{
+				FailOperation(op, new IOException(ML.RecycleRestoreConflict));
+				return;
+			}
+
+			bool verbOk;
+			try
+			{
+				verbOk = await Task.Run(() => Services.RecycleBinService.RestoreEntry(entry));
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine($"[RecycleBin] 还原异常: {ex.Message}");
+				FailOperation(op, ex);
+				return;
+			}
+
+			if (!verbOk)
+			{
+				FailOperation(op, new IOException(ML.RecycleRestoreFailed));
+				return;
+			}
+
+			// 校验：原位置出现条目（或原位置未知时，确认回收站里该物理项已消失）
+			bool restored = !string.IsNullOrEmpty(targetPath)
+				? await WaitUntilAsync(() => File.Exists(targetPath) || Directory.Exists(targetPath))
+				: await WaitUntilAsync(() =>
+				{
+					var entries = Services.RecycleBinService.EnumerateEntries();
+					return !entries.Any(e => string.Equals(e.OriginalFullPath, entry.OriginalFullPath, StringComparison.OrdinalIgnoreCase));
+				});
+
+			if (!restored)
+			{
+				FailOperation(op, new IOException(ML.RecycleRestoreFailed));
+				return;
+			}
+
+			CompleteOperation(op, 1, 0);
+			await _uiDispatcherQueue.EnqueueAsync(() => RemoveRecycleItemFromView(item));
+		}
+
+		/// <summary>彻底删除一个或多个回收站条目（不可恢复）：逐项建卡并按真实结果推进状态。</summary>
+		public async Task PermanentDeleteRecycleItemsAsync(IReadOnlyList<FileSystemNodeViewModel>? items)
+		{
+			if (items == null || items.Count == 0) return;
+			var list = items.Where(i => i.IsRecycleEntry).ToList();
+			if (list.Count == 0) return;
+
+			foreach (var item in list)
+			{
+				var entry = BuildRecycleEntry(item);
+				var op = CreateReportedOperation($"{ML.CmdPermanentDelete} {item.Name}", "\uE74D", fileCount: 1);
+
+				bool verbOk = false;
+				Exception? error = null;
+				try
+				{
+					verbOk = await Task.Run(() => Services.RecycleBinService.DeleteEntry(entry));
+				}
+				catch (Exception ex)
+				{
+					error = ex;
+					Debug.WriteLine($"[RecycleBin] 彻底删除异常: {ex.Message}");
+				}
+
+				bool gone = verbOk && await WaitUntilAsync(() =>
+				{
+					var remaining = Services.RecycleBinService.EnumerateEntries();
+					return !remaining.Any(e => string.Equals(e.OriginalFullPath, entry.OriginalFullPath, StringComparison.OrdinalIgnoreCase));
+				}, timeoutMs: 3000, stepMs: 250);
+
+				if (!gone)
+				{
+					FailOperation(op, error ?? new IOException(ML.RecycleDeleteFailed));
+					continue;
+				}
+
+				CompleteOperation(op, 1, 0);
+				await _uiDispatcherQueue.EnqueueAsync(() => RemoveRecycleItemFromView(item));
+			}
+		}
+
+		/// <summary>清空回收站（调用方确认后调用）：走操作岛并显示真实结果。</summary>
+		public async Task EmptyRecycleBinAsync()
+		{
+			var node = SelectedFolder;
+			if (node == null || node.NodeKind != FileNodeKind.RecycleBin) return;
+
+			var op = CreateReportedOperation(ML.RecycleEmpty, "\uE74D", fileCount: 0);
+
+			bool ok = false;
+			Exception? error = null;
+			try
+			{
+				ok = await Task.Run(() => Services.RecycleBinService.EmptyRecycleBin());
+			}
+			catch (Exception ex)
+			{
+				error = ex;
+				Debug.WriteLine($"[RecycleBin] 清空异常: {ex.Message}");
+			}
+
+			if (!ok)
+			{
+				FailOperation(op, error ?? new IOException(ML.RecycleEmptyFailed));
+				return;
+			}
+
+			CompleteOperation(op, 0, 0);
+			await _uiDispatcherQueue.EnqueueAsync(async () =>
+			{
+				await node.ReloadChildrenAsync();
+				_displayedFolderNode = null;
+				await UpdateCurrentFolderContentAsync(node, version: null);
+				NotifyViewCountChanged();
+			});
+		}
+
+		private void RemoveRecycleItemFromView(FileSystemNodeViewModel item)
+		{
+			CurrentFolderContent.Remove(item);
+			if (SelectedFolder != null)
+				SelectedFolder.Children.Remove(item);
+			NotifyViewCountChanged();
+		}
+
 		private Microsoft.UI.Dispatching.DispatcherQueue _uiDispatcherQueue;
 		[ObservableProperty] private FileSystemNodeViewModel? _selectedFolder;
 		// 当前表格正在展示其内容的文件夹节点：重复进入同一文件夹时跳过无谓的重建
@@ -1052,6 +2067,7 @@ namespace FastFluentFilesFolders.ViewModels
 			else
 			{
 				CurrentFolderContent.Clear();
+				NotifyViewCountChanged();
 			}
 		}
 
@@ -1059,7 +2075,11 @@ namespace FastFluentFilesFolders.ViewModels
 		{
 			if (folder == null)
 			{
-				_uiDispatcherQueue.TryEnqueue(() => CurrentFolderContent.Clear());
+				_uiDispatcherQueue.TryEnqueue(() =>
+				{
+					CurrentFolderContent.Clear();
+					NotifyViewCountChanged();
+				});
 				return;
 			}
 
@@ -1073,9 +2093,6 @@ namespace FastFluentFilesFolders.ViewModels
 			// 守卫1: 开始异步加载前先检查——过期任务跳过磁盘 I/O
 			if (version.HasValue && version.Value != (CurrentTab?.NavigationVersion ?? -1)) return;
 
-			var timingId = Helpers.LoadTiming.Begin(folder.FullPath);
-			var sw = System.Diagnostics.Stopwatch.StartNew();
-
 			try
 			{
 				// 导航开始：先更新面包屑等轻量状态；旧表内容保留到新内容就绪后一次性瞬间切换，
@@ -1085,23 +2102,19 @@ namespace FastFluentFilesFolders.ViewModels
 					if (version.HasValue && version.Value != (CurrentTab?.NavigationVersion ?? -1)) return;
 					CurrentBreadcrumbPath = folder.FullPath;
 				});
-				Helpers.LoadTiming.Mark(timingId, "update-breadcrumb(ui)", sw.ElapsedMilliseconds);
 
 				// 确保子项已加载（后台有序枚举 + 后台构建节点）
 				if (!folder.IsLoaded)
 				{
 					await folder.LoadChildrenAsync();
-					Helpers.LoadTiming.Mark(timingId, "load-children(LoadChildrenAsync)", sw.ElapsedMilliseconds);
-				}
+					}
 				else
 				{
-					Helpers.LoadTiming.Mark(timingId, "children-already-loaded", sw.ElapsedMilliseconds);
-				}
+					}
 
 				// 先在 UI 线程快照 Children（轻量引用拷贝），再在后台构建分组扁平源，
 				// 最后回到 UI 一次性挂载。避免分组构建（SetItems/RebuildFlat）占用 UI 线程造成迟滞。
 				var items = folder.Children.Where(n => !n.IsPlaceholder).ToList();
-				Helpers.LoadTiming.Mark(timingId, "snapshot-items(ui)", sw.ElapsedMilliseconds);
 				var special = folder.WillSplitToDifferentSorts;
 				var v = version ?? (CurrentTab?.NavigationVersion ?? 1);
 
@@ -1112,7 +2125,6 @@ namespace FastFluentFilesFolders.ViewModels
 					var nc = new ObservableCollection<FileSystemNodeViewModel>(items);
 					return (g, nc);
 				});
-				Helpers.LoadTiming.Mark(timingId, "prebuilt-grouped-list(background)", sw.ElapsedMilliseconds);
 
 				await _uiDispatcherQueue.EnqueueAsync(() =>
 				{
@@ -1121,6 +2133,7 @@ namespace FastFluentFilesFolders.ViewModels
 					PendingPrebuiltVersion = v;
 					CurrentFolderContent = newContent;
 					OnPropertyChanged(nameof(IsCurrentFolderSpecial));
+					NotifyViewCountChanged();
 					_displayedFolderNode = folder;
 					var tab = CurrentTab;
 					if (tab?.PendingSelectPath != null)
@@ -1132,15 +2145,10 @@ namespace FastFluentFilesFolders.ViewModels
 							SelectItemRequested?.Invoke(target);
 					}
 				});
-				Helpers.LoadTiming.Mark(timingId, "apply-to-table(ui)", sw.ElapsedMilliseconds);
 			}
 			catch (Exception ex)
 			{
 				Debug.WriteLine($"[UpdateCurrentFolderContent] Error: {ex.Message}");
-			}
-			finally
-			{
-				Helpers.LoadTiming.End(timingId, sw.ElapsedMilliseconds);
 			}
 		}
 
@@ -1155,6 +2163,8 @@ namespace FastFluentFilesFolders.ViewModels
 
 		public void OpenItem(FileSystemNodeViewModel item)
 		{
+			// 回收站条目没有真实可打开路径：请用右键“还原/彻底删除”
+			if (item.IsRecycleEntry) return;
 			if (IsSearchMode)
 			{
 				if (item.IsDirectory) { ExitSearchMode(); NavigateToPath(item.FullPath); }
@@ -1309,7 +2319,7 @@ namespace FastFluentFilesFolders.ViewModels
 		{
 			if (IsSearchMode) ExitSearchMode();
 			// 支持相对路径：以当前文件夹为基准解析为绝对路径（如地址栏输入 ..新建文件夹）
-			if (!string.IsNullOrEmpty(path) && !Path.IsPathRooted(path) && SelectedFolder != null)
+			if (!string.IsNullOrEmpty(path) && !Path.IsPathRooted(path) && SelectedFolder != null && !IsVirtualRootToken(path))
 				path = Path.GetFullPath(Path.Combine(SelectedFolder.FullPath, path));
 			if (ArchiveHelper.IsArchiveVirtualPath(path, out var archiveFile, out var relative))
 			{
@@ -1426,6 +2436,19 @@ namespace FastFluentFilesFolders.ViewModels
 		private void NavigateToNewPath(string path)
 		{
 			if (!Directory.Exists(path)) return;
+
+			// 盘符根目录（C:\、D:\…）复用“此电脑”下的缓存节点，保证 Parent 指向此电脑
+			if (path.Length == 3 && path.EndsWith(":\\"))
+			{
+				var cachedDrive = GetDriveNodeByPath(path);
+				if (cachedDrive != null)
+				{
+					cachedDrive.IsStandalone = false;
+					SelectedFolder = cachedDrive;
+					return;
+				}
+			}
+
 			if (SelectedFolder?.IsStandalone == true && CurrentTab != null)
 				CurrentTab.FolderToRelease = SelectedFolder;
 			// lazyLoad: true —— 目录枚举统一由 UpdateCurrentFolderContentAsync → LoadChildrenAsync 完成一次，
@@ -1468,13 +2491,25 @@ namespace FastFluentFilesFolders.ViewModels
 
 		private void GoUp()
 		{
-			if (_selectedFolder == null) return;
-			var parentPath = GetParentPath(_selectedFolder.FullPath);
+			var node = _selectedFolder;
+			if (node == null) return;
+
+			// 树形导航优先：驱动器的父级是“此电脑”，普通文件夹的父级是同树节点
+			if (node.Parent != null && node.Parent.IsDirectory && !ReferenceEquals(node.Parent, node))
+			{
+				if (ReferenceEquals(SelectedFolder, node.Parent))
+					_ = UpdateCurrentFolderContentAsync(node.Parent, version: null);
+				else
+					SelectedFolder = node.Parent;
+				return;
+			}
+
+			var parentPath = GetParentPath(node.FullPath);
 			if (parentPath == null) return;
 			NavigateToPath(parentPath);
 		}
 
-		private static string? GetParentPath(string path)
+		private string? GetParentPath(string path)
 		{
 			if (string.IsNullOrEmpty(path)) return null;
 			if (ArchiveHelper.IsArchiveVirtualPath(path, out var archiveFile, out var relative))
@@ -1491,12 +2526,27 @@ namespace FastFluentFilesFolders.ViewModels
 			if (path.StartsWith("\\\\"))
 			{
 				var parts = path.TrimEnd('\\').Split('\\');
-				if (parts.Length <= 2) return null;
+				if (parts.Length <= 2) return GetWslServerParent(parts[0]);
 				return string.Join("\\", parts.Take(parts.Length - 1));
 			}
 			var parent = Directory.GetParent(path);
 			return parent?.FullName;
 		}
+
+		/// <summary>\wsl$ / \wsl.localhost 下的发行版根向上一级时回到 Linux 侧栏节点。</summary>
+		private string? GetWslServerParent(string serverName)
+		{
+			if (string.IsNullOrEmpty(serverName)) return null;
+			var server = "\\\\" + serverName;
+			foreach (var root in RootDirectories)
+			{
+				if (root.NodeKind == FileNodeKind.Wsl &&
+					string.Equals(root.FullPath.TrimEnd('\\'), server, StringComparison.OrdinalIgnoreCase))
+					return root.FullPath;
+			}
+			return null;
+		}
+
 		public FileSystemNodeViewModel? FindNodeByPath(string fullPath)
 		{
 			foreach (var root in RootDirectories)
@@ -1523,6 +2573,45 @@ namespace FastFluentFilesFolders.ViewModels
 				}
 			}
 			return null;
+		}
+
+
+		/// <summary>目标文件夹当前是否已固定到系统快速访问。</summary>
+		public bool IsFolderPinned(FileSystemNodeViewModel? folder)
+			=> folder != null && !folder.IsPlaceholder && folder.IsDirectory
+				&& !string.IsNullOrEmpty(folder.FullPath) && QuickAccessHelper.IsPinned(folder.FullPath);
+
+		/// <summary>固定/取消固定到系统快速访问（右键菜单与 Ctrl+P 共用入口）。</summary>
+		public async Task TogglePinnedFolderAsync(FileSystemNodeViewModel? folder)
+		{
+			if (folder == null || folder.IsPlaceholder || !folder.IsDirectory) return;
+			if (string.IsNullOrEmpty(folder.FullPath) || !Directory.Exists(folder.FullPath)) return;
+			try
+			{
+				await Task.Run(() => QuickAccessHelper.TogglePin(folder.FullPath));
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine($"[PinToggle] 失败: {ex.Message}");
+			}
+			await RefreshPinnedShortcutsAsync();
+		}
+
+		/// <summary>重新从系统快速访问读取并刷新左侧“已固定”栏。</summary>
+		public async Task RefreshPinnedShortcutsAsync()
+		{
+			List<string> pinnedPaths;
+			try { pinnedPaths = await Task.Run(() => QuickAccessHelper.GetPinnedFolderPaths()); }
+			catch (Exception ex) { Debug.WriteLine($"[PinToggle] 读取快速访问失败: {ex.Message}"); return; }
+			await _uiDispatcherQueue.EnqueueAsync(() =>
+			{
+				PinnedShortcuts.Clear();
+				foreach (var path in pinnedPaths)
+				{
+					if (!string.IsNullOrEmpty(path) && Directory.Exists(path))
+						PinnedShortcuts.Add(new FileSystemNodeViewModel(path, true, false, AppConfigs!, _uiDispatcherQueue, true));
+				}
+			});
 		}
 
 		private void InitializePinnedShortcuts(Configs configs, Microsoft.UI.Dispatching.DispatcherQueue uiDispatcherQueue)

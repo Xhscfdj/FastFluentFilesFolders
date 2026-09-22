@@ -27,12 +27,19 @@ namespace FastFluentFilesFolders.Views
     {
         private CommandBarFlyout? _itemContextFlyout;
         private CommandBarFlyout? _baseContextFlyout;
+        private CommandBarFlyout? _recycleItemFlyout;
+        private CommandBarFlyout? _recycleBaseFlyout;
+        private AppBarButton? _pinToggleButton;
+        private bool IsInRecycleView => (this.DataContext as MainWindowViewModel)?.IsRecycleBinFolder == true;
+        private bool IsSearchView => (this.DataContext as MainWindowViewModel)?.IsSearchMode == true;
         private bool _toolbarBuilt;
         private (ObservableCollection<FileSystemNodeViewModel>? Items, bool Special)? _lastAppliedGroupedSource;
         private readonly List<ICommandBarElement> _itemPluginItems = new();
         private readonly List<ICommandBarElement> _basePluginItems = new();
         private ObservableCollection<FileSystemNodeViewModel>? _watchedCollection;
         private MainWindowViewModel? _dataContextVm;
+        // 双击进入文件夹后，待新内容挂载完成时把键盘焦点移回文件表格（令左侧 TreeView 失焦）
+        private bool _focusTableAfterNavigation;
         private readonly ObservableCollection<FileOperationItem> _fileOperationItems = new();
         private static MultiLanguageStringsViewModel ML => App.ML;
 
@@ -48,6 +55,7 @@ namespace FastFluentFilesFolders.Views
 
             App.SharedViewModel.RenameFocusRequested += OnRenameFocusRequested;
             App.SharedViewModel.SelectItemRequested += OnSelectItemRequested;
+            App.SharedViewModel.ConflictResolutionRequested += OnConflictResolutionRequested;
 
             FileOperationReporter.OperationAdded += OnFileOperationReported;
 
@@ -75,6 +83,16 @@ namespace FastFluentFilesFolders.Views
             copyPathAccel.Invoked += (_, args) => { args.Handled = true; OnCopyPathClick(null, null); };
             FileGrid.KeyboardAccelerators.Add(copyPathAccel);
 
+            // Ctrl+P：切换当前选中文件夹的固定状态（固定/取消固定到快速访问）
+            var pinAccel = new KeyboardAccelerator { Key = VirtualKey.P, Modifiers = VirtualKeyModifiers.Control };
+            pinAccel.Invoked += async (_, args) =>
+            {
+                args.Handled = true;
+                if (FileGrid.SelectedItem is FileSystemNodeViewModel pinnedItem && pinnedItem.IsDirectory && !pinnedItem.IsPlaceholder)
+                    await TogglePinFolderAsync(pinnedItem);
+            };
+            FileGrid.KeyboardAccelerators.Add(pinAccel);
+
             this.DataContextChanged += (s, e) =>
             {
                 if (this.DataContext is MainWindowViewModel vm && vm != _dataContextVm)
@@ -101,6 +119,7 @@ namespace FastFluentFilesFolders.Views
             App.ML.PropertyChanged -= OnMLPropertyChanged;
             App.SharedViewModel.RenameFocusRequested -= OnRenameFocusRequested;
             App.SharedViewModel.SelectItemRequested -= OnSelectItemRequested;
+            App.SharedViewModel.ConflictResolutionRequested -= OnConflictResolutionRequested;
             FileOperationReporter.OperationAdded -= OnFileOperationReported;
             if (_dataContextVm != null)
                 _dataContextVm.PropertyChanged -= OnViewModelPropertyChanged;
@@ -115,10 +134,20 @@ namespace FastFluentFilesFolders.Views
             if (e.PropertyName == nameof(MainWindowViewModel.CurrentFolderContent) ||
                 e.PropertyName == nameof(MainWindowViewModel.IsCurrentFolderSpecial) ||
                 e.PropertyName == nameof(MainWindowViewModel.IsSearchMode) ||
-                e.PropertyName == nameof(MainWindowViewModel.SearchResults))
+                e.PropertyName == nameof(MainWindowViewModel.SearchResults) ||
+                e.PropertyName == nameof(MainWindowViewModel.SelectedFolder))
             {
                 if (sender is MainWindowViewModel vm)
+                {
                     UpdateGroupedSource(vm);
+                    UpdateRecycleColumnVisibility();
+
+                    if (_focusTableAfterNavigation && e.PropertyName == nameof(MainWindowViewModel.CurrentFolderContent))
+                    {
+                        _focusTableAfterNavigation = false;
+                        FileGrid.Focus(FocusState.Programmatic);
+                    }
+                }
             }
         }
 
@@ -199,7 +228,15 @@ namespace FastFluentFilesFolders.Views
         private void OnRowDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
         {
             if (sender is FrameworkElement element && element.DataContext is FileSystemNodeViewModel item && !item.IsPlaceholder)
-                (this.DataContext as MainWindowViewModel)?.OpenItem(item);
+            {
+                var vm = this.DataContext as MainWindowViewModel;
+                vm?.OpenItem(item);
+
+                // 双击进入文件夹后让左侧 TreeView 自动失焦：等新内容挂载完成后把键盘焦点移回文件表格。
+                // 否则在“此电脑/回收站/网络/WSL”等虚拟位置下，方向键与快捷键仍会作用到目录树。
+                if (item.IsDirectory && !item.IsRecycleEntry)
+                    _focusTableAfterNavigation = true;
+            }
         }
 
         private void OnCalculateSizeTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
@@ -235,18 +272,39 @@ namespace FastFluentFilesFolders.Views
 
             if (row?.Content is FileSystemNodeViewModel item && !item.IsPlaceholder)
             {
-                _itemContextFlyout ??= BuildItemContextFlyout();
                 if (!FileGrid.SelectedItems.Contains(item))
                     FileGrid.SelectedItem = item;
-                RebuildPluginItems(_itemContextFlyout, _itemPluginItems, item);
+                UpdatePinToggleButton(item);
                 var t = sender.TransformToVisual(row);
-                _itemContextFlyout.ShowAt(row, new FlyoutShowOptions { Position = t.TransformPoint(position) });
+                var showOptions = new FlyoutShowOptions { Position = t.TransformPoint(position) };
+
+                if (item.IsRecycleEntry)
+                {
+                    // 回收站条目：还原 / 彻底删除
+                    _recycleItemFlyout ??= BuildRecycleItemFlyout();
+                    _recycleItemFlyout.ShowAt(row, showOptions);
+                }
+                else
+                {
+                    _itemContextFlyout ??= BuildItemContextFlyout();
+                    RebuildPluginItems(_itemContextFlyout, _itemPluginItems, item);
+                    _itemContextFlyout.ShowAt(row, showOptions);
+                }
             }
             else
             {
-                _baseContextFlyout ??= BuildBaseContextFlyout();
-                RebuildPluginItems(_baseContextFlyout, _basePluginItems, null);
-                _baseContextFlyout.ShowAt(sender, new FlyoutShowOptions { Position = position });
+                if (IsInRecycleView)
+                {
+                    // 回收站空白处：清空回收站
+                    _recycleBaseFlyout ??= BuildRecycleBaseFlyout();
+                    _recycleBaseFlyout.ShowAt(sender, new FlyoutShowOptions { Position = position });
+                }
+                else
+                {
+                    _baseContextFlyout ??= BuildBaseContextFlyout();
+                    RebuildPluginItems(_baseContextFlyout, _basePluginItems, null);
+                    _baseContextFlyout.ShowAt(sender, new FlyoutShowOptions { Position = position });
+                }
             }
             args.Handled = true;
         }
@@ -257,6 +315,15 @@ namespace FastFluentFilesFolders.Views
             ColModifiedDate.Header = ML.ColumnModifiedDate;
             ColCreatedDate.Header = ML.ColumnCreatedDate;
             ColSize.Header = ML.ColumnSize;
+            ColOriginalLocation.Header = ML.ColumnOriginalLocation;
+            UpdateRecycleColumnVisibility();
+        }
+
+        private void UpdateRecycleColumnVisibility()
+        {
+            if (ColOriginalLocation == null) return;
+            var recycle = (this.DataContext as MainWindowViewModel)?.IsRecycleBinFolder == true;
+            ColOriginalLocation.Visibility = recycle ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void RefreshAllStrings()
@@ -265,7 +332,10 @@ namespace FastFluentFilesFolders.Views
             RefreshToolbar();
             RefreshGroupHeaderNames();
             _itemContextFlyout = null;
+            _pinToggleButton = null;
             _baseContextFlyout = null;
+            _recycleItemFlyout = null;
+            _recycleBaseFlyout = null;
         }
 
         private void RefreshToolbar()
@@ -295,6 +365,17 @@ namespace FastFluentFilesFolders.Views
             flyout.SecondaryCommands.Add(PlainBtn(ML.CmdOpen,     "\uE8E5", OnOpenClick));
             flyout.SecondaryCommands.Add(PlainBtn(ML.CmdOpenWith, "\uE8E5", OnOpenWithClick));
             flyout.SecondaryCommands.Add(CopyPathThemedBtn(ML.CmdCopyPath, OnCopyPathClick));
+
+            // 固定/取消固定（仅文件夹显示；打开菜单时按选中项刷新）
+            _pinToggleButton = new AppBarButton
+            {
+                Label = ML.CmdPinToQuickAccess,
+                Icon = new FontIcon { Glyph = "\uE718", FontSize = 16 },
+                KeyboardAcceleratorTextOverride = "Ctrl+P",
+                Visibility = Visibility.Collapsed
+            };
+            _pinToggleButton.Click += OnPinToggleClick;
+            flyout.SecondaryCommands.Add(_pinToggleButton);
             flyout.SecondaryCommands.Add(PlainBtn(ML.OpenFileLocation, "\uE8B7", OnOpenFileLocationClick));
             flyout.SecondaryCommands.Add(new AppBarSeparator());
             flyout.SecondaryCommands.Add(PlainBtn(ML.CmdProperties, "\uE90F", OnPropertiesClick));
@@ -331,6 +412,80 @@ namespace FastFluentFilesFolders.Views
             flyout.SecondaryCommands.Add(BuildShowMoreOptionsBtn(isItemMenu: false));
 
             return flyout;
+        }
+
+        private CommandBarFlyout BuildRecycleItemFlyout()
+        {
+            var flyout = new CommandBarFlyout { AlwaysExpanded = true };
+
+            flyout.PrimaryCommands.Add(PlainBtn(ML.RecycleRestore, "\uE8E5", OnRecycleRestoreClick));
+            flyout.PrimaryCommands.Add(RedBtn(ML.CmdPermanentDelete, "\uECC9", OnRecycleDeleteClick));
+            flyout.SecondaryCommands.Add(PlainBtn(ML.CmdCopyPath, "\uE8C8", OnRecycleCopyPathClick));
+
+            return flyout;
+        }
+
+        private CommandBarFlyout BuildRecycleBaseFlyout()
+        {
+            var flyout = new CommandBarFlyout { AlwaysExpanded = true };
+            flyout.SecondaryCommands.Add(PlainBtn(ML.RecycleEmpty, "\uE74D", OnRecycleEmptyClick));
+            return flyout;
+        }
+
+        private async void OnRecycleRestoreClick(object sender, RoutedEventArgs e)
+        {
+            _recycleItemFlyout?.Hide();
+            var vm = this.DataContext as MainWindowViewModel;
+            var items = GetSelectedItems().Where(i => i.IsRecycleEntry).ToList();
+            foreach (var item in items)
+                await vm!.RestoreRecycleItemAsync(item);
+        }
+
+        private void OnRecycleCopyPathClick(object sender, RoutedEventArgs e)
+        {
+            _recycleItemFlyout?.Hide();
+            OnCopyPathClick(sender, e);
+        }
+
+        private async void OnRecycleDeleteClick(object? sender, RoutedEventArgs? e)
+        {
+            _recycleItemFlyout?.Hide();
+            var vm = this.DataContext as MainWindowViewModel;
+            var items = GetSelectedItems().Where(i => i.IsRecycleEntry).ToList();
+            if (items.Count == 0) return;
+
+            var dialog = new ContentDialog
+            {
+                Title = ML.RecycleDeleteConfirmTitle,
+                Content = ML.RecycleDeleteConfirmMessage,
+                CloseButtonText = ML.CmdCancel,
+                PrimaryButtonText = ML.CmdPermanentDelete,
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = App.MainWindow!.Content.XamlRoot
+            };
+            var result = await dialog.ShowAsync();
+            if (result == ContentDialogResult.Primary)
+                await vm!.PermanentDeleteRecycleItemsAsync(items);
+        }
+
+        private async void OnRecycleEmptyClick(object sender, RoutedEventArgs e)
+        {
+            _recycleBaseFlyout?.Hide();
+            var vm = this.DataContext as MainWindowViewModel;
+            if (vm == null) return;
+
+            var dialog = new ContentDialog
+            {
+                Title = ML.RecycleEmptyConfirmTitle,
+                Content = ML.RecycleEmptyConfirmMessage,
+                CloseButtonText = ML.CmdCancel,
+                PrimaryButtonText = ML.RecycleEmpty,
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = App.MainWindow!.Content.XamlRoot
+            };
+            var result = await dialog.ShowAsync();
+            if (result == ContentDialogResult.Primary)
+                await vm.EmptyRecycleBinAsync();
         }
 
         private void OnSortNameAscClick(object s, RoutedEventArgs e) => FileGrid.SortBy("Name", true);
@@ -721,6 +876,40 @@ namespace FastFluentFilesFolders.Views
         }
 
         // === Click handlers ===
+        private void UpdatePinToggleButton(FileSystemNodeViewModel? item)
+        {
+            if (_pinToggleButton == null) return;
+            if (item == null || !item.IsDirectory || item.IsPlaceholder || !System.IO.Directory.Exists(item.FullPath))
+            {
+                _pinToggleButton.Visibility = Visibility.Collapsed;
+                return;
+            }
+            var vm = this.DataContext as MainWindowViewModel;
+            var pinned = vm?.IsFolderPinned(item) ?? QuickAccessHelper.IsPinned(item.FullPath);
+            _pinToggleButton.Visibility = Visibility.Visible;
+            _pinToggleButton.Label = pinned ? ML.CmdUnpinFromQuickAccess : ML.CmdPinToQuickAccess;
+            if (_pinToggleButton.Icon is FontIcon icon)
+                icon.Glyph = pinned ? "\uE77A" : "\uE718";
+        }
+
+        private async void OnPinToggleClick(object sender, RoutedEventArgs e)
+        {
+            _itemContextFlyout?.Hide();
+            var item = FileGrid.SelectedItem as FileSystemNodeViewModel;
+            if (item == null || item.IsPlaceholder || !item.IsDirectory || !System.IO.Directory.Exists(item.FullPath)) return;
+            if (this.DataContext is MainWindowViewModel vm)
+                await vm.TogglePinnedFolderAsync(item);
+        }
+
+        private async Task TogglePinFolderAsync(FileSystemNodeViewModel item)
+        {
+            if (item == null || item.IsPlaceholder || !item.IsDirectory) return;
+            if (this.DataContext is MainWindowViewModel vm)
+                await vm.TogglePinnedFolderAsync(item);
+            else
+                await Task.Run(() => QuickAccessHelper.TogglePin(item.FullPath));
+        }
+
         private void OnOpenClick(object sender, RoutedEventArgs e)
         {
             FinishItemOp();
@@ -732,11 +921,14 @@ namespace FastFluentFilesFolders.Views
         {
             FinishItemOp();
             var items = GetSelectedItems();
+            if (items.Any(i => i.IsRecycleEntry)) return;
             if (items.Count > 0)
                 (this.DataContext as MainWindowViewModel)?.OpenWithCommand.Execute(items[0]);
         }
         private void OnCutClick(object sender, RoutedEventArgs e)
         {
+            // M4：回收站、搜索视图不允许剪切（来源目录不明确/无真实路径）
+            if (IsInRecycleView || IsSearchView) return;
             FinishItemOp();
             var items = GetSelectedItems();
             if (items.Count > 0)
@@ -744,6 +936,7 @@ namespace FastFluentFilesFolders.Views
         }
         private void OnCopyClick(object sender, RoutedEventArgs e)
         {
+            if (IsInRecycleView) return;
             FinishItemOp();
             var items = GetSelectedItems();
             if (items.Count > 0)
@@ -760,25 +953,21 @@ namespace FastFluentFilesFolders.Views
         {
             _itemContextFlyout?.Hide();
             _baseContextFlyout?.Hide();
-            if (FileGrid.SelectedItem is FileSystemNodeViewModel item && item.IsDirectory && !item.IsPlaceholder)
+            if (FileGrid.SelectedItem is FileSystemNodeViewModel item &&
+                item.IsDirectory && !item.IsPlaceholder && !item.IsArchiveEntry)
+            {
                 (this.DataContext as MainWindowViewModel)?.SetPasteTarget(item.FullPath);
+            }
             ExecutePaste();
         }
 
         private void ExecutePaste()
         {
-            var pasteOp = new FileOperationItem
-            {
-                Text = App.ML.CmdPaste,
-                FileCount = 0,
-                Process = "0%",
-                RemainTime = "...",
-                SizeText = "0 B",
-                State = FileOperationState.InProgress,
-                IconGlyph = "\uE77F"
-            };
-            AddFileOperation(pasteOp);
-            (this.DataContext as MainWindowViewModel)?.PasteCommand.Execute(pasteOp);
+            // M4：回收站/搜索视图/虚拟位置（此电脑、网络、压缩包内部等）不允许粘贴
+            if (IsInRecycleView || IsSearchView) return;
+            if ((this.DataContext as MainWindowViewModel)?.IsPasteAllowed != true) return;
+            // 操作岛卡片由 ViewModel.Paste 统一创建/推进（M1.4：空剪贴板不再产生假成功卡）。
+            (this.DataContext as MainWindowViewModel)?.PasteCommand.Execute(null);
         }
 
         private void OnRenameClick(object sender, RoutedEventArgs e)
@@ -786,6 +975,7 @@ namespace FastFluentFilesFolders.Views
             _itemContextFlyout?.Hide();
             var items = GetSelectedItems();
             if (items.Count == 0) return;
+            if (items.Any(i => i.IsRecycleEntry || i.IsArchiveEntry)) return;
             var item = items[0];
             (this.DataContext as MainWindowViewModel)?.RenameCommand.Execute(item);
         }
@@ -794,6 +984,67 @@ namespace FastFluentFilesFolders.Views
         {
             FileGrid.SelectedItem = item;
             FileGrid.ScrollIntoView(item);
+        }
+
+        /// <summary>
+        /// 剪切粘贴遇到同名项时由 ViewModel 回调到这里弹一次确认框，
+        /// 选择结果应用于本次粘贴的全部冲突项。
+        /// </summary>
+        private async Task<FileConflictResolution> OnConflictResolutionRequested(IReadOnlyList<string> conflictNames)
+        {
+            var tcs = new TaskCompletionSource<FileConflictResolution>();
+
+            void ShowDialog()
+            {
+                _ = ShowConflictDialogAsync(conflictNames, tcs);
+            }
+
+            if (DispatcherQueue.HasThreadAccess)
+                ShowDialog();
+            else
+                DispatcherQueue.TryEnqueue(ShowDialog);
+
+            return await tcs.Task;
+        }
+
+        private async Task ShowConflictDialogAsync(
+            IReadOnlyList<string> conflictNames,
+            TaskCompletionSource<FileConflictResolution> tcs)
+        {
+            try
+            {
+                // 注意：项目自带的 LocalizationService 是简易 JSON 解析器，不会还原 "\n" 转义，
+                // 因此换行必须在这里用 Environment.NewLine 拼，不能在语言包里写 \n。
+                var preview = string.Join(Environment.NewLine, conflictNames.Take(5));
+                var content = string.Format(ML.ConflictMessageFmt, conflictNames.Count)
+                    + Environment.NewLine + Environment.NewLine
+                    + preview
+                    + Environment.NewLine + Environment.NewLine
+                    + ML.ConflictHint;
+
+                var dialog = new ContentDialog
+                {
+                    Title = ML.ConflictTitle,
+                    Content = content,
+                    PrimaryButtonText = ML.ConflictReplace,
+                    SecondaryButtonText = ML.ConflictKeepBoth,
+                    CloseButtonText = ML.ConflictSkip,
+                    DefaultButton = ContentDialogButton.Primary,
+                    XamlRoot = App.MainWindow!.Content.XamlRoot
+                };
+
+                var result = await dialog.ShowAsync();
+                tcs.TrySetResult(result switch
+                {
+                    ContentDialogResult.Primary => FileConflictResolution.Replace,
+                    ContentDialogResult.Secondary => FileConflictResolution.KeepBoth,
+                    _ => FileConflictResolution.Skip
+                });
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
         }
 
         private void OnRenameFocusRequested(FileSystemNodeViewModel item)
@@ -916,30 +1167,18 @@ namespace FastFluentFilesFolders.Views
         private void OnDeleteClick(object sender, RoutedEventArgs e)
         {
             _itemContextFlyout?.Hide();
+            if (IsInRecycleView) { OnRecycleDeleteClick(sender, e); return; }
             var items = GetSelectedItems();
             if (items.Count > 0)
-            {
-                foreach (var item in items)
-            {
-                var op = new FileOperationItem { Text = $"{App.ML.CmdDelete} {item.Name}", FileCount = 1, Progress = 100, Process = "100%", RemainTime = "0", State = FileOperationState.Successful, IconGlyph = "\uE74D" };
-                AddFileOperation(op);
-            }
-            (this.DataContext as MainWindowViewModel)?.DeleteCommand.Execute(items);
+                (this.DataContext as MainWindowViewModel)?.DeleteCommand.Execute(items);
         }
-    }
-    private void OnPermanentDeleteClick(object sender, RoutedEventArgs e)
-    {
-        _itemContextFlyout?.Hide();
-        var items = GetSelectedItems();
-        if (items.Count > 0)
+        private void OnPermanentDeleteClick(object sender, RoutedEventArgs e)
         {
-            foreach (var item in items)
-            {
-                var op = new FileOperationItem { Text = $"{App.ML.CmdPermanentDelete} {item.Name}", FileCount = 1, Progress = 100, Process = "100%", RemainTime = "0", State = FileOperationState.Successful, IconGlyph = "\uE74D" };
-                AddFileOperation(op);
-            }
-            (this.DataContext as MainWindowViewModel)?.PermanentDeleteCommand.Execute(items);
-            }
+            _itemContextFlyout?.Hide();
+            if (IsInRecycleView) { OnRecycleDeleteClick(sender, e); return; }
+            var items = GetSelectedItems();
+            if (items.Count > 0)
+                (this.DataContext as MainWindowViewModel)?.PermanentDeleteCommand.Execute(items);
         }
         private void OnCopyPathClick(object sender, RoutedEventArgs e)
         {
@@ -952,6 +1191,7 @@ namespace FastFluentFilesFolders.Views
         {
             _itemContextFlyout?.Hide();
             var items = GetSelectedItems();
+            if (items.Any(i => i.IsRecycleEntry)) return;
             if (items.Count > 0)
                 (this.DataContext as MainWindowViewModel)?.OpenFileLocation(items[0]);
         }
@@ -959,6 +1199,7 @@ namespace FastFluentFilesFolders.Views
         {
             FinishItemOp();
             var items = GetSelectedItems();
+            if (items.Any(i => i.IsRecycleEntry)) return;
             if (items.Count > 0)
                 (this.DataContext as MainWindowViewModel)?.PropertiesCommand.Execute(items[0]);
         }
@@ -1066,6 +1307,11 @@ namespace FastFluentFilesFolders.Views
 
         private async Task PermanentDeleteWithConfirmAsync()
         {
+            if (IsInRecycleView)
+            {
+                OnRecycleDeleteClick(null, null);
+                return;
+            }
             var items = GetSelectedItems();
             if (items.Count == 0) return;
 

@@ -21,6 +21,11 @@ namespace FastFluentFilesFolders.Services
         {
             var useWin32 = _configs.IfUsesWin32APIToGetIcon;
 
+            // Shell 命名空间/Shell 项（“::{CLSID}”、“shellitem::”）必须走 Win32 接口，
+            // 否则 StorageFolder 无法解析虚拟路径，特殊位置会一直回退到 Segoe 字形
+            if (ShellIconHelper.IsShellItemIconPath(fullPath))
+                return await _win32Provider.GetIconAsync(fullPath, isFolder, dispatcherQueue, size);
+
             if (ShellIconHelper.IsSpecialFolder(fullPath) || !useWin32)
             {
                 return await _winrtProvider.GetIconAsync(fullPath, isFolder, dispatcherQueue, size);
@@ -34,6 +39,9 @@ namespace FastFluentFilesFolders.Services
         public bool TryGetCachedIcon(string fullPath, bool isFolder, out ImageSource? icon)
         {
             icon = null;
+            if (ShellIconHelper.IsShellItemIconPath(fullPath))
+                return _win32Provider.TryGetCached(fullPath, isFolder, out icon);
+
             var useWin32 = _configs.IfUsesWin32APIToGetIcon;
             if (ShellIconHelper.IsSpecialFolder(fullPath) || !useWin32)
                 return false;

@@ -17,11 +17,6 @@
                    FontSize="12"
                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                    TextWrapping="Wrap" />
-        <TextBlock Text="{Binding OwnerCaption}"
-                   FontSize="12"
-                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                   TextWrapping="Wrap"
-                   Visibility="{Binding HasOwner, Converter={StaticResource BoolToVisibilityConverter}}" />
 
         <InfoBar Message="{Binding ErrorMessage}"
                  Severity="Informational"
@@ -186,6 +181,55 @@
                                TextWrapping="Wrap"
                                Margin="0,10,0,4" />
                 </Grid>
+            </Grid>
+        </Border>
+
+        <!-- 卡片 3：所有者 -->
+        <Border Background="{ThemeResource LayerFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="16">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="{Binding OwnerSectionLabel}"
+                           FontSize="14"
+                           FontWeight="SemiBold"
+                           Margin="4,4,4,8" />
+                <Border Grid.Row="1" Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                <Grid Grid.Row="2" ColumnSpacing="12" Margin="4,10,4,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding OwnerCurrentLabel}"
+                               VerticalAlignment="Center"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding OwnerDisplay}"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTipService.ToolTip="{Binding OwnerDisplay}" />
+                    <Button Grid.Column="2"
+                            Content="{Binding OwnerChangeLabel}"
+                            Click="OnChangeOwnerClick" />
+                </Grid>
+
+                <TextBlock Grid.Row="3"
+                           Text="{Binding OwnerPendingHint}"
+                           FontSize="12"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           TextWrapping="Wrap"
+                           Margin="4,8,4,0"
+                           Visibility="{Binding OwnerPending, Converter={StaticResource BoolToVisibilityConverter}}" />
             </Grid>
         </Border>
     </StackPanel>

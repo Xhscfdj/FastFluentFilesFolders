@@ -93,6 +93,7 @@
                         <DataTemplate x:DataType="vm:FileSystemNodeViewModel">
                             <TextBlock DoubleTapped="OnRowDoubleTapped"
                                        Text="{x:Bind LastModifiedTimeString, Mode=OneTime}"
+									   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        Visibility="{x:Bind IsPlaceholder, Converter={StaticResource InvertVisibilityConverter}, Mode=OneTime}"
                                        Opacity="{x:Bind RowOpacity, Mode=OneWay}"
                                        VerticalAlignment="Center"/>
@@ -104,6 +105,7 @@
                     <tv:TableViewTemplateColumn.CellTemplate>
                         <DataTemplate x:DataType="vm:FileSystemNodeViewModel">
                             <TextBlock DoubleTapped="OnRowDoubleTapped"
+									   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        Text="{x:Bind FirstCreatedTimeString, Mode=OneTime}"
                                        Visibility="{x:Bind IsPlaceholder, Converter={StaticResource InvertVisibilityConverter}, Mode=OneTime}"
                                        Opacity="{x:Bind RowOpacity, Mode=OneWay}"
@@ -122,6 +124,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="1" Text="{x:Bind VisualSize, Mode=OneWay}"
                                            Visibility="{x:Bind SizeTextVisibility, Mode=OneWay}"
+										   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                            HorizontalAlignment="Right"
                                            VerticalAlignment="Center"/>
                                 <TextBlock Grid.Column="1" Text="{x:Bind ML.CalculateSize, Mode=OneTime}"
@@ -132,6 +135,20 @@
                                            Tapped="OnCalculateSizeTapped"
                                            TextTrimming="CharacterEllipsis"/>
                             </Grid>
+                        </DataTemplate>
+                    </tv:TableViewTemplateColumn.CellTemplate>
+                </tv:TableViewTemplateColumn>
+
+                <!-- 回收站专用：原位置（仅在浏览回收站时显示） -->
+                <tv:TableViewTemplateColumn x:Name="ColOriginalLocation" Width="2*" CanSort="True" SortMemberPath="RecycleOriginalLocation" Visibility="Collapsed">
+                    <tv:TableViewTemplateColumn.CellTemplate>
+                        <DataTemplate x:DataType="vm:FileSystemNodeViewModel">
+                            <TextBlock DoubleTapped="OnRowDoubleTapped"
+                                       Text="{x:Bind RecycleOriginalLocation, Mode=OneWay}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTipService.ToolTip="{x:Bind RecycleOriginalLocation, Mode=OneWay}"
+                                       VerticalAlignment="Center"/>
                         </DataTemplate>
                     </tv:TableViewTemplateColumn.CellTemplate>
                 </tv:TableViewTemplateColumn>

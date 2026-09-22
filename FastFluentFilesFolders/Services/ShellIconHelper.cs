@@ -56,6 +56,85 @@ namespace FastFluentFilesFolders.Services
 		[DllImport("user32.dll", SetLastError = true)]
 		private static extern bool DestroyIcon(IntPtr hIcon);
 
+		// —— Shell 命名空间 / Shell 项图标 ——
+		// SHGetFileInfo 无法解析 “::{CLSID}” 虚拟路径（返回 0），因此此电脑/网络/回收站/WSL
+		// 等特殊位置长期回退到 Segoe 字形。改用 IShellItemImageFactory.GetImage 取真实系统图标。
+		// 另设 "shellitem::" 前缀，让普通目录（如 OneDrive 云盘目录）也能用该接口取到
+		// 带云盘提供商徽标的真实图标，并与 “_folder_” 通用缓存区分开。
+		public const string ShellItemPrefix = "shellitem::";
+
+		private const int SIIGBF_BIGGERSIZEOK = 0x01;
+		private const int SIIGBF_ICONONLY = 0x04;
+
+		[StructLayout(LayoutKind.Sequential)]
+		private struct SIZE { public int cx; public int cy; }
+
+		[ComImport, Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+		private interface IShellItemImageFactory
+		{
+			[PreserveSig]
+			int GetImage(SIZE size, int flags, out IntPtr phbm);
+		}
+
+		[DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
+		private static extern void SHCreateItemFromParsingName(string pszPath, IntPtr pbc, ref Guid riid,
+			[MarshalAs(UnmanagedType.Interface)] out IShellItemImageFactory? ppv);
+
+		[StructLayout(LayoutKind.Sequential)]
+		private struct BITMAP
+		{
+			public int bmType, bmWidth, bmHeight, bmWidthBytes;
+			public ushort bmPlanes, bmBitsPixel;
+			public IntPtr bmBits;
+		}
+
+		[StructLayout(LayoutKind.Sequential)]
+		private struct BITMAPINFOHEADER
+		{
+			public uint biSize;
+			public int biWidth, biHeight;
+			public ushort biPlanes, biBitCount;
+			public uint biCompression, biSizeImage;
+			public int biXPelsPerMeter, biYPelsPerMeter;
+			public uint biClrUsed, biClrImportant;
+		}
+
+		[StructLayout(LayoutKind.Sequential)]
+		private struct BITMAPINFO
+		{
+			public BITMAPINFOHEADER bmiHeader;
+			public uint bmiColors;
+		}
+
+		[DllImport("gdi32.dll")]
+		private static extern int GetObject(IntPtr hObject, int cbBuffer, ref BITMAP lpvObject);
+
+		[DllImport("gdi32.dll")]
+		private static extern int GetDIBits(IntPtr hdc, IntPtr hbm, uint start, uint cLines, byte[] lpvBits, ref BITMAPINFO lpbmi, uint usage);
+
+		[DllImport("gdi32.dll")]
+		private static extern bool DeleteObject(IntPtr hObject);
+
+		[DllImport("user32.dll")]
+		private static extern IntPtr GetDC(IntPtr hWnd);
+
+		[DllImport("user32.dll")]
+		private static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+
+		/// <summary>是否为需要走 Shell 命名空间/Shell 项接口解析的图标路径。</summary>
+		public static bool IsShellItemIconPath(string path) =>
+			!string.IsNullOrEmpty(path) &&
+			(path.StartsWith("::{", StringComparison.OrdinalIgnoreCase) ||
+			 path.StartsWith(ShellItemPrefix, StringComparison.OrdinalIgnoreCase));
+
+		/// <summary>把真实目录包装成走 Shell 项接口解析的图标路径（取带提供商徽标的图标）。</summary>
+		public static string BuildShellItemIconPath(string realPath) => ShellItemPrefix + realPath;
+
+		private static string GetShellItemParsingName(string path) =>
+			path.StartsWith(ShellItemPrefix, StringComparison.OrdinalIgnoreCase)
+				? path.Substring(ShellItemPrefix.Length)
+				: path;
+
 		public ShellIconHelper(IconCache iconCache)
 		{
 			_iconCache = iconCache;
@@ -121,6 +200,8 @@ namespace FastFluentFilesFolders.Services
 				// 驱动器根目录单独缓存
 				if (IsDriveRoot(fullPath))
 					key = $"_drive_{fullPath}";
+				else if (IsShellItemIconPath(fullPath))
+					key = fullPath.ToLowerInvariant(); // 此电脑/回收站/WSL 等虚拟根及云盘目录各有专属图标
 				else
 					key = "_folder_";
 			}
@@ -155,6 +236,10 @@ namespace FastFluentFilesFolders.Services
 
 		private async Task<ImageSource?> LoadIconCoreAsync(string Path, bool isFolder, bool useLargeIcon, DispatcherQueue dispatcherQueue)
 		{
+			// “::{CLSID}” 虚拟位置 / “shellitem::” 云盘目录：走 Shell 项接口取真实系统图标
+			if (IsShellItemIconPath(Path))
+				return await LoadShellItemIconAsync(GetShellItemParsingName(Path), useLargeIcon, dispatcherQueue);
+
 			var shfi = new SHFILEINFO();
 			uint flags = SHGFI_ICON | (useLargeIcon ? SHGFI_LARGEICON : SHGFI_SMALLICON);
 			uint dwAttributes = 0;
@@ -185,27 +270,7 @@ namespace FastFluentFilesFolders.Services
 				if (pixelData == null)
 					return null;
 
-				// 在 UI 线程创建 WriteableBitmap 并填充数据
-				var tcs = new TaskCompletionSource<ImageSource?>();
-				dispatcherQueue.TryEnqueue(() =>
-				{
-					try
-					{
-						var bitmap = new WriteableBitmap(pixelData.Width, pixelData.Height);
-						using (var stream = bitmap.PixelBuffer.AsStream())
-						{
-							stream.Write(pixelData.Pixels, 0, pixelData.Pixels.Length);
-						}
-						tcs.SetResult(bitmap);
-					}
-					catch (Exception ex)
-					{
-						Debug.WriteLine($"[ShellIconHelper] UI thread error: {ex.Message}");
-						tcs.SetResult(null);
-					}
-				});
-
-				return await tcs.Task;
+				return await CreateImageSourceAsync(pixelData, dispatcherQueue);
 			}
 			catch (Exception ex)
 			{
@@ -268,6 +333,122 @@ namespace FastFluentFilesFolders.Services
 				Height = height;
 				Pixels = pixels;
 			}
+		}
+
+		/// <summary>
+		/// 通过 IShellItemImageFactory 解析 Shell 命名空间（“::{CLSID}”）或普通目录的
+		/// 真实系统图标（此电脑/网络/回收站/WSL/云盘等）。
+		/// </summary>
+		private async Task<ImageSource?> LoadShellItemIconAsync(string parsingName, bool useLargeIcon, DispatcherQueue dispatcherQueue)
+		{
+			IntPtr hBitmap = IntPtr.Zero;
+			IShellItemImageFactory? factory = null;
+			try
+			{
+				var iid = typeof(IShellItemImageFactory).GUID;
+				SHCreateItemFromParsingName(parsingName, IntPtr.Zero, ref iid, out factory);
+				if (factory == null)
+					return null;
+
+				int size = useLargeIcon ? 32 : 16;
+				int hr = factory.GetImage(new SIZE { cx = size, cy = size },
+					SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK, out hBitmap);
+				if (hr != 0 || hBitmap == IntPtr.Zero)
+					return null;
+
+				var pixelData = await Task.Run(() => ExtractHBitmapPixelData(hBitmap));
+				if (pixelData == null)
+					return null;
+
+				return await CreateImageSourceAsync(pixelData, dispatcherQueue);
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine($"[ShellIconHelper] LoadShellItemIconAsync({parsingName}) error: {ex.Message}");
+				return null;
+			}
+			finally
+			{
+				if (hBitmap != IntPtr.Zero)
+					DeleteObject(hBitmap);
+				if (factory != null)
+				{
+					try { Marshal.ReleaseComObject(factory); } catch { }
+				}
+			}
+		}
+
+		/// <summary>
+		/// 从 HBITMAP（GetImage 返回 32bpp 预乘 alpha）提取直通 alpha 的 BGRA 像素数据。
+		/// </summary>
+		private IconPixelData? ExtractHBitmapPixelData(IntPtr hBitmap)
+		{
+			var bm = new BITMAP();
+			if (GetObject(hBitmap, Marshal.SizeOf<BITMAP>(), ref bm) == 0)
+				return null;
+
+			int width = bm.bmWidth;
+			int height = bm.bmHeight;
+			if (width <= 0 || height <= 0)
+				return null;
+
+			var bmi = new BITMAPINFO();
+			bmi.bmiHeader.biSize = (uint)Marshal.SizeOf<BITMAPINFOHEADER>();
+			bmi.bmiHeader.biWidth = width;
+			bmi.bmiHeader.biHeight = -height; // 负值 = 自上而下
+			bmi.bmiHeader.biPlanes = 1;
+			bmi.bmiHeader.biBitCount = 32;
+			bmi.bmiHeader.biCompression = 0; // BI_RGB
+
+			var buffer = new byte[width * height * 4];
+			IntPtr hdc = GetDC(IntPtr.Zero);
+			try
+			{
+				if (GetDIBits(hdc, hBitmap, 0, (uint)height, buffer, ref bmi, 0) == 0)
+					return null;
+			}
+			finally
+			{
+				ReleaseDC(IntPtr.Zero, hdc);
+			}
+
+			// HBITMAP 为预乘 alpha，WriteableBitmap 需要直通 alpha：反预乘
+			for (int i = 0; i < buffer.Length; i += 4)
+			{
+				byte a = buffer[i + 3];
+				if (a != 0 && a != 255)
+				{
+					buffer[i] = (byte)Math.Min(255, buffer[i] * 255 / a);
+					buffer[i + 1] = (byte)Math.Min(255, buffer[i + 1] * 255 / a);
+					buffer[i + 2] = (byte)Math.Min(255, buffer[i + 2] * 255 / a);
+				}
+			}
+
+			return new IconPixelData(width, height, buffer);
+		}
+
+		/// <summary>在 UI 线程用像素数据创建 WriteableBitmap。</summary>
+		private static async Task<ImageSource?> CreateImageSourceAsync(IconPixelData pixelData, DispatcherQueue dispatcherQueue)
+		{
+			var tcs = new TaskCompletionSource<ImageSource?>();
+			dispatcherQueue.TryEnqueue(() =>
+			{
+				try
+				{
+					var bitmap = new WriteableBitmap(pixelData.Width, pixelData.Height);
+					using (var stream = bitmap.PixelBuffer.AsStream())
+					{
+						stream.Write(pixelData.Pixels, 0, pixelData.Pixels.Length);
+					}
+					tcs.SetResult(bitmap);
+				}
+				catch (Exception ex)
+				{
+					Debug.WriteLine($"[ShellIconHelper] UI thread error: {ex.Message}");
+					tcs.SetResult(null);
+				}
+			});
+			return await tcs.Task;
 		}
 
 		/// <summary>

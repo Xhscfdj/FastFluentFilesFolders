@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <UserControl
     x:Class="FastFluentFilesFolders.Views.PropertiesGeneralView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -33,6 +33,7 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -78,8 +79,14 @@
                 <TextBlock Grid.Row="8" Text="{Binding AccessedLabelText}" VerticalAlignment="Center" Margin="0,0,4,0" />
                 <TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding Accessed}" IsTextSelectionEnabled="True" TextWrapping="Wrap" VerticalAlignment="Center" />
 
-                <TextBlock Grid.Row="9" Text="{Binding AttributesLabelText}" VerticalAlignment="Center" Margin="0,0,4,0" />
-                <StackPanel Grid.Row="9" Grid.Column="1" Spacing="6">
+                <TextBlock Grid.Row="9" Text="{Binding ProcessesLabelText}" VerticalAlignment="Center" Margin="0,0,4,0"
+                           Visibility="{Binding HasProcessesInfo, Converter={StaticResource BoolToVisibilityConverter}}" />
+                <TextBlock Grid.Row="9" Grid.Column="1" Text="{Binding Processes}" TextWrapping="Wrap" VerticalAlignment="Center"
+                           Visibility="{Binding HasProcessesInfo, Converter={StaticResource BoolToVisibilityConverter}}"
+                           IsTextSelectionEnabled="True"/>
+
+                <TextBlock Grid.Row="10" Text="{Binding AttributesLabelText}" VerticalAlignment="Center" Margin="0,0,4,0" />
+                <StackPanel Grid.Row="10" Grid.Column="1" Spacing="6">
                     <TextBlock Text="{Binding AttributesSummary}"
                                FontSize="12"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"

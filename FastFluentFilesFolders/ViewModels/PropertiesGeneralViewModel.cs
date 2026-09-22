@@ -1,7 +1,9 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -13,6 +15,7 @@ namespace FastFluentFilesFolders.ViewModels
 	{
 		private readonly FileSystemNodeViewModel _item;
 		private readonly FileAttributes _originalAttributes;
+		private readonly DispatcherQueue? _dispatcher;
 
 		public MultiLanguageStringsViewModel ML => App.ML;
 
@@ -26,6 +29,7 @@ namespace FastFluentFilesFolders.ViewModels
 		public string CreatedLabelText => App.ML.Get("PropertiesCreated");
 		public string ModifiedLabelText => App.ML.Get("PropertiesModified");
 		public string AccessedLabelText => App.ML.Get("PropertiesAccessed");
+		public string ProcessesLabelText => App.ML.Get("PropertiesProcesses");
 		public string AttributesLabelText => App.ML.Get("PropertiesAttributes");
 		public string ReadOnlyLabel => App.ML.Get("PropertiesReadOnly");
 		public string HiddenLabel => App.ML.Get("PropertiesHidden");
@@ -43,6 +47,8 @@ namespace FastFluentFilesFolders.ViewModels
 		[ObservableProperty] private string created = string.Empty;
 		[ObservableProperty] private string modified = string.Empty;
 		[ObservableProperty] private string accessed = string.Empty;
+		[ObservableProperty] private string processes = string.Empty;
+		[ObservableProperty] private bool hasProcessesInfo;
 		[ObservableProperty] private string attributesSummary = string.Empty;
 		[ObservableProperty] private bool isReadOnly;
 		[ObservableProperty] private bool isHidden;
@@ -74,9 +80,11 @@ namespace FastFluentFilesFolders.ViewModels
 				}
 			}
 
+			_dispatcher = DispatcherQueue.GetForCurrentThread();
+
 			Location = GetParentPath(item);
 			Size = item.VisualSize;
-			SizeOnDisk = GetSizeOnDisk(item);
+			SizeOnDisk = item.IsDirectory ? item.VisualSize : GetSizeOnDisk(item);
 
 			if (item.IsDirectory)
 				Contains = string.IsNullOrWhiteSpace(item.ChildrenCountText)
@@ -86,9 +94,82 @@ namespace FastFluentFilesFolders.ViewModels
 			Created = item.FirstCreatedTimeString;
 			Modified = item.LastModifiedTimeString;
 			Accessed = ReadAccessTime(item.FullPath);
+
+			item.PropertyChanged += OnItemPropertyChanged;
+			if (!item.IsDirectory)
+			{
+				HasProcessesInfo = true;
+				Processes = string.IsNullOrWhiteSpace(item.ProcessesUsingThisFile) ? "-" : item.ProcessesUsingThisFile;
+			}
+			else
+			{
+				// 文件夹大小在加载前默认 0B：属性窗口启动时立即触发后台计算。
+				if (!item.IsSizeCalculated)
+					_ = item.CalculateSizeCommand.ExecuteAsync(null);
+				_ = CalculateFolderSizeOnDiskAsync();
+			}
+
 			AttributesSummary = FormatAttributes(_originalAttributes);
 			IsReadOnly = _originalAttributes.HasFlag(FileAttributes.ReadOnly);
 			IsHidden = _originalAttributes.HasFlag(FileAttributes.Hidden);
+		}
+
+		private void OnItemPropertyChanged(object? sender, PropertyChangedEventArgs e)
+		{
+			if (e.PropertyName == nameof(FileSystemNodeViewModel.ProcessesUsingThisFile))
+			{
+				Processes = string.IsNullOrWhiteSpace(_item.ProcessesUsingThisFile) ? "-" : _item.ProcessesUsingThisFile;
+			}
+			else if (_item.IsDirectory &&
+			         (e.PropertyName == nameof(FileSystemNodeViewModel.VisualSize) ||
+			          e.PropertyName == nameof(FileSystemNodeViewModel.ExactSize)))
+			{
+				Size = _item.VisualSize;
+			}
+		}
+
+		private async System.Threading.Tasks.Task CalculateFolderSizeOnDiskAsync()
+		{
+			try
+			{
+				var path = _item.FullPath;
+				long diskBytes = await System.Threading.Tasks.Task.Run(() => CalculateAllocatedFolderSize(path));
+				if (_dispatcher != null)
+					_dispatcher.TryEnqueue(() => SizeOnDisk = FormatSizeWithBytes(diskBytes));
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine($"[Properties] Folder size-on-disk calculation failed: {ex.Message}");
+			}
+		}
+
+		private static long CalculateAllocatedFolderSize(string fullPath)
+		{
+			long total = 0;
+			try
+			{
+				foreach (var file in FileSystemNodeViewModel.SafeGetFiles(fullPath))
+				{
+					try
+					{
+						var low = GetCompressedFileSize(file, out uint high);
+						total += ((long)high << 32) | low;
+					}
+					catch { }
+				}
+				foreach (var subDir in FileSystemNodeViewModel.SafeGetDirs(fullPath))
+				{
+					total += CalculateAllocatedFolderSize(subDir);
+				}
+			}
+			catch { }
+			return total;
+		}
+
+		private string FormatSizeWithBytes(long bytes)
+		{
+			if (bytes <= 0) return "-";
+			return $"{FileSystemNodeViewModel.FormatFileSize(bytes)} ({string.Format(App.ML.Get("PropertiesBytesFmt"), bytes.ToString("N0"))})";
 		}
 
 		/// <summary>应用重命名与属性修改；失败返回 false 并填充 LastError。</summary>

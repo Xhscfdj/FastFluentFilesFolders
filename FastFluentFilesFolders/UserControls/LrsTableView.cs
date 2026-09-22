@@ -53,14 +53,17 @@ namespace FastFluentFilesFolders.UserControls
 
         /// <summary>
         /// 切换动画方式：
-        /// Default = 控件默认容器过渡；Fade = 关闭逐行滚动过渡 + 整表淡入；None = 无动画。
+        /// Default = 控件默认容器过渡；Fade = 关闭逐行入场过渡 + 整表淡入；None = 无动画。
+        /// 除 None 外都保留单条增删动画：
+        /// AddDeleteThemeTransition → 新增项目淡入；
+        /// RepositionThemeTransition → 删除项目后，下方项目自动上移补位。
         /// </summary>
         private void ApplyTransitionMode(string mode)
         {
             switch (mode)
             {
                 case "Fade":
-                    ItemContainerTransitions = new TransitionCollection();
+                    ItemContainerTransitions = CreateIncrementalTransitions();
                     _fadeEnabled = true;
                     break;
                 case "None":
@@ -68,11 +71,28 @@ namespace FastFluentFilesFolders.UserControls
                     _fadeEnabled = false;
                     break;
                 default: // "Default"
-                    ItemContainerTransitions = null; // 清除本地值，回到控件默认过渡
+                    ItemContainerTransitions = CreateDefaultTransitions();
                     _fadeEnabled = false;
                     break;
             }
         }
+
+        /// <summary>仅保留单条增删/重排动画（不包含入场动画，避免切换文件夹时逐行出现）。</summary>
+        private static TransitionCollection CreateIncrementalTransitions() => new()
+        {
+            new AddDeleteThemeTransition(),
+            new RepositionThemeTransition { IsStaggeringEnabled = false },
+        };
+
+        /// <summary>与 TableView 默认样式一致的容器过渡，并额外补充重排动画。</summary>
+        private static TransitionCollection CreateDefaultTransitions() => new()
+        {
+            new AddDeleteThemeTransition(),
+            new ContentThemeTransition(),
+            new ReorderThemeTransition(),
+            new EntranceThemeTransition { IsStaggeringEnabled = false },
+            new RepositionThemeTransition { IsStaggeringEnabled = false },
+        };
 
         private void FadeInContent()
         {
@@ -103,9 +123,6 @@ namespace FastFluentFilesFolders.UserControls
             if (_groupedSource != null)
                 _groupedSource.FlatListChanged -= OnFlatListChanged;
 
-            // 切换文件夹前先复位滚动位置，避免 TableView 保留旧偏移造成“新项滚动覆盖老项”。
-            ResetScrollPosition();
-
             var source = new GroupedFileList();
             source.FlatListChanged += OnFlatListChanged;
             source.SetItems(items, grouped);
@@ -122,8 +139,6 @@ namespace FastFluentFilesFolders.UserControls
         {
             if (_groupedSource != null)
                 _groupedSource.FlatListChanged -= OnFlatListChanged;
-
-            ResetScrollPosition();
 
             source.FlatListChanged += OnFlatListChanged;
             _groupedSource = source;
@@ -225,6 +240,8 @@ namespace FastFluentFilesFolders.UserControls
         /// 切换文件夹前把滚动位置复位到顶部。TableView/ListView 内部通常有多个 ScrollViewer
         /// （表头横向滚动、数据行纵向滚动），只找到第一个可能命中表头那个，导致旧表纵向偏移被保留、
         /// 新表顺着旧偏移“滚动出现”。这里遍历复位所有 ScrollViewer（含真正滚动数据行的那个）。
+        /// 注意：为对齐快速参考版 b284133a（其 UpdateSource 不做滚动复位），当前已不在
+        /// UpdateSource/UpdateSourcePrebuilt 中调用；若再次出现“偏移保留”，可重新调用本方法。
         /// </summary>
         public void ResetScrollPosition()
         {

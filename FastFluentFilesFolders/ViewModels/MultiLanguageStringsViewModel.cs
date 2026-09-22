@@ -22,6 +22,7 @@ namespace FastFluentFilesFolders.ViewModels
             nameof(PinnedShortcutsTitle),
             nameof(CmdCut), nameof(CmdCopy), nameof(CmdPaste), nameof(CmdRename), nameof(CmdDelete),
             nameof(CmdPermanentDelete), nameof(CmdOpen), nameof(CmdOpenWith), nameof(CmdCopyPath),
+            nameof(CmdPinToQuickAccess), nameof(CmdUnpinFromQuickAccess),
             nameof(CmdCopyFileAddress), nameof(CmdProperties), nameof(NewTextDocument), nameof(NewShortcut), nameof(NewFile),
             nameof(NewExcelSpreadsheet), nameof(NewWordDocument), nameof(NewPowerPointPresentation),
             nameof(CmdNew), nameof(CmdNewFolder), nameof(CmdShowMoreOptions),
@@ -48,7 +49,10 @@ namespace FastFluentFilesFolders.ViewModels
             nameof(PropertiesSize), nameof(PropertiesModified), nameof(PropertiesCreated),
             nameof(PropertiesProcesses),
             nameof(PropertiesClose), nameof(PropertiesFolder), nameof(PropertiesFile), nameof(PropertiesBytesFmt),
-            nameof(FileOpProgressFmt), nameof(FileOpFailed),
+            nameof(FileOpProgressFmt), nameof(FileOpFailed), nameof(FileOpClipboardFailed),
+            nameof(FileOpClipboardEmpty),
+            nameof(ConflictTitle), nameof(ConflictMessageFmt), nameof(ConflictHint), nameof(ConflictReplace),
+            nameof(ConflictKeepBoth), nameof(ConflictSkip),
             nameof(FileOperationsTitle), nameof(ClearCompleted), nameof(NoFileOperations),
             nameof(NewFileDefault), nameof(NewFolderDefault), nameof(NewTextDocumentDefault),
             nameof(NewShortcutDefault), nameof(NewExcelDefault), nameof(NewWordDefault), nameof(NewPPTDefault),
@@ -57,6 +61,12 @@ namespace FastFluentFilesFolders.ViewModels
             nameof(TimeGroupToday), nameof(TimeGroupYesterday), nameof(TimeGroupEarlierThisWeek),
             nameof(TimeGroupLastWeek), nameof(TimeGroupEarlierThisMonth), nameof(TimeGroupLastMonth),
             nameof(TimeGroupEarlierThisYear), nameof(TimeGroupLastYear), nameof(TimeGroupLongAgo),
+            nameof(TreeThisPC), nameof(TreeNetwork), nameof(TreeLinux), nameof(TreeRecycleBin), nameof(TreeCloudDrives),
+            nameof(RecycleRestore), nameof(RecycleDeleteConfirmTitle), nameof(RecycleDeleteConfirmMessage),
+            nameof(RecycleEmpty), nameof(RecycleEmptyConfirmTitle), nameof(RecycleEmptyConfirmMessage),
+            nameof(RecycleRestoreConflict), nameof(RecycleRestoreFailed),
+            nameof(RecycleDeleteFailed), nameof(RecycleEmptyFailed),
+            nameof(ColumnOriginalLocation),
         };
 
         public MultiLanguageStringsViewModel(LocalizationService loc)
@@ -115,6 +125,8 @@ namespace FastFluentFilesFolders.ViewModels
         public string CmdOpen => _loc.GetString("CmdOpen");
         public string CmdOpenWith => _loc.GetString("CmdOpenWith");
         public string CmdCopyPath => _loc.GetString("CmdCopyPath");
+        public string CmdPinToQuickAccess => _loc.GetString("CmdPinToQuickAccess");
+        public string CmdUnpinFromQuickAccess => _loc.GetString("CmdUnpinFromQuickAccess");
         public string CmdCopyFileAddress => _loc.GetString("CmdCopyFileAddress");
         public string GoHome => _loc.GetString("GoHome");
         public string CmdProperties => _loc.GetString("CmdProperties");
@@ -199,6 +211,14 @@ namespace FastFluentFilesFolders.ViewModels
         public string PropertiesBytesFmt => _loc.GetString("PropertiesBytesFmt");
         public string FileOpProgressFmt => _loc.GetString("FileOpProgressFmt");
         public string FileOpFailed => _loc.GetString("FileOpFailed");
+        public string FileOpClipboardFailed => _loc.GetString("FileOpClipboardFailed");
+        public string FileOpClipboardEmpty => _loc.GetString("FileOpClipboardEmpty");
+        public string ConflictTitle => _loc.GetString("ConflictTitle");
+        public string ConflictMessageFmt => _loc.GetString("ConflictMessageFmt");
+        public string ConflictHint => _loc.GetString("ConflictHint");
+        public string ConflictReplace => _loc.GetString("ConflictReplace");
+        public string ConflictKeepBoth => _loc.GetString("ConflictKeepBoth");
+        public string ConflictSkip => _loc.GetString("ConflictSkip");
         public string FileOperationsTitle => _loc.GetString("FileOperationsTitle");
         public string ClearCompleted => _loc.GetString("ClearCompleted");
         public string NoFileOperations => _loc.GetString("NoFileOperations");
@@ -227,6 +247,24 @@ namespace FastFluentFilesFolders.ViewModels
         public string TimeGroupEarlierThisYear => _loc.GetString("TimeGroup.EarlierThisYear");
         public string TimeGroupLastYear => _loc.GetString("TimeGroup.LastYear");
         public string TimeGroupLongAgo => _loc.GetString("TimeGroup.LongAgo");
+
+        // ===== 侧栏位置与回收站操作 =====
+        public string TreeThisPC => _loc.GetString("Tree.ThisPC");
+        public string TreeNetwork => _loc.GetString("Tree.Network");
+        public string TreeLinux => _loc.GetString("Tree.Linux");
+        public string TreeRecycleBin => _loc.GetString("Tree.RecycleBin");
+        public string TreeCloudDrives => _loc.GetString("Tree.CloudDrives");
+        public string RecycleRestore => _loc.GetString("Recycle.Restore");
+        public string RecycleDeleteConfirmTitle => _loc.GetString("Recycle.DeleteConfirmTitle");
+        public string RecycleDeleteConfirmMessage => _loc.GetString("Recycle.DeleteConfirmMessage");
+        public string RecycleEmpty => _loc.GetString("Recycle.Empty");
+        public string RecycleEmptyConfirmTitle => _loc.GetString("Recycle.EmptyConfirmTitle");
+        public string RecycleEmptyConfirmMessage => _loc.GetString("Recycle.EmptyConfirmMessage");
+        public string RecycleRestoreConflict => _loc.GetString("Recycle.RestoreConflict");
+        public string RecycleRestoreFailed => _loc.GetString("Recycle.RestoreFailed");
+        public string RecycleDeleteFailed => _loc.GetString("Recycle.DeleteFailed");
+        public string RecycleEmptyFailed => _loc.GetString("Recycle.EmptyFailed");
+        public string ColumnOriginalLocation => _loc.GetString("Column.OriginalLocation");
 
         public void RefreshAll()
         {

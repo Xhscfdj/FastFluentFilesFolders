@@ -1,0 +1,64 @@
+name: ci-docs
+
+on:
+  push:
+    branches: main
+    paths-ignore:
+      - 'samples/**'
+  pull_request:
+    branches: main
+    paths-ignore:
+      - 'samples/**'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4.1.4
+  
+    - name: Setup .NET Core SDK
+      uses: actions/setup-dotnet@v5.0.1
+      with:
+        dotnet-version: |
+          8.0.x
+          9.0.x
+          10.0.100
+
+    - name: Install DocFX
+      run: dotnet tool update -g docfx
+
+    - name: Add DocFX to PATH
+      run: echo "${HOME}/.dotnet/tools" >> $GITHUB_PATH
+
+    - name: Build documentation
+      run: docfx docs/docfx.json
+
+    - name: Upload site artifact (PR preview)
+      if: github.event_name == 'pull_request'
+      uses: actions/upload-artifact@v4
+      with:
+        name: docs-site
+        path: artifacts/_site
+        retention-days: 14
+
+    - name: Upload pages artifact (deploy)
+      if: github.event_name == 'push'
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: artifacts/_site
+
+  publish-docs:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build]
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pages: write
+      id-token: write
+    steps:
+    - id: deployment
+      uses: actions/deploy-pages@v4

@@ -1,4 +1,4 @@
-﻿using FastFluentFilesFolders.Extensions;
+using FastFluentFilesFolders.Extensions;
 using FastFluentFilesFolders.Extensions.Interfaces;
 using FastFluentFilesFolders.Extensions.Extensions;
 using FastFluentFilesFolders.Services;
@@ -9,43 +9,56 @@ using Microsoft.UI.Xaml;
 using System;
 using System.Diagnostics;
 
-// To learn more about WinUI, the WinUI project structure,
-// and more about our project templates, see: http://aka.ms/winui-project-info.
-
 namespace FastFluentFilesFolders
 {
-    /// <summary>
-    /// Provides application-specific behavior to supplement the default Application class.
-    /// </summary>
     public partial class App : Application
     {
-		private Window? _window;
+        private Window? _window;
         public static Window? MainWindow { get; private set; }
-		public static MainWindowViewModel SharedViewModel { get; private set; }
-		public static IServiceProvider Services { get; private set; }
+        public static MainWindowViewModel SharedViewModel { get; private set; }
+        public static IServiceProvider Services { get; private set; }
         public static LocalizationService LocalizationService { get; private set; }
         public static MultiLanguageStringsViewModel ML { get; private set; }
         public static PluginManager PluginManager { get; private set; }
         public static MainIconProvider SharedIconProvider { get; private set; }
-		/// <summary>
-		/// Initializes the singleton application object.  This is the first line of authored code
-		/// executed, and as such is the logical equivalent of main() or WinMain().
-		/// </summary>
-		public App()
+
+        private static void CrashLog(string msg)
         {
-            InitializeComponent();
+            try
+            {
+                var path = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "FastFluentFilesFolders", "crash.log");
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+                System.IO.File.AppendAllText(path, DateTime.Now.ToString("HH:mm:ss.fff") + " " + msg + Environment.NewLine);
+            }
+            catch { }
+        }
+
+        public App()
+        {
+            try
+            {
+                InitializeComponent();
+            }
+            catch (Exception ex)
+            {
+                CrashLog("InitializeComponent failed: " + ex);
+                throw;
+            }
+
             var services = new ServiceCollection();
             services.AddSingleton(new Configs());
             var iconCache = new IconCache(maxCapacity: 1500);
             services.AddSingleton(iconCache);
             services.AddSingleton<MainIconProvider>();
             services.AddSingleton<IIconProvider>(sp => sp.GetRequiredService<MainIconProvider>());
-			services.AddSingleton<IFileOperator, FileOperator>();
-			services.AddSingleton<LocalizationService>();
-			services.AddSingleton<MultiLanguageStringsViewModel>();
-			services.AddSingleton<PluginManager>();
-			services.AddSingleton<IExtension, SamplePlugin>();
-			services.AddSingleton<IExtension, ArchivePlugin>();
+            services.AddSingleton<IFileOperator, FileOperator>();
+            services.AddSingleton<LocalizationService>();
+            services.AddSingleton<MultiLanguageStringsViewModel>();
+            services.AddSingleton<PluginManager>();
+            services.AddSingleton<IExtension, SamplePlugin>();
+            services.AddSingleton<IExtension, ArchivePlugin>();
             Services = services.BuildServiceProvider();
 
             var configs = Services.GetRequiredService<Configs>();
@@ -55,35 +68,39 @@ namespace FastFluentFilesFolders
             LocalizationService = locService;
             ML = Services.GetRequiredService<MultiLanguageStringsViewModel>();
             ShellIconHelper.Configs = configs;
-			this.UnhandledException += (s, e) =>
-			{
-				Debug.WriteLine($"未处理异常: {e.Exception}");
-				e.Handled = true; // 防止立即崩溃，方便调试
-			};
-		}
+            this.UnhandledException += (s, e) =>
+            {
+                Debug.WriteLine("未处理异常: " + e.Exception);
+                CrashLog("UnhandledException: " + e.Exception);
+                e.Handled = true;
+            };
+        }
 
-        /// <summary>
-        /// Invoked when the application is launched.
-        /// </summary>
-        /// <param name="args">Details about the launch request and process.</param>
-		protected override async void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
+        protected override async void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
         {
-			// 在 UI 线程上创建共享 ViewModel
-			var dispatcher = DispatcherQueue.GetForCurrentThread();
-			var configs = Services.GetRequiredService<Configs>();
-			var fileOperator = Services.GetRequiredService<IFileOperator>();
-			var iconProvider = Services.GetRequiredService<IIconProvider>();
-			SharedViewModel = new MainWindowViewModel(iconProvider, dispatcher, configs, fileOperator, ML);
+            try
+            {
+                var dispatcher = DispatcherQueue.GetForCurrentThread();
+                var configs = Services.GetRequiredService<Configs>();
+                var fileOperator = Services.GetRequiredService<IFileOperator>();
+                var iconProvider = Services.GetRequiredService<IIconProvider>();
+                SharedViewModel = new MainWindowViewModel(iconProvider, dispatcher, configs, fileOperator, ML);
 
-			PluginManager = Services.GetRequiredService<PluginManager>();
-			PluginManager.SetDispatcherQueue(dispatcher);
+                PluginManager = Services.GetRequiredService<PluginManager>();
+                PluginManager.SetDispatcherQueue(dispatcher);
 
-			_window = new Views.MainWindowView();
-			MainWindow = _window;
-			_window.Activate();
+                _window = new Views.MainWindowView();
+                MainWindow = _window;
+                _window.Activate();
 
-			_ = PluginManager.LoadAllAsync();
-			_ = SharedViewModel.DeferredInitializeAsync();
-		}
+                _ = PluginManager.LoadAllAsync();
+                _ = SharedViewModel.DeferredInitializeAsync();
+            }
+            catch (Exception ex)
+            {
+                CrashLog("OnLaunched failed: " + ex);
+                throw;
+            }
+        }
     }
 }

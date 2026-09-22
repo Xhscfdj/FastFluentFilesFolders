@@ -1,4 +1,4 @@
-using FastFluentFilesFolders.ViewModels;
+﻿using FastFluentFilesFolders.ViewModels;
 using Microsoft.UI.Xaml.Controls;
 
 namespace FastFluentFilesFolders.Views

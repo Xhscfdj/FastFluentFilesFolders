@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using FastFluentFilesFolders.Services;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -18,7 +19,9 @@ namespace FastFluentFilesFolders.ViewModels
 		private readonly List<FileSystemAccessRule> _allRules = new();
 		private string _owner = string.Empty;
 		private string _group = string.Empty;
+		private string _pendingOwner = string.Empty;
 		private bool _edited;
+		private bool _ownerChanged;
 		private bool _syncing;
 
 		public ObservableCollection<SecurityPrincipalInfo> Principals { get; } = new();
@@ -37,6 +40,10 @@ namespace FastFluentFilesFolders.ViewModels
 		public string WriteLabel => App.ML.Get("PropertiesSecurityWrite");
 		public string SpecialLabel => App.ML.Get("PropertiesSecuritySpecial");
 		public string PermissionHintText => App.ML.Get("PropertiesSecurityReadOnlyHint");
+		public string OwnerSectionLabel => App.ML.Get("PropertiesSecurityOwnerSection");
+		public string OwnerCurrentLabel => App.ML.Get("PropertiesSecurityOwnerCurrent");
+		public string OwnerChangeLabel => App.ML.Get("PropertiesSecurityOwnerChange");
+		public string OwnerPendingHint => App.ML.Get("PropertiesSecurityOwnerPendingHint");
 
 		[ObservableProperty] private SecurityPrincipalInfo? selectedPrincipal;
 		[ObservableProperty] private string objectCaption = string.Empty;
@@ -51,6 +58,8 @@ namespace FastFluentFilesFolders.ViewModels
 		[ObservableProperty] private string permissionsTitle = string.Empty;
 		[ObservableProperty] private bool showListDirectoryRow;
 		[ObservableProperty] private bool showSpecialRow;
+		[ObservableProperty] private string ownerDisplay = string.Empty;
+		[ObservableProperty] private bool ownerPending;
 
 		// 允许/拒绝矩阵（TwoWay 绑定）
 		[ObservableProperty] private bool allowFullControl;
@@ -114,6 +123,10 @@ namespace FastFluentFilesFolders.ViewModels
 				_allRules.Clear();
 				Principals.Clear();
 				_edited = false;
+				_ownerChanged = false;
+				_pendingOwner = string.Empty;
+				OwnerPending = false;
+				OwnerDisplay = string.Empty;
 				LastError = null;
 
 				var owner = string.Empty;
@@ -168,6 +181,7 @@ namespace FastFluentFilesFolders.ViewModels
 				ObjectCaption = $"{App.ML.Get("PropertiesSecurityObject")} {_item.FullPath}";
 				OwnerCaption = $"{App.ML.Get("PropertiesSecurityOwner")} {owner}";
 				HasOwner = owner.Length > 0;
+				OwnerDisplay = owner.Length > 0 ? owner : App.ML.Get("PropertiesSecurityOwnerUnknown");
 				HasPrincipals = Principals.Count > 0;
 				HasNoPrincipals = Principals.Count == 0;
 				HasError = false;
@@ -282,42 +296,70 @@ namespace FastFluentFilesFolders.ViewModels
 
 		// ------------------------------------------------------------ 应用
 
-		/// <summary>是否需要在写入前弹出警告（受保护系统资源且已编辑）。</summary>
-		public bool NeedsWarningBeforeApply => _edited && IsProtectedSystemResource();
+		// ------------------------------------------------------------ 所有者
 
-		/// <summary>执行 ACL 写入（仅 DACL / Access 段）。成功返回 true。</summary>
-		public bool ApplyCore()
+		/// <summary>当前（已生效）所有者，供选择弹窗预填。</summary>
+		public string CurrentOwnerValue => _owner;
+
+		/// <summary>当前显示的所有者（含待更改值），供选择弹窗预填。</summary>
+		public string SuggestedOwnerValue => _ownerChanged ? _pendingOwner : _owner;
+
+		/// <summary>校验并暂存新的所有者；点击“应用/确定”时才真正写入。名称无效返回 false。</summary>
+		public bool TrySetOwner(string? input)
 		{
-			LastError = null;
-			if (!_edited || Principals.Count == 0)
-				return true;
+			if (string.IsNullOrWhiteSpace(input))
+				return false;
 
 			try
 			{
-				if (_item.IsDirectory)
+				var account = new NTAccount(input.Trim());
+				var sid = (SecurityIdentifier)account.Translate(typeof(SecurityIdentifier));
+				var canonical = ((NTAccount)sid.Translate(typeof(NTAccount))).Value;
+
+				if (string.Equals(canonical, _owner, StringComparison.OrdinalIgnoreCase))
 				{
-					var dirInfo = new DirectoryInfo(_item.FullPath);
-					var security = dirInfo.GetAccessControl(AccessControlSections.Access);
-					ApplyPrincipalRules(security);
-					dirInfo.SetAccessControl(security);
+					_pendingOwner = string.Empty;
+					_ownerChanged = false;
 				}
 				else
 				{
-					var fileInfo = new FileInfo(_item.FullPath);
-					var security = fileInfo.GetAccessControl(AccessControlSections.Access);
-					ApplyPrincipalRules(security);
-					fileInfo.SetAccessControl(security);
+					_pendingOwner = canonical;
+					_ownerChanged = true;
 				}
 
+				OwnerDisplay = _ownerChanged ? _pendingOwner : _owner;
+				OwnerPending = _ownerChanged;
+				return true;
+			}
+			catch
+			{
+				return false;
+			}
+		}
+
+		/// <summary>是否需要在写入前弹出警告（受保护系统资源且已编辑）。</summary>
+		public bool NeedsWarningBeforeApply => (_edited || _ownerChanged) && IsProtectedSystemResource();
+
+		/// <summary>执行权限/所有者写入。成功返回 true（不在此处刷新 UI，由调用方在 UI 线程调用 <see cref="ReloadState"/>）。</summary>
+		public bool ApplyCore()
+		{
+			LastError = null;
+			if (!_edited && !_ownerChanged)
+				return true;
+
+			if (_ownerChanged)
+				PrivilegeHelper.EnableOwnershipPrivileges();
+
+			try
+			{
+				ApplyInProcess();
 				_edited = false;
-				ReloadState();
+				_ownerChanged = false;
 				return true;
 			}
 			catch (UnauthorizedAccessException ex)
 			{
-				Debug.WriteLine($"[Properties] Apply security changes denied: {ex.Message}");
-				LastError = App.ML.Get("PropertiesSecurityAccessDeniedHint");
-				return false;
+				Debug.WriteLine($"[Properties] In-process security apply denied: {ex.Message}; requesting elevation.");
 			}
 			catch (Exception ex)
 			{
@@ -325,6 +367,94 @@ namespace FastFluentFilesFolders.ViewModels
 				LastError = ex.Message;
 				return false;
 			}
+
+			// 进程内权限不足：向用户请求管理员授权后以提升进程重试。
+			if (TryApplyElevated(out var cancelled, out var elevationError))
+			{
+				_edited = false;
+				_ownerChanged = false;
+				return true;
+			}
+
+			if (cancelled)
+			{
+				LastError = App.ML.Get("PropertiesSecurityElevationCancelled");
+			}
+			else if (_ownerChanged)
+			{
+				var baseMessage = App.ML.Get("PropertiesSecurityOwnerChangeFailed");
+				LastError = string.IsNullOrWhiteSpace(elevationError)
+					? baseMessage
+					: $"{baseMessage}\n\n{elevationError}";
+			}
+			else
+			{
+				LastError = string.IsNullOrWhiteSpace(elevationError)
+					? App.ML.Get("PropertiesSecurityAccessDeniedHint")
+					: $"{App.ML.Get("PropertiesSecurityAccessDeniedHint")}\n\n{elevationError}";
+			}
+			return false;
+		}
+
+		private void ApplyInProcess()
+		{
+			var sections = AccessControlSections.Access;
+			if (_ownerChanged)
+				sections |= AccessControlSections.Owner;
+
+			if (_item.IsDirectory)
+			{
+				var dirInfo = new DirectoryInfo(_item.FullPath);
+				var security = dirInfo.GetAccessControl(sections);
+				if (_edited)
+					ApplyPrincipalRules(security);
+				if (_ownerChanged)
+					security.SetOwner(new NTAccount(_pendingOwner));
+				dirInfo.SetAccessControl(security);
+			}
+			else
+			{
+				var fileInfo = new FileInfo(_item.FullPath);
+				var security = fileInfo.GetAccessControl(sections);
+				if (_edited)
+					ApplyPrincipalRules(security);
+				if (_ownerChanged)
+					security.SetOwner(new NTAccount(_pendingOwner));
+				fileInfo.SetAccessControl(security);
+			}
+		}
+
+		/// <summary>构建变更快照并请求 UAC 提升，由管理员进程写入。</summary>
+		private bool TryApplyElevated(out bool cancelled, out string? error)
+		{
+			var rules = new List<SecurityRuleChange>();
+			foreach (var p in Principals)
+			{
+				if (!p.Changed)
+					continue;
+
+				rules.Add(new SecurityRuleChange
+				{
+					Identity = p.Identity,
+					Allow = (long)p.Allowed,
+					Deny = (long)p.Denied,
+					Inheritance = (int)(p.HasExplicitRules
+						? p.InheritanceFlags
+						: _item.IsDirectory ? InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit : InheritanceFlags.None),
+					Propagation = (int)(p.HasExplicitRules ? p.PropagationFlags : PropagationFlags.None)
+				});
+			}
+
+			var request = new SecurityChangeRequest
+			{
+				Path = _item.FullPath,
+				IsDirectory = _item.IsDirectory,
+				Owner = _ownerChanged ? _pendingOwner : null,
+				Rules = rules
+			};
+
+			var ok = ElevatedSecurityHelper.TryApply(request, out cancelled, out error);
+			return ok;
 		}
 
 		private void ApplyPrincipalRules(FileSystemSecurity security)

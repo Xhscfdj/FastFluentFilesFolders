@@ -365,46 +365,72 @@ namespace FastFluentFilesFolders.UserControls
             if (string.IsNullOrEmpty(path))
                 return;
 
-            var parts = ParsePath(path);
-            for (int i = 0; i < parts.Length; i++)
+            // 侧栏虚拟位置（此电脑/网络/回收站/云盘）：单段面包屑并显示友好名称
+            var virtualName = App.SharedViewModel?.GetSidebarDisplayName(path);
+            if (virtualName != null)
             {
-                var displayName = parts[i];
-                string fullPath;
-                if (i == 0 && path.StartsWith("\\\\"))
-                {
-                    fullPath = string.Join("\\", parts.Take(2));
-                    if (displayName == fullPath)
-                        continue;
-                }
-                else if (i == 0)
-                {
-                    fullPath = parts[0] + "\\";
-                }
-                else
-                {
-                    var rootPrefix = path.StartsWith("\\\\")
-                        ? string.Join("\\", parts.Take(2))
-                        : parts[0] + "\\";
-                    var remaining = parts.Skip(path.StartsWith("\\\\") ? 2 : 1).Take(i - (path.StartsWith("\\\\") ? 1 : 0));
-                    fullPath = path.StartsWith("\\\\")
-                        ? rootPrefix + "\\" + string.Join("\\", remaining) + "\\" + displayName
-                        : parts[0] + "\\" + string.Join("\\", parts.Skip(1).Take(i));
-                }
-
-                fullPath = fullPath.TrimEnd('\\');
-                if (fullPath.Length == 2 && fullPath[1] == ':')
-                    fullPath += "\\";
-
-                var segment = new BreadcrumbSegment
-                {
-                    DisplayName = displayName,
-                    FullPath = fullPath,
-                    IsLast = (i == parts.Length - 1),
-                    NavigateCommand = NavigateCommand,
-                    NavigateSubCommand = NavigateSubCommand
-                };
-                Segments.Add(segment);
+                AddSegment(path, virtualName, isLast: true);
+                return;
             }
+
+            var isUnc = path.StartsWith("\\\\", StringComparison.Ordinal);
+            var trimmed = path.TrimEnd('\\');
+            if (trimmed.Length == 0)
+                return;
+
+            string[] parts = isUnc
+                ? trimmed.Substring(2).Split('\\')
+                : trimmed.Split('\\', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+                return;
+
+            var crumbs = new List<(string Display, string FullPath)>();
+            if (isUnc)
+            {
+                var acc = "\\\\" + parts[0];
+                crumbs.Add((parts[0], acc));
+                for (int i = 1; i < parts.Length; i++)
+                {
+                    acc = acc + "\\" + parts[i];
+                    crumbs.Add((parts[i], acc));
+                }
+            }
+            else
+            {
+                // 本地路径：把 “C:” 还原成 “C:\” 作为根段
+                var drive = parts[0].Length == 1 && path.Length > 1 && path[1] == ':'
+                    ? parts[0] + ":"
+                    : parts[0];
+                var acc = drive + "\\";
+                crumbs.Add((parts[0], acc));
+                for (int i = 1; i < parts.Length; i++)
+                {
+                    acc = acc + parts[i];
+                    crumbs.Add((parts[i], acc));
+                    acc = acc + "\\";
+                }
+            }
+
+            for (int i = 0; i < crumbs.Count; i++)
+            {
+                var fullPath = crumbs[i].FullPath;
+                // 驱动器根 “C:\” 保留末尾反斜杠
+                if (!(i == 0 && !isUnc && fullPath.EndsWith(":\\")))
+                    fullPath = fullPath.TrimEnd('\\');
+                AddSegment(fullPath, crumbs[i].Display, i == crumbs.Count - 1);
+            }
+        }
+
+        private void AddSegment(string fullPath, string displayName, bool isLast)
+        {
+            Segments.Add(new BreadcrumbSegment
+            {
+                DisplayName = displayName,
+                FullPath = fullPath,
+                IsLast = isLast,
+                NavigateCommand = NavigateCommand,
+                NavigateSubCommand = NavigateSubCommand
+            });
         }
 
         private string[] ParsePath(string path)

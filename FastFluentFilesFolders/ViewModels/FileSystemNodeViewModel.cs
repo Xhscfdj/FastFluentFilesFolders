@@ -1,4 +1,4 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI;
 using FastFluentFilesFolders.Services;
@@ -18,6 +18,27 @@ using System.Threading.Tasks;
 
 namespace FastFluentFilesFolders.ViewModels
 {
+	/// <summary>目录树/表格节点的类型（用于区分物理文件夹与侧栏特殊位置）。</summary>
+	public enum FileNodeKind
+	{
+		/// <summary>普通物理文件夹（默认）</summary>
+		Folder,
+		/// <summary>驱动器（C:\、D:\ 等）</summary>
+		Drive,
+		/// <summary>此电脑（所有驱动器入口）</summary>
+		ThisPc,
+		/// <summary>网络</summary>
+		Network,
+		/// <summary>Linux（WSL 根）</summary>
+		Wsl,
+		/// <summary>云盘分组（OneDrive 等）</summary>
+		CloudGroup,
+		/// <summary>回收站</summary>
+		RecycleBin,
+		/// <summary>回收站内的条目</summary>
+		RecycleItem
+	}
+
 	public partial class FileSystemNodeViewModel : ViewModelBase
 	{
 		// 构造函数（统一入口）
@@ -38,13 +59,14 @@ namespace FastFluentFilesFolders.ViewModels
 				_configs = configs;
 			}
 			FullPath = fullPath;
+			IconSourcePath = fullPath;
 			IsDirectory = isDirectory;
 			// 设置名称和扩展名
 			if (isDirectory && !IsPlaceholder)
 			{
 				// 对于驱动器根目录，名称为 "C:\" 形式
 				Children.Add(new PlaceholderNodeViewModel());
-				Name = (fullPath.Length == 3 && fullPath.EndsWith(":\\")) ? fullPath : Path.GetFileName(fullPath.TrimEnd('\\'));
+				Name = (fullPath.Length == 3 && fullPath.EndsWith(":\\")) ? fullPath : GetDirectoryDisplayName(fullPath);
 				Extension = string.Empty;
 				IsSpecialFolder = ShellIconHelper.IsSpecialFolder(fullPath);
 				if (_configs != null && _configs.IsTimeGroupedFolder(fullPath))
@@ -81,12 +103,44 @@ namespace FastFluentFilesFolders.ViewModels
 		private readonly DispatcherQueue _uiDispatcherQueue;
 		private bool _isLoaded;
 		private bool _isCounting;
+		// 驱动器根枚举失败后的“自动重试”只允许一次，防止失败→重试→再失败的无限循环
+		private bool _childrenRetryScheduled;
 		private bool _isInited;
 		private bool _isLazyLoad;
 		private bool _hasBasicInfo;
 		public bool IsStandalone { get; set; }
 		// 父节点引用（目录树节点加载子项时回填），用于 O(深度) 的祖先快速查找
 		public FileSystemNodeViewModel? Parent { get; set; }
+
+		/// <summary>节点类型（物理文件夹为 Folder）。</summary>
+		public FileNodeKind NodeKind { get; set; } = FileNodeKind.Folder;
+
+		/// <summary>图标不可用时的 Segoe Fluent/MDL2 回退字形（侧栏特殊节点使用）。</summary>
+		public string IconGlyph { get; set; } = string.Empty;
+
+		/// <summary>
+		/// 解析图标所用的路径，默认为 FullPath。WSL/云盘分组等虚拟节点的导航路径
+		/// 取不到系统图标，可指定为对应的 Shell 命名空间 CLSID 或真实目录。
+		/// </summary>
+		public string IconSourcePath { get; set; } = string.Empty;
+
+		/// <summary>回收站条目：原文件位置（还原/显示用）。</summary>
+		public string RecycleOriginalLocation { get; set; } = string.Empty;
+
+		/// <summary>回收站条目在最近一次枚举快照中的序号（用于执行还原/删除）。</summary>
+		public int RecycleEntryIndex { get; set; } = -1;
+
+		/// <summary>是否为回收站内的条目（表格行右键操作分流）。</summary>
+		public bool IsRecycleEntry => NodeKind == FileNodeKind.RecycleItem;
+
+		// 侧栏特殊根的 CLSID / 路径常量（与 Windows 资源管理器“::{CLSID}”约定一致，
+		// 便于 ShellIconHelper 直接取真实系统图标）
+		public const string ThisPcClsidPath = "::{20D04FE0-3AEA-1069-A2D8-08002B30309D}";
+		public const string NetworkClsidPath = "::{208D2C60-3AEA-1069-A2D7-08002B30309D}";
+		public const string RecycleBinClsidPath = "::{645FF040-5081-101B-9F08-00AA002F954E}";
+		// Windows 资源管理器“Linux”命名空间（WSL 发行版入口），用于取 Linux 系统图标
+		public const string WslClsidPath = "::{B2B4A4D1-2754-4140-A2EB-9A76D9D7CDC6}";
+		public const string CloudGroupPath = "cloud:group";
 
 		// 限制“缓存未命中”时的图标解码并发，防止阻塞式 Shell 调用耗尽线程池而卡顿。
 		// 并发上限在启动时由 Configs.IconParallelLoadingCount 注入（默认 30）；
@@ -154,7 +208,7 @@ namespace FastFluentFilesFolders.ViewModels
 			}
 
 			foreach (var node in batch)
-				_ = node.LoadIconAsync(node.FullPath, node.IsDirectory);
+				_ = node.LoadIconAsync(node.IconSourcePath, node.IsDirectory);
 		}
 
 		// 批量图标赋值：图标在后台完成的时间不同，若每个完成都立即在 UI 线程单独赋值，
@@ -216,9 +270,6 @@ namespace FastFluentFilesFolders.ViewModels
 		[ObservableProperty] private string _fullPath = string.Empty;
 		[ObservableProperty] private bool _isDirectory = true;
 		[ObservableProperty] private string _extension = string.Empty;
-		// 图标按需加载：仅当虚拟化列表/树将该行实体化并读取 Icon 时才触发加载，
-		// 避免一次性为整个文件夹的所有项加载图标导致卡顿
-		// 诊断开关（临时）：false = 不加载图标，用于确认“滚动替换”是否由图标异步填充引起。
 #if !RELEASE
 		internal static bool IconLoadingEnabled = true;
 #endif
@@ -231,8 +282,6 @@ namespace FastFluentFilesFolders.ViewModels
 				if (!_iconRequested && !IsPlaceholder && App.SharedIconProvider != null && _uiDispatcherQueue != null)
 				{
 					_iconRequested = true;
-					// 诊断开关：临时禁用异步图标加载，确认“滚动/进入时的替换感”是否来自图标逐行填充。
-					// 测试完请改回 true。
 #if !RELEASE
 					if (IconLoadingEnabled)
 						RequestIconLoad(this);
@@ -277,9 +326,9 @@ namespace FastFluentFilesFolders.ViewModels
 
 		// 压缩包预览相关：当节点位于压缩包内部时为 true
 		[ObservableProperty] private bool _isArchiveEntry = false;
-		// 物理压缩包文件的完整路径（如 C:\a\test.zip）
+		// 物理压缩包文件的完整路径
 		public string ArchiveFilePath { get; private set; } = string.Empty;
-		// 在压缩包内部的相对路径（"" 表示压缩包根目录）
+		// 在压缩包内部的相对路径
 		public string ArchiveRelativePath { get; private set; } = string.Empty;
 		private string _sortByTime = string.Empty;
 		public string SortByTime
@@ -297,11 +346,8 @@ namespace FastFluentFilesFolders.ViewModels
 			IsRenaming ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 		public Microsoft.UI.Xaml.Visibility IsNotRenamingVisibility =>
 			IsRenaming ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
-
-		// 多语言（供 DataTemplate 内按钮等直接绑定使用）
 		public MultiLanguageStringsViewModel? ML => App.ML;
 
-		// 文件夹显示“计算大小”按钮；文件或已计算完成的文件夹显示大小文本
 		public Microsoft.UI.Xaml.Visibility CalculateSizeButtonVisibility =>
 			(!IsPlaceholder && IsDirectory && !IsSizeCalculated)
 				? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
@@ -403,6 +449,95 @@ namespace FastFluentFilesFolders.ViewModels
 			return node;
 		}
 
+		/// <summary>
+		/// 创建驱动器节点（C:\、D:\ 等）。displayName 如 “本地磁盘 (C:)” 由调用方本地化。
+		/// </summary>
+		public static FileSystemNodeViewModel CreateDriveNode(string rootPath, string displayName, Configs configs, DispatcherQueue uiDispatcherQueue)
+		{
+			var node = new FileSystemNodeViewModel(rootPath, true, false, configs, uiDispatcherQueue, true);
+			node.NodeKind = FileNodeKind.Drive;
+			node.Name = displayName;
+			node.Extension = string.Empty;
+			node.IconGlyph = string.Empty;
+			return node;
+		}
+
+		/// <summary>
+		/// 创建侧栏虚拟根节点（此电脑 / 网络 / 回收站 / 云盘分组等）。
+		/// keepPlaceholder=false 时移除懒加载占位项（回收站等不需要展开箭头的位置）。
+		/// </summary>
+		public static FileSystemNodeViewModel CreateVirtualRoot(
+			string fullPath,
+			string displayName,
+			FileNodeKind kind,
+			Configs configs,
+			DispatcherQueue uiDispatcherQueue,
+			bool keepPlaceholder = true)
+		{
+			var node = new FileSystemNodeViewModel(fullPath, true, false, configs, uiDispatcherQueue, true);
+			node.NodeKind = kind;
+			node.Name = displayName;
+			node.Extension = string.Empty;
+			node.IconGlyph = GetFallbackGlyph(kind);
+			if (kind == FileNodeKind.Wsl)
+				node.IconSourcePath = WslClsidPath;
+			if (!keepPlaceholder)
+			{
+				node.Children.Clear();
+				node._isLoaded = false;
+			}
+			return node;
+		}
+
+		/// <summary>创建回收站条目节点（不占用真实路径语义，仅供展示与回收站操作）。</summary>
+		public static FileSystemNodeViewModel CreateRecycleItemNode(
+			string name,
+			bool isDirectory,
+			string iconPath,
+			string originalLocation,
+			int entryIndex,
+			long size,
+			DateTime modifyUtc,
+			Configs configs,
+			DispatcherQueue uiDispatcherQueue)
+		{
+			var node = new FileSystemNodeViewModel(iconPath, isDirectory, false, configs, uiDispatcherQueue, true);
+			node.NodeKind = FileNodeKind.RecycleItem;
+			node.Name = name;
+			node.Extension = isDirectory ? string.Empty : Path.GetExtension(name);
+			node.IconGlyph = string.Empty;
+			node.RecycleOriginalLocation = originalLocation;
+			node.RecycleEntryIndex = entryIndex;
+			node.IsDirectory = isDirectory;
+			node.ApplyMetadata(isDirectory, size, modifyUtc, modifyUtc);
+			return node;
+		}
+
+		/// <summary>
+		/// 目录显示名。Path.GetFileName 对 UNC 根（\\server\share，如 \\wsl.localhost\Ubuntu）
+		/// 会返回空，需回退到手动取最后一段。
+		/// </summary>
+		private static string GetDirectoryDisplayName(string fullPath)
+		{
+			var name = Path.GetFileName(fullPath.TrimEnd('\\'));
+			if (!string.IsNullOrEmpty(name))
+				return name;
+
+			var trimmed = fullPath.TrimEnd('\\', '/');
+			int idx = trimmed.LastIndexOfAny(new[] { '\\', '/' });
+			return (idx >= 0 && idx < trimmed.Length - 1) ? trimmed.Substring(idx + 1) : trimmed;
+		}
+
+		private static string GetFallbackGlyph(FileNodeKind kind) => kind switch
+		{
+			FileNodeKind.ThisPc => "\uE7F8",
+			FileNodeKind.Network => "\uE968",
+			FileNodeKind.Wsl => "\uE8B7",
+			FileNodeKind.RecycleBin => "\uE74D",
+			FileNodeKind.CloudGroup => "\uE753",
+			_ => string.Empty
+		};
+
 		// 根据压缩包内部条目创建节点
 		private FileSystemNodeViewModel CreateArchiveChild(
 			Extensions.Interfaces.ArchiveEntry entry)
@@ -498,13 +633,30 @@ namespace FastFluentFilesFolders.ViewModels
 			LastModifiedTimeString = LastModifiedTime.ToString("yyyy-MM-dd HH:mm:ss");
 			FirstCreatedTimeString = FirstCreatedTime.ToString("yyyy-MM-dd HH:mm:ss");
 			VisualSize = FormatFileSize(ExactSize);
-			IsHidden = isHidden;
-			IsSystem = isSystem;
+			// 驱动器根/侧栏虚拟位置不套用 Hidden/System 淡化（C:\ 本身带 System+Hidden 属性，
+			// 否则 C 盘会显示成半透明）。
+			IsHidden = !IsDriveOrVirtualNode && isHidden;
+			IsSystem = !IsDriveOrVirtualNode && isSystem;
 		}
+
+		/// <summary>驱动器根与侧栏虚拟位置不参与“隐藏/系统文件半透明”表现。</summary>
+		private bool IsDriveOrVirtualNode =>
+			NodeKind == FileNodeKind.Drive ||
+			NodeKind == FileNodeKind.ThisPc ||
+			NodeKind == FileNodeKind.Network ||
+			NodeKind == FileNodeKind.Wsl ||
+			NodeKind == FileNodeKind.CloudGroup ||
+			NodeKind == FileNodeKind.RecycleBin;
 
 		// 根据文件属性设置隐藏/系统标记（用于半透明显示）
 		public void ApplyFileAttributes(FileAttributes attributes)
 		{
+			if (IsDriveOrVirtualNode)
+			{
+				IsHidden = false;
+				IsSystem = false;
+				return;
+			}
 			IsHidden = (attributes & FileAttributes.Hidden) != 0;
 			IsSystem = (attributes & FileAttributes.System) != 0;
 		}
@@ -541,7 +693,7 @@ namespace FastFluentFilesFolders.ViewModels
 			_hasBasicInfo = false;
 			if (IsPlaceholder) return;
 			await LoadBasicInfoAsync();
-			_ = LoadIconAsync(FullPath, IsDirectory);
+			_ = LoadIconAsync(IconSourcePath, IsDirectory);
 		}
 
 		/// <summary>
@@ -762,7 +914,17 @@ namespace FastFluentFilesFolders.ViewModels
 			bool IsSystem);
 
 		public static List<FileSystemEntryInfo> SafeEnumerateEntries(string path)
+			=> SafeEnumerateEntries(path, out _);
+
+		/// <summary>
+		/// 枚举目录。success=false 仅表示“完全没枚举到东西”（盘未就绪、无权限、设备被拔等）。
+		/// 若中途抛异常但已经枚举到部分条目，按“部分成功”返回，避免 U 盘上一个坏条目
+		/// 导致整个目录被判失败并反复重试。
+		/// </summary>
+		public static List<FileSystemEntryInfo> SafeEnumerateEntries(string path, out bool success)
 		{
+			success = false;
+			bool completed = false;
 			var dirs = new List<FileSystemEntryInfo>();
 			var files = new List<FileSystemEntryInfo>();
 			try
@@ -792,10 +954,25 @@ namespace FastFluentFilesFolders.ViewModels
 						Debug.WriteLine($"[SafeEnumerateEntries] entry error {entry.FullName}: {ex.Message}");
 					}
 				}
+				completed = true;
 			}
 			catch (Exception ex)
 			{
 				Debug.WriteLine($"[SafeEnumerateEntries] {path}: {ex.Message}");
+				LogEnumDiag($"枚举异常: {path} -> {ex.GetType().Name}: {ex.Message}");
+			}
+
+			int collected = dirs.Count + files.Count;
+			// 完整枚举成功，或者虽然中途出错但已拿到部分条目 → 视为可用结果
+			success = completed || collected > 0;
+			if (!completed && success)
+			{
+				Debug.WriteLine($"[SafeEnumerateEntries] 部分枚举成功 {path}，已收集 {collected} 项");
+				LogEnumDiag($"部分枚举成功（{collected} 项，枚举中途出错）: {path}");
+			}
+			else if (!success)
+			{
+				LogEnumDiag($"枚举失败: {path}");
 			}
 
 			// 自己实现排序：目录/文件分别按配置的默认排序方式排好，目录在前、文件在后。
@@ -814,6 +991,28 @@ namespace FastFluentFilesFolders.ViewModels
 		{
 			var str = App.SharedViewModel?.AppConfigs?.DefaultOrderMode;
 			return Enum.TryParse<SortMode>(str, out var mode) ? mode : SortMode.ModifiedDesc;
+		}
+
+		/// <summary>
+		/// 把目录枚举异常写进 %LOCALAPPDATA%\FastFluentFilesFolders\enum.log，
+		/// 方便在没有调试器/Release 环境下定位“U 盘/网络盘内容为空”的原因。
+		/// </summary>
+		private static void LogEnumDiag(string message)
+		{
+			try
+			{
+				var dir = Path.Combine(
+					Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+					"FastFluentFilesFolders");
+				Directory.CreateDirectory(dir);
+				File.AppendAllText(
+					Path.Combine(dir, "enum.log"),
+					DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff") + " " + message + Environment.NewLine);
+			}
+			catch
+			{
+				// 诊断日志失败不影响主流程
+			}
 		}
 
 		private static void SortEntries(List<FileSystemEntryInfo> entries, SortMode mode, bool isDirectory)
@@ -887,15 +1086,71 @@ namespace FastFluentFilesFolders.ViewModels
 				return;
 			}
 
-			var myPath = FullPath;
-			var timingId = LoadTiming.Begin($"{myPath} (ReloadChildren)");
-			var sw = System.Diagnostics.Stopwatch.StartNew();
+			switch (NodeKind)
+			{
+				case FileNodeKind.ThisPc:
+					await ReloadThisPcChildrenAsync();
+					return;
+				case FileNodeKind.Network:
+					await ReloadNetworkChildrenAsync();
+					return;
+				case FileNodeKind.Wsl:
+					await ReloadWslChildrenAsync();
+					return;
+				case FileNodeKind.CloudGroup:
+					await ReloadCloudChildrenAsync();
+					return;
+				case FileNodeKind.RecycleBin:
+					await ReloadRecycleBinChildrenAsync();
+					return;
+			}
 
-			var entries = await Task.Run(() => SafeEnumerateEntries(myPath));
-			LoadTiming.Mark(timingId, "enumerate+sort", sw.ElapsedMilliseconds);
+			var myPath = FullPath;
+
+			var sw = System.Diagnostics.Stopwatch.StartNew();
+			var (entries, enumOk) = await Task.Run(() =>
+			{
+				var list = SafeEnumerateEntries(myPath, out bool ok);
+				return (list, ok);
+			});
+			sw.Stop();
+			if (sw.ElapsedMilliseconds > 1500)
+			{
+				Debug.WriteLine($"[LoadChildren] 枚举耗时 {sw.ElapsedMilliseconds}ms（{entries.Count} 项，ok={enumOk}）: {myPath}");
+				LogEnumDiag($"枚举较慢 {sw.ElapsedMilliseconds}ms（{entries.Count} 项，ok={enumOk}）: {myPath}");
+			}
+
+			if (!enumOk)
+			{
+				// 盘未就绪/被拔/无权限：不要把它当作“空目录”永久缓存。
+				// 重置加载状态，下次进入会重新枚举；驱动器根最多自动重试一次
+				// （必须有这个上限，否则“失败 → 重试 → 再失败”会变成无限循环）。
+				Debug.WriteLine($"[LoadChildren] 枚举失败，等待重试: {myPath}");
+				LogEnumDiag($"加载失败，已重置为可重试（驱动器根最多自动重试一次）: {myPath}");
+				bool isDriveRoot = NodeKind == FileNodeKind.Drive;
+				bool shouldRetry = false;
+				if (isDriveRoot && !_childrenRetryScheduled)
+				{
+					_childrenRetryScheduled = true;
+					shouldRetry = true;
+				}
+
+				await _uiDispatcherQueue.EnqueueAsync(() =>
+				{
+					Children.Clear();
+					Children.Add(new PlaceholderNodeViewModel());
+					ChildrenCountText = "[?]";
+					_isLoaded = false;
+				});
+
+				if (shouldRetry)
+					_ = RetryLoadChildrenOnceAsync(900);
+				return;
+			}
+
+			_childrenRetryScheduled = false;
 
 			var (dirNodes, fileNodes) = await BuildChildNodesAsync(entries);
-			LoadTiming.Mark(timingId, "build-nodes(background)", sw.ElapsedMilliseconds);
 
 			var allNodes = new List<FileSystemNodeViewModel>(dirNodes.Count + fileNodes.Count);
 			allNodes.AddRange(dirNodes);
@@ -910,8 +1165,125 @@ namespace FastFluentFilesFolders.ViewModels
 				var actualCount = Children.Count(c => !c.IsPlaceholder);
 				ChildrenCountText = actualCount > 0 ? $"[{actualCount}]" : "[?]";
 			});
-			LoadTiming.Mark(timingId, "fill-children(ui)", sw.ElapsedMilliseconds);
-			LoadTiming.End(timingId, sw.ElapsedMilliseconds);
+		}
+
+		/// <summary>驱动器根枚举失败后延迟重试一次（U 盘挂载需要一点时间）。最多一次，避免无限重试。</summary>
+		private async Task RetryLoadChildrenOnceAsync(int delayMs)
+		{
+			try
+			{
+				await Task.Delay(delayMs);
+			}
+			catch
+			{
+				return;
+			}
+
+			if (_isLoaded || !IsDirectory || !Directory.Exists(FullPath))
+			{
+				_childrenRetryScheduled = false;
+				return;
+			}
+
+			await LoadChildrenAsync();
+			_childrenRetryScheduled = false;
+
+			// 重试成功且用户正停留在该盘时，刷新表格内容（否则表格仍是刚才的空快照）。
+			var vm = App.SharedViewModel;
+			if (vm != null && ReferenceEquals(vm.SelectedFolder, this))
+				await vm.RefreshCurrentFolderAsync();
+		}
+
+		// ===== 侧栏特殊位置子项加载（此电脑 / 网络 / Linux / 回收站 / 云盘） =====
+		private async Task ReloadThisPcChildrenAsync()
+		{
+			// 驱动器节点缓存由 MainWindowViewModel 维护（含 U 盘热插拔增删），这里只做引用快照。
+			// 若 ViewModel 还未就绪（例如构造期），不要标记为已加载，留待稍后重试，避免“此电脑”永久为空。
+			var vm = App.SharedViewModel;
+			if (vm == null)
+			{
+				_isLoaded = false;
+				return;
+			}
+			var snapshot = vm.DriveNodeSnapshot();
+			var allNodes = snapshot.ToList();
+			foreach (var node in allNodes)
+				node.Parent = this;
+			await ApplySpecialChildrenAsync(allNodes);
+		}
+
+		private async Task ReloadNetworkChildrenAsync()
+		{
+			var allNodes = new List<FileSystemNodeViewModel>();
+			var paths = await Task.Run(() => Services.ShellLocations.GetNetworkComputerPaths());
+			foreach (var p in paths)
+			{
+				if (string.IsNullOrEmpty(p) || !p.StartsWith("\\", StringComparison.Ordinal)) continue;
+				var child = new FileSystemNodeViewModel(p, true, false, _configs, _uiDispatcherQueue, true);
+				child.Parent = this;
+				child.NodeKind = FileNodeKind.Folder;
+				allNodes.Add(child);
+			}
+			await ApplySpecialChildrenAsync(allNodes);
+		}
+
+		private async Task ReloadWslChildrenAsync()
+		{
+			var allNodes = new List<FileSystemNodeViewModel>();
+			var prefix = FullPath;
+			var roots = await Task.Run(() => Services.ShellLocations.GetWslDistroRootPaths(prefix));
+			foreach (var root in roots)
+			{
+				var child = new FileSystemNodeViewModel(root, true, false, _configs, _uiDispatcherQueue, true);
+				child.Parent = this;
+				allNodes.Add(child);
+			}
+			await ApplySpecialChildrenAsync(allNodes);
+		}
+
+		private async Task ReloadCloudChildrenAsync()
+		{
+			var allNodes = new List<FileSystemNodeViewModel>();
+			var detected = await Task.Run(() => Services.CloudDriveDetector.DetectCloudRoots());
+			foreach (var cloud in detected)
+			{
+				if (!Directory.Exists(cloud.Path)) continue;
+				var child = new FileSystemNodeViewModel(cloud.Path, true, false, _configs, _uiDispatcherQueue, true);
+				child.Parent = this;
+				child.NodeKind = FileNodeKind.Folder;
+				child.Name = cloud.DisplayName;
+				child.Extension = string.Empty;
+				// 经 Shell 项接口取云盘提供商的真实图标（OneDrive/Dropbox 等），而非通用文件夹图标
+				child.IconSourcePath = ShellIconHelper.BuildShellItemIconPath(cloud.Path);
+				allNodes.Add(child);
+			}
+			await ApplySpecialChildrenAsync(allNodes);
+		}
+
+		private async Task ReloadRecycleBinChildrenAsync()
+		{
+			var allNodes = new List<FileSystemNodeViewModel>();
+			var entries = await Task.Run(() => Services.RecycleBinService.EnumerateEntries());
+			for (int i = 0; i < entries.Count; i++)
+			{
+				var entry = entries[i];
+				allNodes.Add(FileSystemNodeViewModel.CreateRecycleItemNode(
+					entry.Name, entry.IsDirectory, entry.OriginalFullPath, entry.OriginalLocation,
+					i, entry.Size, entry.ModifiedUtc, _configs, _uiDispatcherQueue));
+			}
+			await ApplySpecialChildrenAsync(allNodes);
+		}
+
+		private async Task ApplySpecialChildrenAsync(List<FileSystemNodeViewModel> allNodes)
+		{
+			await _uiDispatcherQueue.EnqueueAsync(() =>
+			{
+				Children.Clear();
+				foreach (var item in allNodes)
+					AddChildWithSort(item);
+				var actualCount = Children.Count(c => !c.IsPlaceholder);
+				ChildrenCountText = actualCount > 0 ? $"[{actualCount}]" : "[?]";
+			});
 		}
 
 		/// <summary>
@@ -1058,14 +1430,5 @@ namespace FastFluentFilesFolders.ViewModels
 				}
 			}
 		}
-		//private bool IsRoot()
-		//{
-		//	if (FullPath == null) return true;
-		//	if (FullPath[FullPath.Length - 1] == '\\')
-		//	{
-		//		return true;
-		//	}
-		//	return false;
-		//}
 	}
 }

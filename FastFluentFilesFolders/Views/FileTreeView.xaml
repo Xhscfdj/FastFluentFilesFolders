@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Page
     x:Class="FastFluentFilesFolders.Views.FileTreeView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -9,18 +9,25 @@
     xmlns:vm="using:FastFluentFilesFolders.ViewModels"
     mc:Ignorable="d">
 
+    <Page.Resources>
+        <!-- Icon 为空时显示节点字形（此电脑/网络/回收站等），图标加载出来后又切回真实图标 -->
+        <local:NullToVisibleConverter x:Key="NullToVisible" />
+        <local:NullToCollapsedConverter x:Key="NullToCollapsed" />
+        <!-- 增高侧栏每一项（默认 28） -->
+        <x:Double x:Key="TreeViewItemMinHeight">40</x:Double>
+    </Page.Resources>
+
     <Grid>
-		<Grid.ColumnDefinitions>
-			<ColumnDefinition Width="*" />
-		</Grid.ColumnDefinitions>
 		<Grid.RowDefinitions>
-			<RowDefinition Height="Auto" />
-			<RowDefinition Height="*" />
-			<RowDefinition Height="Auto" />
+			<RowDefinition Height="Auto"/>
+			<RowDefinition Height="*"/>
 		</Grid.RowDefinitions>
-		
-		<TextBlock Text="{Binding ML.PinnedShortcutsTitle}" FontWeight="SemiBold" Foreground="Gray" Margin="10,0,0,10"/>
-		<TreeView Grid.Row="1"
+		<Border Grid.Row="0" 
+            Height="1" 
+            Background="Gray" 
+            Margin="10,5,10,5" />
+		<TreeView x:Name="SidebarTree"
+				  Grid.Row="1"
                   ItemsSource="{Binding RootDirectories}"
                   SelectionChanged="TreeView_SelectionChanged"
                   KeyDown="TreeView_KeyDown"
@@ -33,25 +40,22 @@
                                   IsSelected="{Binding IsSelected, Mode=TwoWay}">
                         <TreeViewItem.Content>
                             <StackPanel Orientation="Horizontal" Opacity="{Binding RowOpacity, Mode=OneWay}">
-                                <Image Source="{Binding Icon}" Width="20" Height="20" />
-                                <TextBlock Text="{Binding Name}" Margin="5,0,0,0" />
+                                <Grid Width="20" Height="20" VerticalAlignment="Center">
+                                    <Image Source="{Binding Icon}"
+                                           Width="20" Height="20"
+                                           Visibility="{Binding Icon, Converter={StaticResource NullToCollapsed}}"/>
+                                    <FontIcon Glyph="{Binding IconGlyph}"
+                                              FontSize="14"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Visibility="{Binding Icon, Converter={StaticResource NullToVisible}}"/>
+                                </Grid>
+                                <TextBlock Text="{Binding Name}" Margin="5,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
                         </TreeViewItem.Content>
                     </TreeViewItem>
                 </DataTemplate>
             </TreeView.ItemTemplate>
         </TreeView>
-        <!--
-        <Button Grid.Row="2" Click="ToggleSettings"
-				Grid.Column="0"
-                BorderThickness="0" Background="Transparent"
-                Padding="12,8" Margin="4,0,0,4">
-			<Button.Content>
-				<StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Left">
-					<FontIcon x:Name="SettingsBtnIcon" Glyph="&#xE713;" FontSize="14" HorizontalAlignment="Left"/>
-					<TextBlock x:Name="SettingsBtnLabel" Text="设置" FontSize="13" HorizontalAlignment="Left"/>
-				</StackPanel>
-			</Button.Content>
-		</Button>-->
     </Grid>
 </Page>

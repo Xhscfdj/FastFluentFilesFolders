@@ -110,4 +110,22 @@ namespace FastFluentFilesFolders.Views
                 VM.OpenItem(selectedItem);
         }
     }
+
+    /// <summary>Icon == null → Visible（用于显示字形回退）。</summary>
+    public sealed class NullToVisibleConverter : Microsoft.UI.Xaml.Data.IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+            => value == null ? Visibility.Visible : Visibility.Collapsed;
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+            => throw new NotSupportedException();
+    }
+
+    /// <summary>Icon == null → Collapsed（用于隐藏空的 Image 占位）。</summary>
+    public sealed class NullToCollapsedConverter : Microsoft.UI.Xaml.Data.IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+            => value == null ? Visibility.Collapsed : Visibility.Visible;
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+            => throw new NotSupportedException();
+    }
 }
