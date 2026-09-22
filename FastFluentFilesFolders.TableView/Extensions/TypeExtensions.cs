@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
-namespace FastFluentFilesFolders.UserControls.TableView.Extensions;
+namespace WinUI.TableView.Extensions;
 
 /// <summary>
 /// Provides extension methods for the Type class.

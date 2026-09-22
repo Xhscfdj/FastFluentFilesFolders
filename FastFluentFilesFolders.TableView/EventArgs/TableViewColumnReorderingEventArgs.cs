@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Provides data for the <see cref="TableView.ColumnReordering"/> event.

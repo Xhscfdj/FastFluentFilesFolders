@@ -12,10 +12,10 @@ using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
 using Windows.Foundation;
-using FastFluentFilesFolders.UserControls.TableView.Extensions;
-using FastFluentFilesFolders.UserControls.TableView.Helpers;
+using WinUI.TableView.Extensions;
+using WinUI.TableView.Helpers;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Represents a row in a TableView.

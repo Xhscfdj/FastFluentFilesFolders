@@ -1,8 +1,8 @@
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using SD = FastFluentFilesFolders.UserControls.TableView.SortDirection;
+using SD = WinUI.TableView.SortDirection;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 partial class TableViewColumnHeader
 {

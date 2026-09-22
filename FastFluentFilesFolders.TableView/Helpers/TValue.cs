@@ -1,4 +1,4 @@
-namespace FastFluentFilesFolders.UserControls.TableView.Helpers;
+namespace WinUI.TableView.Helpers;
 
 /// <summary>
 /// Represents a value type wrapper that enables implicit conversion between the wrapped value and the wrapper type.

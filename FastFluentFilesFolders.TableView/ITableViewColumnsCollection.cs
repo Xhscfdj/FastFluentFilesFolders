@@ -3,10 +3,10 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
-/// Represents a collection of columns in a <see cref="FastFluentFilesFolders.UserControls.TableView.TableView"/>, providing functionality to manage and interact with the columns.
+/// Represents a collection of columns in a <see cref="WinUI.TableView.TableView"/>, providing functionality to manage and interact with the columns.
 /// </summary>
 /// <remarks>This interface extends <see cref="IList{T}"/> to provide standard list operations for <see
 /// cref="TableViewColumn"/> objects. It also implements <see cref="INotifyCollectionChanged"/> to notify subscribers of
@@ -39,10 +39,10 @@ public interface ITableViewColumnsCollection : IList<TableViewColumn>, INotifyCo
     IList<TableViewColumn> VisibleColumns { get; }
 
     /// <summary>
-    /// Gets or sets the <see cref="FastFluentFilesFolders.UserControls.TableView.TableView"/> associated with the collection.
+    /// Gets or sets the <see cref="WinUI.TableView.TableView"/> associated with the collection.
     /// </summary>
     /// <remarks>
-    /// This property allows access to the <see cref="FastFluentFilesFolders.UserControls.TableView.TableView"/> that owns this collection of columns.
+    /// This property allows access to the <see cref="WinUI.TableView.TableView"/> that owns this collection of columns.
     /// </remarks>
     TableView? TableView { get; }
 }

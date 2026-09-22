@@ -12,10 +12,10 @@ using System.Collections.Specialized;
 using System.Linq;
 using Windows.Foundation;
 using Windows.Foundation.Collections;
-using FastFluentFilesFolders.UserControls.TableView.Converters;
-using FastFluentFilesFolders.UserControls.TableView.Extensions;
+using WinUI.TableView.Converters;
+using WinUI.TableView.Extensions;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Represents the header row in a TableView.

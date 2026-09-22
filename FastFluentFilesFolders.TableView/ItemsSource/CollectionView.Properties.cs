@@ -2,9 +2,9 @@ using Microsoft.UI.Xaml.Data;
 using System.Collections;
 using System.Collections.Generic;
 using Windows.Foundation.Collections;
-using FastFluentFilesFolders.UserControls.TableView.Extensions;
+using WinUI.TableView.Extensions;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 partial class CollectionView
 {

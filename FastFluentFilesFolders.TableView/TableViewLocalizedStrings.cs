@@ -1,14 +1,14 @@
 using Microsoft.Windows.ApplicationModel.Resources;
 using System;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Provides localized string resources for the TableView.
 /// </summary>
 internal partial class TableViewLocalizedStrings
 {
-    private const string WinUI_TableView = "FastFluentFilesFolders.UserControls.TableView";
+    private const string WinUI_TableView = "WinUI.TableView";
 #if WINDOWS
     private static readonly ResourceManager _resourceManager = new(); 
 #else

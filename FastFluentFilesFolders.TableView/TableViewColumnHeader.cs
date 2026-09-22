@@ -12,12 +12,12 @@ using System.Linq;
 using System.Threading.Tasks;
 using Windows.System;
 using Windows.UI.Core;
-using FastFluentFilesFolders.UserControls.TableView.Collections;
-using FastFluentFilesFolders.UserControls.TableView.Controls;
-using FastFluentFilesFolders.UserControls.TableView.Extensions;
-using SD = FastFluentFilesFolders.UserControls.TableView.SortDirection;
+using WinUI.TableView.Collections;
+using WinUI.TableView.Controls;
+using WinUI.TableView.Extensions;
+using SD = WinUI.TableView.SortDirection;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Represents the header of a column in a TableView.

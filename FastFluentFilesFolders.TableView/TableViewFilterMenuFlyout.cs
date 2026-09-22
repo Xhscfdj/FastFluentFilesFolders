@@ -3,10 +3,10 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using System.Collections.Generic;
 using System.Linq;
-using FastFluentFilesFolders.UserControls.TableView.Controls;
-using FastFluentFilesFolders.UserControls.TableView.Extensions;
+using WinUI.TableView.Controls;
+using WinUI.TableView.Extensions;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Represents the filter menu flyout for a TableViewColumnHeader.

@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Interface for handling column filtering in a TableView.

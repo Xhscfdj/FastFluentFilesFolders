@@ -1,7 +1,7 @@
 using Windows.Foundation;
-using FastFluentFilesFolders.UserControls.TableView.Extensions;
+using WinUI.TableView.Extensions;
 
-namespace FastFluentFilesFolders.UserControls.TableView.Primitives;
+namespace WinUI.TableView.Primitives;
 
 /// <inheritdoc/>
 public partial class ListViewItemPresenter : Microsoft.UI.Xaml.Controls.Primitives.ListViewItemPresenter

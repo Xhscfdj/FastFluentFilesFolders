@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Represents a filter item used in the options flyout of a TableViewColumnHeader.

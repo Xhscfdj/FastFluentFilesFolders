@@ -3,11 +3,11 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 using System;
 using Windows.Globalization.DateTimeFormatting;
-using FastFluentFilesFolders.UserControls.TableView.Controls;
-using FastFluentFilesFolders.UserControls.TableView.Extensions;
-using FastFluentFilesFolders.UserControls.TableView.Helpers;
+using WinUI.TableView.Controls;
+using WinUI.TableView.Extensions;
+using WinUI.TableView.Helpers;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Represents a column in a TableView that displays time.

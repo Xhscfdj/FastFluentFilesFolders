@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using Windows.Foundation.Collections;
 
-namespace FastFluentFilesFolders.UserControls.TableView.Collections;
+namespace WinUI.TableView.Collections;
 
 /// <summary>
 /// Provides a strongly-typed wrapper around <see cref="DependencyObjectCollection"/>

@@ -1,6 +1,6 @@
 using Windows.Foundation.Collections;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Vector changed EventArgs

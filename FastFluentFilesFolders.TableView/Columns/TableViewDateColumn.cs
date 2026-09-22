@@ -2,12 +2,12 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 using System;
-using FastFluentFilesFolders.UserControls.TableView.Controls;
-using FastFluentFilesFolders.UserControls.TableView.Extensions;
-using FastFluentFilesFolders.UserControls.TableView.Helpers;
+using WinUI.TableView.Controls;
+using WinUI.TableView.Extensions;
+using WinUI.TableView.Helpers;
 using DayOfWeek = Windows.Globalization.DayOfWeek;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Represents a column in a TableView that displays a date.

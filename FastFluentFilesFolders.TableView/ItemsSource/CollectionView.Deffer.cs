@@ -1,6 +1,6 @@
 using Windows.Foundation;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 partial class CollectionView
 {

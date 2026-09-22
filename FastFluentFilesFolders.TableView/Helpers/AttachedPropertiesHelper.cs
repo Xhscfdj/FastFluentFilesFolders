@@ -1,6 +1,6 @@
 using Microsoft.UI.Xaml;
 
-namespace FastFluentFilesFolders.UserControls.TableView.Helpers;
+namespace WinUI.TableView.Helpers;
 
 /// <summary>
 /// Provides attached properties for various purposes.

@@ -1,7 +1,7 @@
 using Microsoft.UI.Xaml.Controls.Primitives;
 using System.ComponentModel;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Provides data for the RowContextFlyout event.

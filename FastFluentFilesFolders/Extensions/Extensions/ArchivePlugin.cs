@@ -8,8 +8,10 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Globalization;
 using System.IO.Compression;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
@@ -21,6 +23,9 @@ namespace FastFluentFilesFolders.Extensions.Extensions
     {
         private bool _isInitialized;
         private ExtensionContext? _ctx;
+
+        private static readonly object EncodingLock = new();
+        private static bool _codePagesRegistered;
 
         private static readonly HashSet<string> ArchiveExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -110,6 +115,55 @@ namespace FastFluentFilesFolders.Extensions.Extensions
         {
             if (string.IsNullOrEmpty(extension)) return false;
             return ArchiveExtensions.Contains(extension);
+        }
+
+        private static void EnsureCodePagesRegistered()
+        {
+            if (_codePagesRegistered) return;
+            lock (EncodingLock)
+            {
+                if (_codePagesRegistered) return;
+                Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+                _codePagesRegistered = true;
+            }
+        }
+
+        private static Encoding GetSystemAnsiEncoding()
+        {
+            EnsureCodePagesRegistered();
+            try
+            {
+                return Encoding.GetEncoding(CultureInfo.CurrentCulture.TextInfo.ANSICodePage);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ArchivePlugin] Failed to get ANSI encoding: {ex.Message}");
+                return Encoding.UTF8;
+            }
+        }
+
+        // .NET 的 ZipArchive 对未设置 UTF-8 标志的条目默认按 UTF-8 解码，
+        // 遇到 Windows 传统工具用系统代码页（如 GBK）生成的中文文件名会变成 U+FFFD。
+        // 这里先用默认编码探测，一旦出现替换字符就回退到系统 ANSI 编码读取。
+        private static Encoding GetZipEntryNameEncoding(string archivePath)
+        {
+            try
+            {
+                using var probe = ZipFile.OpenRead(archivePath);
+                foreach (var entry in probe.Entries)
+                {
+                    if (entry.FullName.Contains('\uFFFD'))
+                    {
+                        return GetSystemAnsiEncoding();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ArchivePlugin] ZIP encoding probe failed: {ex.Message}");
+            }
+
+            return Encoding.UTF8;
         }
 
         private async Task CompressTo(FileSystemNodeViewModel target, string format)
@@ -205,7 +259,8 @@ namespace FastFluentFilesFolders.Extensions.Extensions
                     if (ext == ".zip")
                     {
                         Directory.CreateDirectory(destDir);
-                        ZipFile.ExtractToDirectory(target.FullPath, destDir);
+                        var entryNameEncoding = GetZipEntryNameEncoding(target.FullPath);
+                        ZipFile.ExtractToDirectory(target.FullPath, destDir, entryNameEncoding);
                     }
                     else
                     {
@@ -266,7 +321,8 @@ namespace FastFluentFilesFolders.Extensions.Extensions
                     if (ext == ".zip")
                     {
                         Directory.CreateDirectory(destDir);
-                        ZipFile.ExtractToDirectory(file.Path, destDir);
+                        var entryNameEncoding = GetZipEntryNameEncoding(file.Path);
+                        ZipFile.ExtractToDirectory(file.Path, destDir, entryNameEncoding);
                     }
                     else
                     {
@@ -330,12 +386,14 @@ namespace FastFluentFilesFolders.Extensions.Extensions
             {
                 FileName = sevenZipPath,
                 Arguments = isDir
-                    ? $"a -tzip \"{outputPath}\" \"{sourcePath}\\*\" -mx5 -y"
-                    : $"a -tzip \"{outputPath}\" \"{sourcePath}\" -mx5 -y",
+                    ? $"a -tzip -mcu=on -scsUTF-8 \"{outputPath}\" \"{sourcePath}\\*\" -mx5 -y"
+                    : $"a -tzip -mcu=on -scsUTF-8 \"{outputPath}\" \"{sourcePath}\" -mx5 -y",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
-                RedirectStandardError = true
+                RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
             };
 
             using var process = Process.Start(psi)!;
@@ -356,11 +414,13 @@ namespace FastFluentFilesFolders.Extensions.Extensions
             var psi = new ProcessStartInfo
             {
                 FileName = sevenZipPath,
-                Arguments = $"x \"{archivePath}\" -o\"{destDir}\" -y",
+                Arguments = $"x -scsUTF-8 \"{archivePath}\" -o\"{destDir}\" -y",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
-                RedirectStandardError = true
+                RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
             };
 
             using var process = Process.Start(psi)!;
@@ -448,7 +508,7 @@ namespace FastFluentFilesFolders.Extensions.Extensions
                 var ext = Path.GetExtension(archivePath).ToLowerInvariant();
                 if (ext == ".zip")
                 {
-                    using var archive = ZipFile.OpenRead(archivePath);
+                    using var archive = ZipFile.Open(archivePath, ZipArchiveMode.Read, GetZipEntryNameEncoding(archivePath));
                     var normalized = relativePath.Replace('\\', '/').TrimEnd('/');
                     var entry = archive.Entries.FirstOrDefault(e =>
                         e.FullName.TrimEnd('/').Equals(normalized, StringComparison.OrdinalIgnoreCase));
@@ -493,7 +553,7 @@ namespace FastFluentFilesFolders.Extensions.Extensions
             var result = new List<FlatEntry>();
             try
             {
-                using var archive = ZipFile.OpenRead(archivePath);
+                using var archive = ZipFile.Open(archivePath, ZipArchiveMode.Read, GetZipEntryNameEncoding(archivePath));
                 foreach (var e in archive.Entries)
                 {
                     var path = e.FullName.Replace('/', '\\').TrimEnd('\\');
@@ -520,7 +580,7 @@ namespace FastFluentFilesFolders.Extensions.Extensions
                 var psi = new ProcessStartInfo
                 {
                     FileName = sevenZip,
-                    Arguments = $"l -slt \"{archivePath}\"",
+                    Arguments = $"l -slt -scsUTF-8 \"{archivePath}\"",
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     RedirectStandardOutput = true,

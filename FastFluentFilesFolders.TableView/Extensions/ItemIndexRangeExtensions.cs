@@ -1,6 +1,6 @@
 using Microsoft.UI.Xaml.Data;
 
-namespace FastFluentFilesFolders.UserControls.TableView.Extensions;
+namespace WinUI.TableView.Extensions;
 
 /// <summary>
 /// Provides extension methods for the ItemIndexRange type.

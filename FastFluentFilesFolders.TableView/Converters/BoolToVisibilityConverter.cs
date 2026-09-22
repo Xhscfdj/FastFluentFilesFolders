@@ -2,7 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using System;
 
-namespace FastFluentFilesFolders.UserControls.TableView.Converters;
+namespace WinUI.TableView.Converters;
 
 internal partial class BoolToVisibilityConverter : IValueConverter
 {

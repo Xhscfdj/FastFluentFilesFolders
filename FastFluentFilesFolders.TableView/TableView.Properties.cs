@@ -8,9 +8,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
-using FastFluentFilesFolders.UserControls.TableView.Helpers;
+using WinUI.TableView.Helpers;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Partial class for TableView that contains dependency properties and related methods.

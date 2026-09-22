@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Provides data for the event that is raised when a column is being sorted in a TableView.

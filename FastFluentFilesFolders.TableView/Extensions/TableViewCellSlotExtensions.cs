@@ -1,4 +1,4 @@
-namespace FastFluentFilesFolders.UserControls.TableView.Extensions;
+namespace WinUI.TableView.Extensions;
 
 /// <summary>
 /// Provides extension methods for the TableViewCellSlot type.

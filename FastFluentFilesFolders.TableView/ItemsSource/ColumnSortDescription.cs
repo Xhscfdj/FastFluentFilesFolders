@@ -1,4 +1,4 @@
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Represents a sort description for a specific column in TableView.

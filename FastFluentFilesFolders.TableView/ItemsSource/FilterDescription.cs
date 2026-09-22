@@ -1,6 +1,6 @@
 using System;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Describes a filter operation applied to TableView items.

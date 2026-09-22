@@ -20,10 +20,10 @@ using Windows.Foundation;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.System;
-using FastFluentFilesFolders.UserControls.TableView.Extensions;
-using FastFluentFilesFolders.UserControls.TableView.Helpers;
+using WinUI.TableView.Extensions;
+using WinUI.TableView.Helpers;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Represents a control that displays data in customizable table-like interface.
@@ -113,28 +113,10 @@ public partial class TableView : ListView
     /// <inheritdoc/>
     protected override void PrepareContainerForItemOverride(DependencyObject element, object item)
     {
+        // 本项目不使用：条件单元格样式、单元格选择、行详情模板。原版会在这里投递一个“下一帧回调”，
+        // 再对每行的所有 Cell 做 EnsureCellsStyle / ApplyCellsSelectionState / ApplyDetailsPaneState / ApplyCurrentCellState，
+        // 这些对本项目全是空转，却会让 63 行“下一帧逐行补状态”（轻微 A情况）。这里直接只保留 base。
         base.PrepareContainerForItemOverride(element, item);
-
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            if (element is TableViewRow row)
-            {
-                if (!_rows.Contains(row))
-                {
-                    _rows.Add(row);
-                }
-
-                row.TableView = this;
-                row.EnsureCellsStyle(default, item);
-                row.ApplyCellsSelectionState();
-                row.RowPresenter?.ApplyDetailsPaneState(item);
-
-                if (CurrentCellSlot.HasValue)
-                {
-                    row.ApplyCurrentCellState(CurrentCellSlot.Value);
-                }
-            }
-        });
     }
 
     /// <inheritdoc/>

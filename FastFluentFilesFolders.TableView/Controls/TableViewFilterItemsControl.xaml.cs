@@ -8,7 +8,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Windows.System;
 
-namespace FastFluentFilesFolders.UserControls.TableView.Controls;
+namespace WinUI.TableView.Controls;
 
 /// <summary>
 /// Represents the control that displays filter items in the filter flyout of a TableViewColumnHeader.

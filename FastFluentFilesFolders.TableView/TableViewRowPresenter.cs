@@ -10,12 +10,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Windows.Foundation;
-using FastFluentFilesFolders.UserControls.TableView.Extensions;
+using WinUI.TableView.Extensions;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
-/// Represents a control that presents visuals for the <see cref="FastFluentFilesFolders.UserControls.TableView.TableViewRow"/>.
+/// Represents a control that presents visuals for the <see cref="WinUI.TableView.TableViewRow"/>.
 /// </summary>
 [TemplateVisualState(Name = VisualStates.StateDetailsVisible, GroupName = VisualStates.GroupRowDetails)]
 [TemplateVisualState(Name = VisualStates.StateDetailsCollapsed, GroupName = VisualStates.GroupRowDetails)]

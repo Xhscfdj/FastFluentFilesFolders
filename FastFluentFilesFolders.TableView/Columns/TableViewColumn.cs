@@ -3,10 +3,10 @@ using Microsoft.UI.Xaml.Data;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using FastFluentFilesFolders.UserControls.TableView.Extensions;
-using SD = FastFluentFilesFolders.UserControls.TableView.SortDirection;
+using WinUI.TableView.Extensions;
+using SD = WinUI.TableView.SortDirection;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Represents a column in a TableView.

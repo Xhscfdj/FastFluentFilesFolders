@@ -1,4 +1,4 @@
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Specifies the action to take when editing a cell in TableView.

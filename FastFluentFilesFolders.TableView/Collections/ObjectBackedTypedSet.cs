@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace FastFluentFilesFolders.UserControls.TableView.Collections;
+namespace WinUI.TableView.Collections;
 
 /// <summary>
 /// Represents a set of objects that enforces a specific element type at runtime, providing set operations over objects

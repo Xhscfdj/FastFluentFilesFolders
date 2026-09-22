@@ -2,12 +2,12 @@
   <PropertyGroup>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
-    <RootNamespace>FastFluentFilesFolders.UserControls.TableView</RootNamespace>
+    <RootNamespace>WinUI.TableView</RootNamespace>
+    <AssemblyName>WinUI.TableView</AssemblyName>
     <UseWinUI>true</UseWinUI>
     <Nullable>enable</Nullable>
     <LangVersion>preview</LangVersion>
     <GenerateLibraryLayout>true</GenerateLibraryLayout>
-    <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
   <ItemGroup>

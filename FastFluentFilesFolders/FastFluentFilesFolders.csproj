@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>FastFluentFilesFolders</RootNamespace>
@@ -95,6 +95,7 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" Version="8.2.251219" />
     <PackageReference Include="CommunityToolkit.WinUI.Controls.Sizers" Version="8.2.251219" />
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
 
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.0" />
@@ -107,10 +108,10 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.1839" />
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.3.1" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.2.0" />
     <PackageReference Include="System.Drawing.Common" Version="10.0.9" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.0" />
-    <PackageReference Include="WinUI.TableView" Version="1.4.1" />
+    <ProjectReference Include="..\FastFluentFilesFolders.TableView\FastFluentFilesFolders.TableView.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Update="Configs\appSettings.json">

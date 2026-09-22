@@ -1,4 +1,4 @@
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Specifies the visibility of the row or column headers in TableView.

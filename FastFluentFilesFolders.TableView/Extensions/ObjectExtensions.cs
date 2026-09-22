@@ -8,7 +8,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.RegularExpressions;
 
-namespace FastFluentFilesFolders.UserControls.TableView.Extensions;
+namespace WinUI.TableView.Extensions;
 
 /// <summary>
 /// Provides extension methods for object types.

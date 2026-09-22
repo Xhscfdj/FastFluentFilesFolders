@@ -4,10 +4,10 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using System;
 using Windows.System;
-using FastFluentFilesFolders.UserControls.TableView.Extensions;
-using FastFluentFilesFolders.UserControls.TableView.Helpers;
+using WinUI.TableView.Extensions;
+using WinUI.TableView.Helpers;
 
-namespace FastFluentFilesFolders.UserControls.TableView.Controls;
+namespace WinUI.TableView.Controls;
 
 /// <summary>
 /// Represents a time editing element for the TableViewTimeColumn.

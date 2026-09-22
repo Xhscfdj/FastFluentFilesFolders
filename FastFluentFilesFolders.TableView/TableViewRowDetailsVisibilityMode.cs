@@ -1,4 +1,4 @@
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Defines constants that specify the visibility of row details in a <see cref="TableView"/>.

@@ -5,14 +5,14 @@ using System.Collections.Specialized;
 using System.Linq;
 using Windows.Foundation.Collections;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
-/// Represents a collection of <see cref="TableViewColumn"/> objects used in a <see cref="FastFluentFilesFolders.UserControls.TableView.TableView"/>.
+/// Represents a collection of <see cref="TableViewColumn"/> objects used in a <see cref="WinUI.TableView.TableView"/>.
 /// </summary>
-/// <remarks>This collection provides functionality for managing columns in a <see cref="FastFluentFilesFolders.UserControls.TableView.TableView"/>, including adding,
+/// <remarks>This collection provides functionality for managing columns in a <see cref="WinUI.TableView.TableView"/>, including adding,
 /// removing,  and tracking changes to column properties. It supports notifications for collection changes and column 
-/// property changes, enabling dynamic updates to the <see cref="FastFluentFilesFolders.UserControls.TableView.TableView"/>.</remarks>
+/// property changes, enabling dynamic updates to the <see cref="WinUI.TableView.TableView"/>.</remarks>
 public partial class TableViewColumnsCollection : DependencyObjectCollection, ITableViewColumnsCollection
 {
     private TableViewColumn[] _itemsCopy = []; // To keep a copy of the items to keep track of removed items
@@ -27,7 +27,7 @@ public partial class TableViewColumnsCollection : DependencyObjectCollection, IT
     /// The constructor for the <see cref="TableViewColumnsCollection"/> class.
     /// </summary>
     /// <param name="tableView">
-    /// The <see cref="FastFluentFilesFolders.UserControls.TableView.TableView"/> that owns this collection.
+    /// The <see cref="WinUI.TableView.TableView"/> that owns this collection.
     /// </param>
     public TableViewColumnsCollection(TableView tableView)
     {

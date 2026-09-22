@@ -1,6 +1,6 @@
 using Microsoft.UI.Xaml.Controls;
 
-namespace FastFluentFilesFolders.UserControls.TableView.Extensions;
+namespace WinUI.TableView.Extensions;
 
 /// <summary>
 /// Provides extension methods for FrameworkElements.

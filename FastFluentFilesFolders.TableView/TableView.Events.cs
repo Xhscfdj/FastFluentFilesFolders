@@ -2,7 +2,7 @@ using Microsoft.UI.Xaml;
 using System;
 using System.ComponentModel;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Partial class for TableView that contains Events and firing event methods.

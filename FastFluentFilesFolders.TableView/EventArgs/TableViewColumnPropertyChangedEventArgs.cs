@@ -1,6 +1,6 @@
 using System;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Provides data for the ColumnPropertyChanged event.

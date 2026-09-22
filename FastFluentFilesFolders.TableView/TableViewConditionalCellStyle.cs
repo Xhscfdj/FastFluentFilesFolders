@@ -2,10 +2,10 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Markup;
 using System;
 #if WINDOWS
-using FastFluentFilesFolders.UserControls.TableView.Collections;
+using WinUI.TableView.Collections;
 #endif
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Represents a collection of <see cref="TableViewConditionalCellStyle"/> for a TableView.

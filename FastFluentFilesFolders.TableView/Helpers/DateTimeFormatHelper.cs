@@ -6,9 +6,9 @@ using System.Diagnostics;
 using System.Globalization;
 using Windows.Globalization.DateTimeFormatting;
 using Windows.System.UserProfile;
-using FastFluentFilesFolders.UserControls.TableView.Extensions;
+using WinUI.TableView.Extensions;
 
-namespace FastFluentFilesFolders.UserControls.TableView.Helpers;
+namespace WinUI.TableView.Helpers;
 
 /// <summary>
 /// Provides helper methods for formatting Date and Time values.

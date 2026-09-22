@@ -6,9 +6,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using Windows.ApplicationModel.DataTransfer;
-using FastFluentFilesFolders.UserControls.TableView.Helpers;
+using WinUI.TableView.Helpers;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Provides clipboard paste functionality for the TableView control, allowing users to paste tabular data from the clipboard into the table.

@@ -26,10 +26,6 @@ namespace FastFluentFilesFolders.UserControls
         public LrsTableView()
         {
             AllowLiveShaping = false;
-            // 显式启用虚拟化 + 回收复用：只实例化可见行，避免整表替换时对所有行逐个实例化/绑定
-            // （这是“新表 ~1s 逐行出现”的根因——TableView 可能没在虚拟化）。
-            SetValue(VirtualizingStackPanel.IsVirtualizingProperty, true);
-            VirtualizingStackPanel.SetVirtualizationMode(this, VirtualizationMode.Recycling);
             Loaded += OnLoaded;
             Unloaded += OnUnloaded;
         }
@@ -115,9 +111,7 @@ namespace FastFluentFilesFolders.UserControls
             source.SetItems(items, grouped);
 
             _groupedSource = source;
-            var sw = System.Diagnostics.Stopwatch.StartNew();
             ItemsSource = source;
-            Helpers.LoadTiming.Mark(0, $"UpdateSource(attach) count={source.Count}", sw.ElapsedMilliseconds);
             if (_fadeEnabled && source.Count > 0) FadeInContent();
         }
 
@@ -133,29 +127,7 @@ namespace FastFluentFilesFolders.UserControls
 
             source.FlatListChanged += OnFlatListChanged;
             _groupedSource = source;
-            var sw = System.Diagnostics.Stopwatch.StartNew();
             ItemsSource = source;
-            Helpers.LoadTiming.Mark(0, $"UpdateSourcePrebuilt(attach) count={source.Count}", sw.ElapsedMilliseconds);
-
-            // 诊断：挂载后第一次 LayoutUpdated 的时间，直接反映整表首帧布局/实体化耗时（A情况 可能在这里）
-            var swFirstLayout = System.Diagnostics.Stopwatch.StartNew();
-            EventHandler<object>? firstLayout = null;
-            firstLayout = (_, _) =>
-            {
-                LayoutUpdated -= firstLayout;
-                Helpers.LoadTiming.Mark(0, $"first-layout-after-attach(count={source.Count})", swFirstLayout.ElapsedMilliseconds);
-            };
-            LayoutUpdated += firstLayout;
-
-            // 诊断：挂载后约 1s 时实际实例化了多少行（可见行 ~20 → 虚拟化生效；~= item 数 → 没虚拟化）
-            int srcCount = source.Count;
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-            {
-                int realized = 0;
-                foreach (var _ in FindDescendants<TableViewRow>(this)) realized++;
-                Helpers.LoadTiming.Mark(0, $"realized-rows-after-1s(src={srcCount})", realized);
-            });
-
             if (_fadeEnabled) FadeInContent();
         }
 

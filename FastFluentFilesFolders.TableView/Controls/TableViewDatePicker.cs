@@ -1,9 +1,9 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
-using FastFluentFilesFolders.UserControls.TableView.Extensions;
+using WinUI.TableView.Extensions;
 
-namespace FastFluentFilesFolders.UserControls.TableView.Controls;
+namespace WinUI.TableView.Controls;
 
 /// <summary>
 /// Represents a date editing element for the TableViewDateColumn.

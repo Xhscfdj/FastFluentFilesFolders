@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Specialized;
 
-namespace FastFluentFilesFolders.UserControls.TableView.Helpers;
+namespace WinUI.TableView.Helpers;
 
 /// <summary>
 /// Listens for collection changed events using a weak reference to the source.

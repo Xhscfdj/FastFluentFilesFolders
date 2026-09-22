@@ -1,6 +1,6 @@
 using System;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// Represents a filter description for a specific column in TableView.

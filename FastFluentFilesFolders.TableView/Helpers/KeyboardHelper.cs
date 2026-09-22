@@ -2,7 +2,7 @@ using Microsoft.UI.Input;
 using Windows.System;
 using Windows.UI.Core;
 
-namespace FastFluentFilesFolders.UserControls.TableView.Helpers;
+namespace WinUI.TableView.Helpers;
 
 /// <summary>
 /// Provides helper methods for keyboard keys state checks.

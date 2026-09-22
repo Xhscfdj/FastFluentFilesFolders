@@ -3,7 +3,7 @@ using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.Generic;
 
-namespace FastFluentFilesFolders.UserControls.TableView.Extensions;
+namespace WinUI.TableView.Extensions;
 
 /// <summary>
 /// Provides extension methods for traversing the visual tree of <see cref="DependencyObject"/>.

@@ -8,9 +8,9 @@ using System.ComponentModel;
 using System.Linq;
 using Windows.Foundation;
 using Windows.Foundation.Collections;
-using FastFluentFilesFolders.UserControls.TableView.Extensions;
+using WinUI.TableView.Extensions;
 
-namespace FastFluentFilesFolders.UserControls.TableView;
+namespace WinUI.TableView;
 
 /// <summary>
 /// A collection view implementation that supports filtering, sorting, and incremental loading.
