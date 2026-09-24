@@ -23,6 +23,11 @@ namespace FastFluentFilesFolders.UserControls
         private Storyboard? _fadeStoryboard;
         private bool _fadeEnabled;
 
+        // 当前生效的排序（用于新增/删除条目后把新项放回正确位置）
+        private string? _activeSortPath;
+        private bool _activeSortAscending;
+        private bool _sortReapplyPending;
+
         public LrsTableView()
         {
             AllowLiveShaping = false;
@@ -148,6 +153,9 @@ namespace FastFluentFilesFolders.UserControls
 
         public void SortBy(string sortPath, bool ascending)
         {
+            _activeSortPath = sortPath;
+            _activeSortAscending = ascending;
+
             if (_groupedSource != null && _groupedSource.Count > 0)
             {
                 _groupedSource.SortWithinGroups(sortPath, ascending);
@@ -167,6 +175,28 @@ namespace FastFluentFilesFolders.UserControls
                     col.SortDirection = null;
                 }
             }
+        }
+
+        /// <summary>
+        /// 新增/删除条目后，按当前排序重新排列（合并到一次 UI 调度，避免批量粘贴时逐条重排）。
+        /// 未排序时不做任何事。
+        /// </summary>
+        public void ScheduleReapplyActiveSort()
+        {
+            if (string.IsNullOrEmpty(_activeSortPath)) return;
+            if (_sortReapplyPending) return;
+
+            _sortReapplyPending = true;
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                _sortReapplyPending = false;
+                if (string.IsNullOrEmpty(_activeSortPath) || _groupedSource == null) return;
+
+                _groupedSource.SortWithinGroups(_activeSortPath!, _activeSortAscending);
+                var s = ItemsSource;
+                ItemsSource = null;
+                ItemsSource = s;
+            });
         }
 
         private void OnFlatListChanged()
@@ -221,11 +251,14 @@ namespace FastFluentFilesFolders.UserControls
 
             if (direction is not null)
             {
+                _activeSortPath = sortPath;
+                _activeSortAscending = direction == SD.Ascending;
                 _groupedSource.SortWithinGroups(sortPath, direction == SD.Ascending);
                 column.SortDirection = direction;
             }
             else
             {
+                _activeSortPath = null;
                 _groupedSource.ResetSort();
                 column.SortDirection = null;
             }

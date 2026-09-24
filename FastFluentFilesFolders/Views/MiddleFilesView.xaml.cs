@@ -30,9 +30,18 @@ namespace FastFluentFilesFolders.Views
         private CommandBarFlyout? _recycleItemFlyout;
         private CommandBarFlyout? _recycleBaseFlyout;
         private AppBarButton? _pinToggleButton;
+        // 回收站工具栏按钮（用于按选中项/是否为空设置可用性）
+        private AppBarButton? _recycleRestoreBtn;
+        private AppBarButton? _recycleDeleteBtn;
+        private AppBarButton? _recycleEmptyBtn;
         private bool IsInRecycleView => (this.DataContext as MainWindowViewModel)?.IsRecycleBinFolder == true;
         private bool IsSearchView => (this.DataContext as MainWindowViewModel)?.IsSearchMode == true;
         private bool _toolbarBuilt;
+        // 「彻底删除」等危险操作使用的红色（菜单/工具栏各自的既有取值）
+        private static readonly SolidColorBrush RedBrush = new(Microsoft.UI.Colors.Red);
+        private static readonly SolidColorBrush ToolbarRedBrush = new(Windows.UI.Color.FromArgb(255, 255, 59, 48));
+        // 当前工具栏是否为“回收站模式”，用于进入/离开回收站时自动切换
+        private bool _toolbarRecycleMode;
         private (ObservableCollection<FileSystemNodeViewModel>? Items, bool Special)? _lastAppliedGroupedSource;
         private readonly List<ICommandBarElement> _itemPluginItems = new();
         private readonly List<ICommandBarElement> _basePluginItems = new();
@@ -52,6 +61,7 @@ namespace FastFluentFilesFolders.Views
 
             FileGrid.ContextRequested += OnFileGridContextRequested;
             FileGrid.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(OnFileGridKeyDown), true);
+            FileGrid.SelectionChanged += (_, _) => UpdateRecycleToolbarState();
 
             App.SharedViewModel.RenameFocusRequested += OnRenameFocusRequested;
             App.SharedViewModel.SelectItemRequested += OnSelectItemRequested;
@@ -141,6 +151,8 @@ namespace FastFluentFilesFolders.Views
                 {
                     UpdateGroupedSource(vm);
                     UpdateRecycleColumnVisibility();
+                    UpdateToolbarForLocation();
+                    UpdateRecycleToolbarState();
 
                     if (_focusTableAfterNavigation && e.PropertyName == nameof(MainWindowViewModel.CurrentFolderContent))
                     {
@@ -222,6 +234,9 @@ namespace FastFluentFilesFolders.Views
                     if (this.DataContext is MainWindowViewModel vm)
                         FileGrid.UpdateSource(vm.CurrentFolderContent ?? new(), vm.IsCurrentFolderSpecial);
                 }
+
+                // 若表格当前处于某列排序状态，把新增/删除后的项放回正确位置
+                FileGrid.ScheduleReapplyActiveSort();
             }
         }
 
@@ -345,6 +360,28 @@ namespace FastFluentFilesFolders.Views
             BuildToolbar();
         }
 
+        /// <summary>进入/离开回收站时自动切换工具栏（回收站专属 ↔ 普通目录）。</summary>
+        private void UpdateToolbarForLocation()
+        {
+            if (!_toolbarBuilt) return;
+            if (IsInRecycleView == _toolbarRecycleMode) return;
+            RefreshToolbar();
+        }
+
+        /// <summary>回收站工具栏按钮可用性：无选中项时还原/彻底删除置灰；回收站为空时清空置灰。</summary>
+        private void UpdateRecycleToolbarState()
+        {
+            if (_recycleRestoreBtn == null && _recycleDeleteBtn == null && _recycleEmptyBtn == null) return;
+            if (!IsInRecycleView) return;
+
+            bool hasSelection = GetSelectedItems().Any(i => i.IsRecycleEntry);
+            if (_recycleRestoreBtn != null) _recycleRestoreBtn.IsEnabled = hasSelection;
+            if (_recycleDeleteBtn != null) _recycleDeleteBtn.IsEnabled = hasSelection;
+
+            var items = (this.DataContext as MainWindowViewModel)?.CurrentFolderContent;
+            if (_recycleEmptyBtn != null) _recycleEmptyBtn.IsEnabled = items != null && items.Count > 0;
+        }
+
         private void RefreshGroupHeaderNames()
         {
             if (FileGrid.ItemsSource is GroupedFileList list)
@@ -362,26 +399,27 @@ namespace FastFluentFilesFolders.Views
             flyout.PrimaryCommands.Add(ThemedBtn(ML.CmdDelete,   ThemedIconKey("Icon.Delete"),  OnDeleteClick));
             flyout.PrimaryCommands.Add(RedBtn(ML.CmdPermanentDelete, "\uECC9", OnPermanentDeleteClick));
 
-            flyout.SecondaryCommands.Add(PlainBtn(ML.CmdOpen,     "\uE8E5", OnOpenClick));
-            flyout.SecondaryCommands.Add(PlainBtn(ML.CmdOpenWith, "\uE8E5", OnOpenWithClick));
+            flyout.SecondaryCommands.Add(GlyphBtn(ML.CmdOpen,     "\uE8E5", OnOpenClick));
+            flyout.SecondaryCommands.Add(GlyphBtn(ML.CmdOpenWith, "\uE8E5", OnOpenWithClick));
             flyout.SecondaryCommands.Add(CopyPathThemedBtn(ML.CmdCopyPath, OnCopyPathClick));
 
             // 固定/取消固定（仅文件夹显示；打开菜单时按选中项刷新）
             _pinToggleButton = new AppBarButton
             {
                 Label = ML.CmdPinToQuickAccess,
-                Icon = new FontIcon { Glyph = "\uE718", FontSize = 16 },
+                Content = MenuIcon("\uE718"),
                 KeyboardAcceleratorTextOverride = "Ctrl+P",
                 Visibility = Visibility.Collapsed
             };
             _pinToggleButton.Click += OnPinToggleClick;
             flyout.SecondaryCommands.Add(_pinToggleButton);
-            flyout.SecondaryCommands.Add(PlainBtn(ML.OpenFileLocation, "\uE8B7", OnOpenFileLocationClick));
+            flyout.SecondaryCommands.Add(GlyphBtn(ML.OpenFileLocation, "\uE8B7", OnOpenFileLocationClick));
             flyout.SecondaryCommands.Add(new AppBarSeparator());
-            flyout.SecondaryCommands.Add(PlainBtn(ML.CmdProperties, "\uE90F", OnPropertiesClick));
+            flyout.SecondaryCommands.Add(GlyphBtn(ML.CmdProperties, "\uE90F", OnPropertiesClick));
             flyout.SecondaryCommands.Add(new AppBarSeparator());
             flyout.SecondaryCommands.Add(BuildShowMoreOptionsBtn(isItemMenu: true));
 
+            ApplyMenuItemStyle(flyout);
             return flyout;
         }
 
@@ -401,16 +439,17 @@ namespace FastFluentFilesFolders.Views
             var newBtn = new AppBarButton
             {
                 Label = ML.CmdNew,
-                Content = new ThemedIcon { Style = (Style)Application.Current.Resources["Icon.New"] },
+                Content = MenuIcon(styleKey: "Icon.New"),
                 Flyout = newSubMenu
             };
             flyout.SecondaryCommands.Add(newBtn);
-            flyout.SecondaryCommands.Add(PlainBtn(ML.CmdNewFolder, "\uE8F4", OnNewFolderClick));
+            flyout.SecondaryCommands.Add(GlyphBtn(ML.CmdNewFolder, "\uE8F4", OnNewFolderClick));
             flyout.SecondaryCommands.Add(new AppBarSeparator());
-            flyout.SecondaryCommands.Add(PlainBtn(ML.CmdPaste, "\uE77F", OnPasteClick));
+            flyout.SecondaryCommands.Add(GlyphBtn(ML.CmdPaste, "\uE77F", OnPasteClick));
             flyout.SecondaryCommands.Add(new AppBarSeparator());
             flyout.SecondaryCommands.Add(BuildShowMoreOptionsBtn(isItemMenu: false));
 
+            ApplyMenuItemStyle(flyout);
             return flyout;
         }
 
@@ -418,17 +457,19 @@ namespace FastFluentFilesFolders.Views
         {
             var flyout = new CommandBarFlyout { AlwaysExpanded = true };
 
-            flyout.PrimaryCommands.Add(PlainBtn(ML.RecycleRestore, "\uE8E5", OnRecycleRestoreClick));
+            flyout.PrimaryCommands.Add(GlyphBtn(ML.RecycleRestore, "\uE8E5", OnRecycleRestoreClick));
             flyout.PrimaryCommands.Add(RedBtn(ML.CmdPermanentDelete, "\uECC9", OnRecycleDeleteClick));
-            flyout.SecondaryCommands.Add(PlainBtn(ML.CmdCopyPath, "\uE8C8", OnRecycleCopyPathClick));
+            flyout.SecondaryCommands.Add(GlyphBtn(ML.CmdCopyPath, "\uE8C8", OnRecycleCopyPathClick));
 
+            ApplyMenuItemStyle(flyout);
             return flyout;
         }
 
         private CommandBarFlyout BuildRecycleBaseFlyout()
         {
             var flyout = new CommandBarFlyout { AlwaysExpanded = true };
-            flyout.SecondaryCommands.Add(PlainBtn(ML.RecycleEmpty, "\uE74D", OnRecycleEmptyClick));
+            ApplyMenuItemStyle(flyout);
+            flyout.SecondaryCommands.Add(GlyphBtn(ML.RecycleEmpty, "\uE74D", OnRecycleEmptyClick));
             return flyout;
         }
 
@@ -501,7 +542,41 @@ namespace FastFluentFilesFolders.Views
         {
             if (ToolbarCmd == null) return;
 
-            ToolbarCmd.PrimaryCommands.Add(TbIconBtn("Icon.Cut", ML.CmdCut, OnCutClick));
+            // 回收站与普通目录使用不同的工具栏
+            _toolbarRecycleMode = IsInRecycleView;
+
+            if (_toolbarRecycleMode)
+                BuildRecycleToolbar();
+            else
+                BuildBrowseToolbar();
+
+            FileOpsBtn.SetItems(_fileOperationItems);
+        }
+
+        /// <summary>回收站专属工具栏：还原 / 彻底删除 / 清空回收站（+ 排序）。</summary>
+        private void BuildRecycleToolbar()
+        {
+            _recycleRestoreBtn = TbGlyphBtn("\uE8E5", ML.RecycleRestore, OnRecycleRestoreClick);
+            _recycleDeleteBtn = TbGlyphBtn("\uECC9", ML.CmdPermanentDelete,
+                (s, e) => OnRecycleDeleteClick(s, e), red: true);
+            _recycleEmptyBtn = TbGlyphBtn("\uE74D", ML.RecycleEmpty, OnRecycleEmptyClick);
+
+            ToolbarCmd!.PrimaryCommands.Add(_recycleRestoreBtn);
+            ToolbarCmd.PrimaryCommands.Add(_recycleDeleteBtn);
+            ToolbarCmd.PrimaryCommands.Add(_recycleEmptyBtn);
+            ToolbarCmd.PrimaryCommands.Add(new AppBarSeparator());
+
+            var sortBtn = TbLabelBtn("Icon.Sort", ML.CmdSort, null);
+            sortBtn.Flyout = BuildSortToolbarFlyout();
+            ToolbarCmd.PrimaryCommands.Add(sortBtn);
+
+            UpdateRecycleToolbarState();
+        }
+
+        /// <summary>普通目录工具栏：剪切/复制/粘贴/重命名/删除/彻底删除/新建/排序。</summary>
+        private void BuildBrowseToolbar()
+        {
+            ToolbarCmd!.PrimaryCommands.Add(TbIconBtn("Icon.Cut", ML.CmdCut, OnCutClick));
             ToolbarCmd.PrimaryCommands.Add(TbIconBtn("Icon.Copy", ML.CmdCopy, OnCopyClick));
             ToolbarCmd.PrimaryCommands.Add(TbIconBtn("Icon.Paste", ML.CmdPaste, OnPasteClick));
             ToolbarCmd.PrimaryCommands.Add(TbIconBtn("Icon.Rename", ML.CmdRename, OnRenameClick));
@@ -516,8 +591,36 @@ namespace FastFluentFilesFolders.Views
             var sortBtn = TbLabelBtn("Icon.Sort", ML.CmdSort, null);
             sortBtn.Flyout = BuildSortToolbarFlyout();
             ToolbarCmd.PrimaryCommands.Add(sortBtn);
+        }
 
-            FileOpsBtn.SetItems(_fileOperationItems);
+        /// <summary>字形图标工具栏按钮（回收站用）：有矢量图标时用 ThemedIcon，否则回退 FontIcon。</summary>
+        private static AppBarButton TbGlyphBtn(string glyph, string tooltip, RoutedEventHandler? click, bool red = false)
+        {
+            FrameworkElement icon;
+            if (IconLibrary.HasIcon(glyph))
+            {
+                var themed = new ThemedIcon { Glyph = glyph, Mono = red };
+                if (red) themed.Foreground = RedBrush;
+                icon = themed;
+            }
+            else
+            {
+                var fontIcon = new FontIcon { Glyph = glyph, FontSize = 18 };
+                if (red) fontIcon.Foreground = RedBrush;
+                icon = fontIcon;
+            }
+
+            var btn = new AppBarButton
+            {
+                Width = 40, Height = 40,
+                LabelPosition = CommandBarLabelPosition.Collapsed,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                VerticalContentAlignment = VerticalAlignment.Center,
+                Content = new Viewbox { Child = icon, Width = 20, Height = 20 }
+            };
+            ToolTipService.SetToolTip(btn, tooltip);
+            if (click != null) btn.Click += click;
+            return btn;
         }
 
         private static AppBarButton TbIconBtn(string styleKey, string tooltip, RoutedEventHandler? click)
@@ -544,7 +647,15 @@ namespace FastFluentFilesFolders.Views
             var stack = new StackPanel { Orientation = Orientation.Horizontal };
             stack.Children.Add(new Viewbox { Child = icon, Width = 18, Height = 18 });
             stack.Children.Add(new TextBlock { Text = label, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
-            stack.Children.Add(new FontIcon { Glyph = "\uE70D", FontSize = 10, Margin = new Thickness(4, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Opacity = 0.6 });
+            stack.Children.Add(new Viewbox
+            {
+                Child = new ThemedIcon { Style = (Style)Application.Current.Resources["Icon.ChevronDown"] },
+                Width = 10,
+                Height = 10,
+                Margin = new Thickness(4, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Opacity = 0.6
+            });
             var btn = new AppBarButton
             {
                 LabelPosition = CommandBarLabelPosition.Collapsed,
@@ -557,14 +668,14 @@ namespace FastFluentFilesFolders.Views
 
         private static AppBarButton TbRedBtn(string tooltip, RoutedEventHandler? click)
         {
-            var fontIcon = new FontIcon { Glyph = "\uECC9", FontSize = 18, Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 59, 48)) };
+            var icon = new ThemedIcon { Glyph = "\uECC9", Mono = true, Foreground = ToolbarRedBrush };
             var btn = new AppBarButton
             {
                 Width = 40, Height = 40,
                 LabelPosition = CommandBarLabelPosition.Collapsed,
                 HorizontalContentAlignment = HorizontalAlignment.Center,
                 VerticalContentAlignment = VerticalAlignment.Center,
-                Content = new Viewbox { Child = fontIcon, Width = 20, Height = 20 }
+                Content = new Viewbox { Child = icon, Width = 20, Height = 20 }
             };
             ToolTipService.SetToolTip(btn, tooltip);
             if (click != null) btn.Click += click;
@@ -664,7 +775,7 @@ namespace FastFluentFilesFolders.Views
                             }
                             var subMenuItem = new MenuFlyoutItem { Text = sub.Header };
                             if (sub.IconGlyph != null)
-                                subMenuItem.Icon = new FontIcon { Glyph = sub.IconGlyph, FontSize = 14 };
+                                subMenuItem.Icon = IconLibrary.CreateIconElement(sub.IconGlyph, 14);
                             if (sub.Command != null)
                                 subMenuItem.Click += (_, _) => { flyout.Hide(); sub.Command.Execute(sub.CommandParameter ?? targetNode); if (targetNode != null && !targetNode.IsPlaceholder) _ = targetNode.RefreshAsync(); };
                             subMenu.Items.Add(subMenuItem);
@@ -672,13 +783,10 @@ namespace FastFluentFilesFolders.Views
 
                         var appBarBtn = new AppBarButton { Label = item.Header };
                         if (item.ThemedIconKey != null)
-                        {
-                            var themed = new ThemedIcon();
-                            themed.Style = (Style)Application.Current.Resources[item.ThemedIconKey];
-                            appBarBtn.Content = themed;
-                        }
+                            ApplyThemedIconKey(appBarBtn, item.ThemedIconKey);
                         else if (item.IconGlyph != null)
-                            appBarBtn.Icon = new FontIcon { Glyph = item.IconGlyph, FontSize = 16 };
+                            ApplyGlyphIcon(appBarBtn, item.IconGlyph);
+                        ApplyMenuItemStyle(appBarBtn);
                         appBarBtn.Flyout = subMenu;
                         flyout.SecondaryCommands.Add(appBarBtn);
                         tracker.Add(appBarBtn);
@@ -687,13 +795,10 @@ namespace FastFluentFilesFolders.Views
                     {
                         var btn = new AppBarButton { Label = item.Header };
                         if (item.ThemedIconKey != null)
-                        {
-                            var themed = new ThemedIcon();
-                            themed.Style = (Style)Application.Current.Resources[item.ThemedIconKey];
-                            btn.Content = themed;
-                        }
+                            ApplyThemedIconKey(btn, item.ThemedIconKey);
                         else if (item.IconGlyph != null)
-                            btn.Icon = new FontIcon { Glyph = item.IconGlyph, FontSize = 16 };
+                            ApplyGlyphIcon(btn, item.IconGlyph);
+                        ApplyMenuItemStyle(btn);
                         if (item.Command != null)
                             btn.Click += (_, _) => { flyout.Hide(); item.Command.Execute(item.CommandParameter ?? targetNode); if (targetNode != null && !targetNode.IsPlaceholder) _ = targetNode.RefreshAsync(); };
                         flyout.SecondaryCommands.Add(btn);
@@ -714,25 +819,124 @@ namespace FastFluentFilesFolders.Views
 
         private static string ThemedIconKey(string name) => name;
 
-        private static AppBarButton PlainBtn(string label, string glyph, RoutedEventHandler? click)
+        /// <summary>菜单/工具栏按钮：字形有 ThemedIcon 矢量版本时用它，未收录的字形仍回退 FontIcon。</summary>
+        private static AppBarButton GlyphBtn(string label, string glyph, RoutedEventHandler? click)
         {
-            var btn = new AppBarButton
-            {
-                Label = label,
-                Icon = new FontIcon { Glyph = glyph, FontSize = 16 }
-            };
+            var btn = new AppBarButton { Label = label };
+            ApplyGlyphIcon(btn, glyph);
             if (click != null) btn.Click += click;
             return btn;
         }
 
+        /// <summary>
+        /// 给二级命令套上菜单项模板：WinUI 默认的 overflow 项模板里没有 ContentPresenter，
+        /// 直接放 Content（ThemedIcon）不会显示（已用红色方块探针验证），换成自定义模板后就能显示。
+        /// </summary>
+        private static void ApplyMenuItemStyle(CommandBarFlyout flyout)
+        {
+            if (IconLibrary.TryLookupResource("ThemedMenuItemStyle", out var value) && value is Style style)
+            {
+                foreach (var command in flyout.SecondaryCommands)
+                    if (command is AppBarButton button) ApplyMenuItemStyle(button, style);
+            }
+
+            // 二级列表的宽度由“最宽的那个项”决定，而菜单宽度往往由一级命令栏撑开，
+            // 于是列表右边会留空档；弹出后按菜单实际宽度把二级项撑满（只增不减，避免布局来回抖）。
+            flyout.Opened -= OnMenuFlyoutOpened;
+            flyout.Opened += OnMenuFlyoutOpened;
+        }
+
+        private static void OnMenuFlyoutOpened(object? sender, object e)
+        {
+            if (sender is not CommandBarFlyout flyout || flyout.DispatcherQueue == null) return;
+            flyout.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => StretchSecondaryCommands(flyout));
+        }
+
+        private static void StretchSecondaryCommands(CommandBarFlyout flyout)
+        {
+            // 只按“一级命令栏的实际宽度”撑：没有一级命令栏时列表本身就是宽度来源（撑了会互相反馈、越撑越宽）。
+            double barWidth = 0;
+            foreach (var command in flyout.PrimaryCommands)
+                if (command is FrameworkElement element && element.ActualWidth > 0)
+                    barWidth += element.ActualWidth + element.Margin.Left + element.Margin.Right;
+
+            if (barWidth <= 0) return;
+            var target = barWidth + 20;
+
+            foreach (var command in flyout.SecondaryCommands)
+                if (command is AppBarButton button && button.ActualWidth + 1 < target)
+                    button.MinWidth = target;
+        }
+
+        private static FrameworkElement? TopMostElementOf(DependencyObject element)
+        {
+            FrameworkElement? top = element as FrameworkElement;
+            var parent = VisualTreeHelper.GetParent(element);
+            while (parent != null)
+            {
+                if (parent is FrameworkElement fe) top = fe;
+                parent = VisualTreeHelper.GetParent(parent);
+            }
+            return top;
+        }
+
+        private static void ApplyMenuItemStyle(AppBarButton button)
+        {
+            if (IconLibrary.TryLookupResource("ThemedMenuItemStyle", out var value) && value is Style style)
+                ApplyMenuItemStyle(button, style);
+        }
+
+        private static void ApplyMenuItemStyle(AppBarButton button, Style style)
+        {
+            button.Style = style;
+
+            // 自定义模板后补上无障碍名称，读屏/自动化仍能念出菜单项
+            if (!string.IsNullOrEmpty(button.Label))
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, button.Label);
+        }
+
+        /// <summary>
+        /// 菜单项图标：显式 16×16 + 立即建层。
+        /// CommandBarFlyout 的二级命令（Popup 内的控件）不会触发 Loaded——不立即建层就是空白图标，
+        /// 不给显式尺寸则 Popup 里排不出图标位（标签左移）。
+        /// </summary>
+        private static ThemedIcon MenuIcon(string? glyph = null, string? styleKey = null)
+        {
+            var icon = new ThemedIcon { Width = 16, Height = 16 };
+            if (!string.IsNullOrEmpty(styleKey))
+                icon.Style = (Style)Application.Current.Resources[styleKey];
+            if (!string.IsNullOrEmpty(glyph))
+                icon.Glyph = glyph;
+            icon.EnsureBuilt();
+            return icon;
+        }
+
+        /// <summary>按字形给菜单项配 ThemedIcon（两色矢量；未收录字形时 ThemedIcon 自动回退字体图标）。</summary>
+        private static void ApplyGlyphIcon(AppBarButton btn, string glyph)
+        {
+            btn.Content = MenuIcon(glyph);
+        }
+
+        /// <summary>插件的样式键（如 Icon.Archive）→ 同名 IconData 生成矢量图标。</summary>
+        private static void ApplyThemedIconKey(AppBarButton btn, string themedIconKey)
+        {
+            if (IconLibrary.TryLookupResource(themedIconKey, out var value) && value is Style)
+            {
+                btn.Content = MenuIcon(styleKey: themedIconKey);
+                return;
+            }
+
+            var name = themedIconKey.StartsWith("Icon.", StringComparison.Ordinal) ? themedIconKey[5..] : themedIconKey;
+            btn.Icon = IconLibrary.CreateIconElementByName(name, 16)
+                       ?? new FontIcon { Glyph = "\uE7B8", FontSize = 16 };
+        }
+
         private static AppBarButton CopyPathThemedBtn(string label, RoutedEventHandler? click)
         {
-            var icon = new ThemedIcon();
-            icon.Style = (Style)Application.Current.Resources["Icon.Copy"];
             var btn = new AppBarButton
             {
                 Label = label,
-                Content = new Viewbox { Child = icon, Width = 16, Height = 16 },
+                Content = MenuIcon(styleKey: "Icon.Copy"),
                 KeyboardAcceleratorTextOverride = "Ctrl+Shift+C"
             };
             if (click != null) btn.Click += click;
@@ -741,22 +945,28 @@ namespace FastFluentFilesFolders.Views
 
         private static AppBarButton RedBtn(string label, string glyph, RoutedEventHandler? click)
         {
+            var red = new SolidColorBrush(Microsoft.UI.Colors.Red);
+            var icon = MenuIcon(glyph);
+            icon.Mono = true;
+            icon.Foreground = red;
+            icon.EnsureBuilt();
             var btn = new AppBarButton
             {
                 Label = label,
-                Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red),
-                Icon = new FontIcon { Glyph = glyph, FontSize = 16, Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red) }
+                Foreground = red,
+                Content = icon
             };
             if (click != null) btn.Click += click;
             return btn;
         }
 
+        /// <summary>子菜单项图标：MenuFlyoutItem 只接受 IconElement，用 PathIcon 呈现矢量版本。</summary>
         private static MenuFlyoutItem SubMenuBtn(string label, string glyph, RoutedEventHandler? click)
         {
             var item = new MenuFlyoutItem
             {
                 Text = label,
-                Icon = new FontIcon { Glyph = glyph, FontSize = 14 }
+                Icon = IconLibrary.CreateIconElement(glyph, 14)
             };
             if (click != null) item.Click += click;
             return item;
@@ -773,7 +983,7 @@ namespace FastFluentFilesFolders.Views
             return new AppBarButton
             {
                 Label = ML.CmdShowMoreOptions,
-                Icon = new FontIcon { Glyph = "\uE712", FontSize = 16 },
+                Content = MenuIcon("\uE712"),
                 Flyout = subMenu
             };
         }
@@ -888,8 +1098,11 @@ namespace FastFluentFilesFolders.Views
             var pinned = vm?.IsFolderPinned(item) ?? QuickAccessHelper.IsPinned(item.FullPath);
             _pinToggleButton.Visibility = Visibility.Visible;
             _pinToggleButton.Label = pinned ? ML.CmdUnpinFromQuickAccess : ML.CmdPinToQuickAccess;
-            if (_pinToggleButton.Icon is FontIcon icon)
-                icon.Glyph = pinned ? "\uE77A" : "\uE718";
+            if (_pinToggleButton.Content is ThemedIcon pinIcon)
+            {
+                pinIcon.Glyph = pinned ? "\uE77A" : "\uE718";
+                pinIcon.EnsureBuilt();
+            }
         }
 
         private async void OnPinToggleClick(object sender, RoutedEventArgs e)

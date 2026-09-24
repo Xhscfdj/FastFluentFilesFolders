@@ -69,8 +69,10 @@
 
                                                 <Border Grid.Column="0" Width="32" Height="32" CornerRadius="16"
                                                         Background="{Binding State, Converter={StaticResource StateToBrushConverter}, ConverterParameter=Background}">
-                                                    <FontIcon Glyph="{Binding DisplayIconGlyph}" FontSize="16"
-                                                              Foreground="{Binding State, Converter={StaticResource StateToBrushConverter}}"/>
+                                                    <Viewbox Width="16" Height="16">
+                                                        <uc:ThemedIcon Glyph="{Binding DisplayIconGlyph}" Mono="True" FontSize="16"
+                                                                       Foreground="{Binding State, Converter={StaticResource StateToBrushConverter}}"/>
+                                                    </Viewbox>
                                                 </Border>
 
                                                 <TextBlock Grid.Column="1" Margin="12,0" VerticalAlignment="Center"
@@ -83,7 +85,9 @@
                                                         Visibility="{Binding IsCompleted, Converter={StaticResource BoolToVis}}"
                                                         Click="CloseItem_Click"
                                                         ToolTipService.ToolTip="Clear">
-                                                    <FontIcon Glyph="&#xE711;" FontSize="12"/>
+                                                    <Viewbox Width="12" Height="12">
+                                                        <uc:ThemedIcon Glyph="&#xE711;" Mono="True" FontSize="12"/>
+                                                    </Viewbox>
                                                 </Button>
                                             </Grid>
 
@@ -117,7 +121,9 @@
             </Flyout>
         </Button.Flyout>
         <StackPanel Orientation="Horizontal" Spacing="4">
-            <FontIcon x:Name="IslandIcon" Glyph="&#xE8B7;" FontSize="12" VerticalAlignment="Center"/>
+            <Viewbox Width="12" Height="12" VerticalAlignment="Center">
+                <uc:ThemedIcon x:Name="IslandIcon" Glyph="&#xE8B7;" Mono="True" FontSize="12"/>
+            </Viewbox>
             <TextBlock x:Name="CountText" Text="" VerticalAlignment="Center" FontSize="12"/>
         </StackPanel>
     </Button>

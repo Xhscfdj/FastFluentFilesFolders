@@ -50,7 +50,9 @@
             IsEnabled="{Binding CanGoBack, ElementName=LRSB}"
             Style="{StaticResource SubtleButtonStyle}"
             Padding="4">
-				<FontIcon Glyph="&#xE72B;" FontSize="14"/>
+				<Viewbox Width="14" Height="14">
+					<local:ThemedIcon Style="{StaticResource Icon.Back}"/>
+				</Viewbox>
 			</Button>
 
 			<Button Grid.Column="1" x:Name="ForwardButton"
@@ -59,7 +61,9 @@
             IsEnabled="{Binding CanGoForward, ElementName=LRSB}"
             Style="{StaticResource SubtleButtonStyle}"
             Padding="4">
-				<FontIcon Glyph="&#xE72A;" FontSize="14"/>
+				<Viewbox Width="14" Height="14">
+					<local:ThemedIcon Style="{StaticResource Icon.Forward}"/>
+				</Viewbox>
 			</Button>
 
 			<Button Grid.Column="2" x:Name="UpButton"
@@ -67,7 +71,9 @@
             Command="{Binding GoUpCommand, ElementName=LRSB}"
             Style="{StaticResource SubtleButtonStyle}"
             Padding="4">
-				<FontIcon Glyph="&#xE74A;" FontSize="14"/>
+				<Viewbox Width="14" Height="14">
+					<local:ThemedIcon Style="{StaticResource Icon.Up}"/>
+				</Viewbox>
 			</Button>
 
 			<Button Grid.Column="3" x:Name="RefreshButton"
@@ -75,7 +81,9 @@
 			Style="{StaticResource SubtleButtonStyle}"
 			Click="OnRefreshClick"
 			Padding="4">
-				<FontIcon Glyph="&#xE72C;" FontSize="14"/>
+				<Viewbox Width="14" Height="14">
+					<local:ThemedIcon Style="{StaticResource Icon.Refresh}"/>
+				</Viewbox>
 			</Button>
 
 			<Button Grid.Column="4" x:Name="HomeButton"
@@ -84,7 +92,9 @@
 			CommandParameter="{Binding HomePath, ElementName=LRSB}"
 			Style="{StaticResource SubtleButtonStyle}"
 			Padding="4">
-				<FontIcon Glyph="&#xE80F;" FontSize="14"/>
+				<Viewbox Width="14" Height="14">
+					<local:ThemedIcon Style="{StaticResource Icon.Home}"/>
+				</Viewbox>
 			</Button>
 
 			<Grid Grid.Column="5" x:Name="AddressBarArea" Margin="4,0,0,0" PointerPressed="OnAddressBarAreaPointerPressed">
@@ -146,7 +156,9 @@
 										<Button.RenderTransform>
 											<RotateTransform Angle="0"/>
 										</Button.RenderTransform>
-										<FontIcon Glyph="&#xE76C;" FontSize="10"/>
+										<Viewbox Width="10" Height="10">
+											<local:ThemedIcon Style="{StaticResource Icon.ChevronRight}"/>
+										</Viewbox>
 										<Button.Flyout>
 											<MenuFlyout Opening="OnFlyoutOpening" Closing="OnFlyoutClosing">
 												<MenuFlyout.MenuFlyoutPresenterStyle>
@@ -171,7 +183,9 @@
             Style="{StaticResource SubtleButtonStyle}"
             Click="OnSearchButtonClick"
             Padding="4">
-				<FontIcon Glyph="&#xE721;" FontSize="14"/>
+				<Viewbox Width="14" Height="14">
+					<local:ThemedIcon Style="{StaticResource Icon.Search}"/>
+				</Viewbox>
 			</Button>
 
 			<Button Grid.Column="7" x:Name="CopyPathButton"
@@ -180,7 +194,9 @@
             Command="{Binding CopyPathCommand, ElementName=LRSB}"
 			Style="{StaticResource SubtleButtonStyle}"
             Padding="4">
-				<FontIcon Glyph="&#xE8C8;" FontSize="16"/>
+				<Viewbox Width="16" Height="16">
+					<local:ThemedIcon Style="{StaticResource Icon.Copy}"/>
+				</Viewbox>
 			</Button>
 
 			<ItemsControl Grid.Column="8" x:Name="PluginToolbarItems" Margin="4,0,0,0">
@@ -194,7 +210,9 @@
 						<Button Width="32" Height="32"
                         Style="{StaticResource SubtleButtonStyle}"
                         Padding="4">
-							<FontIcon Glyph="{Binding}" FontSize="14"/>
+							<Viewbox Width="14" Height="14">
+							<local:ThemedIcon Glyph="{Binding}"/>
+						</Viewbox>
 						</Button>
 					</DataTemplate>
 				</ItemsControl.ItemTemplate>

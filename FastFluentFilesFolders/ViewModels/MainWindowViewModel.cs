@@ -655,8 +655,10 @@ namespace FastFluentFilesFolders.ViewModels
 
 						bool isDir = Directory.Exists(plan.DestPath);
 						var node = new FileSystemNodeViewModel(plan.DestPath, isDir, false, AppConfigs, _uiDispatcherQueue, false);
-						_ = node.InitAsync(node.FullPath, isDir);
+						// 先同步补齐分组需要的元数据，再启动异步元数据/图标加载，
+						// 避免异步赋值与加入分组视图的时序竞争。
 						PrepareNodeForGroupedView(node);
+						_ = node.InitAsync(node.FullPath, isDir);
 						createdNodes.Add(node);
 						if (isCut)
 							movedSourcePaths.Add(plan.SourcePath);
@@ -944,6 +946,7 @@ namespace FastFluentFilesFolders.ViewModels
 			else
 				RemoveNodeByFullPath(CurrentFolderContent, item, path);
 			RemoveNodeByFullPath(SelectedFolder?.Children, item, path);
+			SelectedFolder?.RefreshChildrenCountText();
 		}
 
 		/// <summary>收集所有“已加载”的目录节点（含侧栏根、固定栏、各标签页与当前目录），UI 线程调用。</summary>
@@ -989,7 +992,9 @@ namespace FastFluentFilesFolders.ViewModels
 			foreach (var folder in loadedFolders)
 			{
 				if (!PathEquals(folder.FullPath, parentPath)) continue;
-				RemoveNodeByFullPath(folder.Children, folder.Children.Contains(item) ? item : null, item.FullPath);
+				int removed = RemoveNodeByFullPath(folder.Children, folder.Children.Contains(item) ? item : null, item.FullPath);
+				if (removed > 0)
+					folder.RefreshChildrenCountText();
 			}
 		}
 
@@ -1033,6 +1038,7 @@ namespace FastFluentFilesFolders.ViewModels
 					if (!SelectedFolder.Children.Contains(node))
 						SelectedFolder.Children.Add(node);
 				}
+				SelectedFolder.RefreshChildrenCountText();
 				return;
 			}
 
@@ -1049,6 +1055,7 @@ namespace FastFluentFilesFolders.ViewModels
 					if (!loadedDest.Children.Contains(node))
 						loadedDest.Children.Add(node);
 				}
+				loadedDest.RefreshChildrenCountText();
 				return;
 			}
 
@@ -1189,8 +1196,8 @@ namespace FastFluentFilesFolders.ViewModels
 		public void AddItemToCurrentView(string fullPath, bool isDirectory)
 		{
 			var node = new FileSystemNodeViewModel(fullPath, isDirectory, false, _appConfigs, _uiDispatcherQueue, false);
-			_ = node.InitAsync(node.FullPath, isDirectory);
 			PrepareNodeForGroupedView(node);
+			_ = node.InitAsync(node.FullPath, isDirectory);
 			_uiDispatcherQueue.TryEnqueue(() =>
 			{
 				CurrentFolderContent.Add(node);
@@ -1198,6 +1205,7 @@ namespace FastFluentFilesFolders.ViewModels
 				{
 					node.Parent = SelectedFolder;
 					SelectedFolder.Children.Add(node);
+					SelectedFolder.RefreshChildrenCountText();
 				}
 				NotifyViewCountChanged();
 			});
@@ -1379,6 +1387,7 @@ namespace FastFluentFilesFolders.ViewModels
 				{
 					node.Parent = SelectedFolder;
 					SelectedFolder.Children.Add(node);
+					SelectedFolder.RefreshChildrenCountText();
 				}
 				NotifyViewCountChanged();
 			});
@@ -1977,8 +1986,11 @@ namespace FastFluentFilesFolders.ViewModels
 		/// <summary>清空回收站（调用方确认后调用）：走操作岛并显示真实结果。</summary>
 		public async Task EmptyRecycleBinAsync()
 		{
+			// 不再因为“当前节点判断失败”而静默返回：先建卡，结果可见
 			var node = SelectedFolder;
-			if (node == null || node.NodeKind != FileNodeKind.RecycleBin) return;
+			var recycleNode = node != null && node.NodeKind == FileNodeKind.RecycleBin ? node : null;
+			if (recycleNode == null)
+				Debug.WriteLine($"[RecycleBin] 清空时当前节点不是回收站: {node?.FullPath ?? "<null>"}");
 
 			var op = CreateReportedOperation(ML.RecycleEmpty, "\uE74D", fileCount: 0);
 
@@ -2001,11 +2013,13 @@ namespace FastFluentFilesFolders.ViewModels
 			}
 
 			CompleteOperation(op, 0, 0);
+			if (recycleNode == null) return;
+
 			await _uiDispatcherQueue.EnqueueAsync(async () =>
 			{
-				await node.ReloadChildrenAsync();
+				await recycleNode.ReloadChildrenAsync();
 				_displayedFolderNode = null;
-				await UpdateCurrentFolderContentAsync(node, version: null);
+				await UpdateCurrentFolderContentAsync(recycleNode, version: null);
 				NotifyViewCountChanged();
 			});
 		}

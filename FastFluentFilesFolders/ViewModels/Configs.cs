@@ -10,7 +10,7 @@ namespace FastFluentFilesFolders.ViewModels
     public partial class Configs : ObservableObject
     {
         public static readonly bool IsDebugMode = true;
-        public static readonly string Version = "1.0.2";
+        public static readonly string Version = "1.1.0";
         private static readonly string DefaultConfigPath =
             Path.Combine(AppContext.BaseDirectory, "Configs", "configs.json");
 

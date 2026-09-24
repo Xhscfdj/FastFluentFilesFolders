@@ -561,46 +561,74 @@ namespace FastFluentFilesFolders.ViewModels
 			return node;
 		}
 
-		// 同步加载基本文件/文件夹信息（确保排序时属性已就绪）
+		// 异步加载基本文件/文件夹信息（磁盘读取在后台，属性赋值统一回到 UI 线程）
 		private async Task LoadBasicInfoAsync()
 		{
 			if (IsPlaceholder || _hasBasicInfo) { return; }
 			_hasBasicInfo = true;
+
+			var path = FullPath;
+			bool isDir = IsDirectory;
+			bool exists = false;
+			DateTime lastWrite = DateTime.MinValue;
+			DateTime created = DateTime.MinValue;
+			long size = 0;
+			FileAttributes attributes = default;
+
 			try
 			{
-				if (IsDirectory)
+				await Task.Run(() =>
 				{
-					if (Directory.Exists(FullPath))
+					try
 					{
-						var dirInfo = await Task.Run(() => new DirectoryInfo(FullPath));
-						LastModifiedTime = dirInfo.LastWriteTimeUtc;
-						FirstCreatedTime = dirInfo.CreationTimeUtc;
-						ApplyFileAttributes(dirInfo.Attributes);
+						if (isDir)
+						{
+							if (Directory.Exists(path))
+							{
+								var dirInfo = new DirectoryInfo(path);
+								lastWrite = dirInfo.LastWriteTimeUtc;
+								created = dirInfo.CreationTimeUtc;
+								attributes = dirInfo.Attributes;
+								exists = true;
+							}
+						}
+						else if (File.Exists(path))
+						{
+							var fileInfo = new FileInfo(path);
+							lastWrite = fileInfo.LastWriteTimeUtc;
+							created = fileInfo.CreationTimeUtc;
+							size = fileInfo.Length;
+							attributes = fileInfo.Attributes;
+							exists = true;
+						}
 					}
-					ExactSize = 0;
-				}
-				else if (File.Exists(FullPath))
-				{
-					var fileInfo = await Task.Run(() => new FileInfo(FullPath));
-					LastModifiedTime = fileInfo.LastWriteTimeUtc;
-					FirstCreatedTime = fileInfo.CreationTimeUtc;
-					ExactSize = fileInfo.Length;
-					ApplyFileAttributes(fileInfo.Attributes);
-				}
+					catch (Exception ex)
+					{
+						Debug.WriteLine($"[LoadBasicInfo] 读取失败 {path}: {ex.Message}");
+					}
+				});
 
 				await _uiDispatcherQueue.EnqueueAsync(() =>
 				{
+					if (exists)
+					{
+						LastModifiedTime = lastWrite;
+						FirstCreatedTime = created;
+						ExactSize = isDir ? 0 : size;
+						ApplyFileAttributes(attributes);
+					}
+
 					// 更新字符串显示
 					LastModifiedTimeString = LastModifiedTime.ToString("yyyy-MM-dd HH:mm:ss");
 					FirstCreatedTimeString = FirstCreatedTime.ToString("yyyy-MM-dd HH:mm:ss");
 					VisualSize = FormatFileSize(ExactSize);
 				});
 
-				Debug.WriteLine($"[BasicInfo] {FullPath} loaded: Size={ExactSize}, Modified={LastModifiedTimeString}");
+				Debug.WriteLine($"[BasicInfo] {path} loaded: Size={size}, Modified={lastWrite:yyyy-MM-dd HH:mm:ss}");
 			}
 			catch (Exception ex)
 			{
-				Debug.WriteLine($"[LoadBasicInfo] Error loading info for {FullPath}: {ex.Message}");
+				Debug.WriteLine($"[LoadBasicInfo] Error loading info for {path}: {ex.Message}");
 				// 保持默认值，不影响排序
 			}
 		}
@@ -694,6 +722,16 @@ namespace FastFluentFilesFolders.ViewModels
 			if (IsPlaceholder) return;
 			await LoadBasicInfoAsync();
 			_ = LoadIconAsync(IconSourcePath, IsDirectory);
+		}
+
+		/// <summary>
+		/// 重新计算并刷新“子项数量”文本（粘贴/删除/新建后调用，避免树里的 [n] 一直是旧值）。
+		/// </summary>
+		public void RefreshChildrenCountText()
+		{
+			if (!IsDirectory || IsPlaceholder) return;
+			int count = Children.Count(c => !c.IsPlaceholder);
+			ChildrenCountText = count > 0 ? $" [{count}]" : string.Empty;
 		}
 
 		/// <summary>

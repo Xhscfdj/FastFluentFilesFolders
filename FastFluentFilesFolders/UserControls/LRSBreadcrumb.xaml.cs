@@ -209,7 +209,12 @@ namespace FastFluentFilesFolders.UserControls
                     if (item.CommandParameter != null)
                         btn.CommandParameter = item.CommandParameter;
                     if (item.IconGlyph != null)
-                        btn.Content = new FontIcon { Glyph = item.IconGlyph, FontSize = 14 };
+                    {
+                        if (IconLibrary.HasIcon(item.IconGlyph))
+                            btn.Content = new Viewbox { Child = new ThemedIcon { Glyph = item.IconGlyph }, Width = 14, Height = 14 };
+                        else
+                            btn.Content = new FontIcon { Glyph = item.IconGlyph, FontSize = 14 };
+                    }
 
                     toolbarItems.Add(btn);
                 }

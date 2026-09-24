@@ -392,33 +392,55 @@ namespace FastFluentFilesFolders.Services
 			}
 		}
 
-		private static bool InvokeVerbOnEntry(RecycleBinEntry entry, RecycleVerbKind kind)
+		/// <summary>在 STA 线程上执行 Shell 相关调用（动词/清空回收站对线程套间敏感）。</summary>
+		private static bool RunOnSta(Func<bool> action, string label, int timeoutMs = 20000)
 		{
-			// Shell 动词（还原/彻底删除）必须在 STA 线程上执行；
-			// 在 MTA 线程（Task.Run）上调用可能“不抛异常但什么都不发生”。
 			bool result = false;
 			Exception? error = null;
 			var thread = new Thread(() =>
 			{
-				try { result = InvokeVerbOnEntryCore(entry, kind); }
+				try { result = action(); }
 				catch (Exception ex) { error = ex; }
 			});
 			thread.IsBackground = true;
 			thread.SetApartmentState(ApartmentState.STA);
 			thread.Start();
 
-			var label = kind == RecycleVerbKind.Restore ? "还原" : "彻底删除";
-			if (!thread.Join(TimeSpan.FromSeconds(20)))
+			if (!thread.Join(TimeSpan.FromMilliseconds(timeoutMs)))
 			{
-				Debug.WriteLine($"[RecycleBin] {label}超时: {entry.Name}");
+				Debug.WriteLine($"[RecycleBin] {label}超时");
+				LogRecycle($"{label}超时");
 				return false;
 			}
 			if (error != null)
 			{
 				Debug.WriteLine($"[RecycleBin] {label}异常: {error.Message}");
+				LogRecycle($"{label}异常: {error.Message}");
 				return false;
 			}
 			return result;
+		}
+
+		/// <summary>回收站诊断日志：%LOCALAPPDATA%\FastFluentFilesFolders\recycle.log</summary>
+		private static void LogRecycle(string message)
+		{
+			try
+			{
+				var dir = Path.Combine(
+					Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+					"FastFluentFilesFolders");
+				Directory.CreateDirectory(dir);
+				File.AppendAllText(
+					Path.Combine(dir, "recycle.log"),
+					DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff") + " " + message + Environment.NewLine);
+			}
+			catch { }
+		}
+
+		private static bool InvokeVerbOnEntry(RecycleBinEntry entry, RecycleVerbKind kind)
+		{
+			var label = kind == RecycleVerbKind.Restore ? "还原" : "彻底删除";
+			return RunOnSta(() => InvokeVerbOnEntryCore(entry, kind), $"{label} {entry?.Name}");
 		}
 
 		private static bool InvokeVerbOnEntryCore(RecycleBinEntry entry, RecycleVerbKind kind)
@@ -477,17 +499,43 @@ namespace FastFluentFilesFolders.Services
 			}
 		}
 
-		/// <summary>清空回收站（调用方需先自行弹确认框）。</summary>
+		/// <summary>
+		/// 清空回收站（调用方需先自行弹确认框）。
+		/// 先尝试系统 SHEmptyRecycleBin（STA 线程）；失败时回退为逐项删除物理项（$R + $I），
+		/// 保证“清空”一定生效，而不是静默什么都不做。
+		/// </summary>
 		public static bool EmptyRecycleBin()
 		{
+			int hr = -1;
+			bool apiOk = RunOnSta(() =>
+			{
+				hr = SHEmptyRecycleBin(IntPtr.Zero, null, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
+				// S_OK(0) 成功；S_FALSE(1) 表示回收站本来就是空的
+				return hr == 0 || hr == 1;
+			}, "清空回收站(SHEmptyRecycleBin)", timeoutMs: 60000);
+
+			LogRecycle($"SHEmptyRecycleBin hr=0x{hr:X8} apiOk={apiOk}");
+			if (apiOk) return true;
+
+			// 回退：逐项删除物理项（与“彻底删除”同一条已验证可用的路径）
 			try
 			{
-				int hr = SHEmptyRecycleBin(IntPtr.Zero, null, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
-				return hr == 0;
+				var entries = EnumerateEntries();
+				LogRecycle($"回退清空：枚举到 {entries.Count} 项");
+				if (entries.Count == 0) return true;
+
+				int deleted = 0;
+				foreach (var e in entries)
+				{
+					if (DeleteEntry(e)) deleted++;
+				}
+				LogRecycle($"回退清空：已删除 {deleted}/{entries.Count}");
+				return deleted > 0;
 			}
 			catch (Exception ex)
 			{
-				Debug.WriteLine($"[RecycleBin] 清空失败: {ex.Message}");
+				Debug.WriteLine($"[RecycleBin] 回退清空失败: {ex.Message}");
+				LogRecycle($"回退清空失败: {ex.Message}");
 				return false;
 			}
 		}

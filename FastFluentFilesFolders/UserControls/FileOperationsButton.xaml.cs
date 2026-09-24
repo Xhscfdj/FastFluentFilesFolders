@@ -22,6 +22,12 @@ namespace FastFluentFilesFolders.UserControls
 
         public void SetItems(ObservableCollection<FileOperationItem> items)
         {
+            // 工具栏重建（回收站切换/语言切换）时会再次调用：同一集合不要重复订阅
+            if (ReferenceEquals(_items, items)) return;
+
+            if (_items != null)
+                _items.CollectionChanged -= OnItemsChanged;
+
             _items = items;
             OpsList.ItemsSource = items;
             items.CollectionChanged += OnItemsChanged;
