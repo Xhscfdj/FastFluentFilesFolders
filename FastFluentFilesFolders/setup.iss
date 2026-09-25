@@ -1,6 +1,6 @@
 #define MyAppName "FastFluentFilesFolders"
-#define MyAppVersion "1.0.2"
-#define MyAppPublisher "XumoSoftware"
+#define MyAppVersion "1.1.0"
+#define MyAppPublisher "XhunjiWare"
 #define MyAppExeName "FastFluentFilesFolders.exe"
 #ifndef DestnationArch
     #define DestnationArch "x64"
@@ -62,5 +62,5 @@ Filename: "{app}\{#MyAppExeName}"; Description: "启动 {#MyAppName}"; Flags: no
 function InitializeSetup: Boolean;
 begin
   Result := True;
-  // 可在此添加自定义逻辑，如检查 .NET 运行时等
+
 end;

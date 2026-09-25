@@ -217,26 +217,40 @@ namespace FastFluentFilesFolders.Views
 
         private void OnCurrentFolderCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
         {
-            if (FileGrid.ItemsSource is GroupedFileList list)
+            if (FileGrid.ItemsSource is not GroupedFileList list) return;
+            if (this.DataContext is not MainWindowViewModel vm) return;
+
+            try
             {
                 if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Remove && e.OldItems != null)
                 {
+                    // 直接增量移除，不重建整表（否则滚动位置会被重置到顶部）
                     foreach (FileSystemNodeViewModel item in e.OldItems)
                         list.RemoveItem(item);
                 }
                 else if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add && e.NewItems != null)
                 {
+                    // 增量插入：GroupedFileList 会按当前排序插到正确位置
                     foreach (FileSystemNodeViewModel item in e.NewItems)
                         list.AddItem(item);
                 }
                 else
                 {
-                    if (this.DataContext is MainWindowViewModel vm)
-                        FileGrid.UpdateSource(vm.CurrentFolderContent ?? new(), vm.IsCurrentFolderSpecial);
+                    FileGrid.UpdateSource(vm.CurrentFolderContent ?? new(), vm.IsCurrentFolderSpecial);
                 }
-
-                // 若表格当前处于某列排序状态，把新增/删除后的项放回正确位置
-                FileGrid.ScheduleReapplyActiveSort();
+            }
+            catch (Exception ex)
+            {
+                // 兜底：增量更新出现意外（索引/状态不一致等）时回退整表刷新，保证内容正确
+                System.Diagnostics.Debug.WriteLine($"[FileGrid] 增量更新失败，回退整表刷新: {ex}");
+                try
+                {
+                    FileGrid.UpdateSource(vm.CurrentFolderContent ?? new(), vm.IsCurrentFolderSpecial);
+                }
+                catch (Exception inner)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[FileGrid] 整表刷新也失败: {inner.Message}");
+                }
             }
         }
 

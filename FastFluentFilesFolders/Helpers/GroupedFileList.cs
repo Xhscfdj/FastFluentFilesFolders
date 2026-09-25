@@ -26,11 +26,65 @@ namespace FastFluentFilesFolders.Helpers
         private bool _isBatchUpdating;
         private bool _isGrouped;
 
+        // 当前排序状态：用于新增条目时“插到正确位置”，而不是重置整个 ItemsSource（会滚回顶部）
+        private string? _sortPath;
+        private bool _sortAscending;
+        private bool _hasActiveSort;
+
         public event Action? FlatListChanged;
 
         public void SetDispatcher(DispatcherQueue dispatcher)
         {
             _dispatcher = dispatcher;
+        }
+
+        /// <summary>记录当前排序（由 LrsTableView 在排序时设置）。</summary>
+        public void SetActiveSort(string sortPath, bool ascending)
+        {
+            _sortPath = sortPath;
+            _sortAscending = ascending;
+            _hasActiveSort = true;
+        }
+
+        public void ClearActiveSort()
+        {
+            _hasActiveSort = false;
+            _sortPath = null;
+        }
+
+        private Comparison<FileSystemNodeViewModel>? GetActiveComparison()
+        {
+            if (!_hasActiveSort || string.IsNullOrEmpty(_sortPath)) return null;
+            bool asc = _sortAscending;
+            return _sortPath switch
+            {
+                "Name" => (a, b) => asc
+                    ? string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase)
+                    : string.Compare(b.Name, a.Name, StringComparison.CurrentCultureIgnoreCase),
+                "LastModifiedTime" => (a, b) => asc
+                    ? a.LastModifiedTime.CompareTo(b.LastModifiedTime)
+                    : b.LastModifiedTime.CompareTo(a.LastModifiedTime),
+                "FirstCreatedTime" => (a, b) => asc
+                    ? a.FirstCreatedTime.CompareTo(b.FirstCreatedTime)
+                    : b.FirstCreatedTime.CompareTo(a.FirstCreatedTime),
+                "ExactSize" => (a, b) => asc
+                    ? a.ExactSize.CompareTo(b.ExactSize)
+                    : b.ExactSize.CompareTo(a.ExactSize),
+                _ => null
+            };
+        }
+
+        /// <summary>二分查找插入位置（列表已是该比较下的有序序列）。</summary>
+        private static int LowerBound(IReadOnlyList<FileSystemNodeViewModel> list, FileSystemNodeViewModel item, Comparison<FileSystemNodeViewModel> cmp)
+        {
+            int lo = 0, hi = list.Count;
+            while (lo < hi)
+            {
+                int mid = lo + ((hi - lo) >> 1);
+                if (cmp(list[mid], item) < 0) lo = mid + 1;
+                else hi = mid;
+            }
+            return lo;
         }
 
         public void SetItems(IEnumerable<FileSystemNodeViewModel> items, bool grouped)
@@ -65,10 +119,19 @@ namespace FastFluentFilesFolders.Helpers
 
         public void AddItem(FileSystemNodeViewModel item)
         {
-            // 平铺模式（非分组目录）：直接追加，不建组头
+            var comparison = GetActiveComparison();
+
+            // 平铺模式（非分组目录）：按当前排序插到正确位置，未排序时追加
             if (!_isGrouped)
             {
-                Add(item);
+                if (comparison == null)
+                {
+                    Add(item);
+                }
+                else
+                {
+                    Insert(LowerBound(this, item, comparison), item);
+                }
                 return;
             }
 
@@ -80,6 +143,8 @@ namespace FastFluentFilesFolders.Helpers
             if (!_groupChildren.ContainsKey(key))
                 _groupChildren[key] = new List<FileSystemNodeViewModel>();
             _groupChildren[key].Add(item);
+            if (comparison != null)
+                _groupChildren[key].Sort(comparison);
 
             if (_isBatchUpdating) return;
 
@@ -90,13 +155,16 @@ namespace FastFluentFilesFolders.Helpers
                 int headerIdx = GetHeaderInsertIndex(key);
                 Insert(headerIdx, header);
                 if (header.IsGroupExpanded)
-                    Insert(headerIdx + 1 + _groupChildren[key].Count - 1, item);
+                {
+                    int posInGroup = _groupChildren[key].IndexOf(item);
+                    Insert(headerIdx + 1 + (posInGroup >= 0 ? posInGroup : _groupChildren[key].Count - 1), item);
+                }
             }
             else if (header.IsGroupExpanded)
             {
                 int headerIdx = IndexOf(header);
-                int insertIdx = headerIdx + _groupChildren[key].Count;
-                Insert(insertIdx, item);
+                int posInGroup = _groupChildren[key].IndexOf(item);
+                Insert(headerIdx + 1 + (posInGroup >= 0 ? posInGroup : _groupChildren[key].Count - 1), item);
             }
         }
 
@@ -254,6 +322,7 @@ namespace FastFluentFilesFolders.Helpers
 
         public void ResetSort()
         {
+            ClearActiveSort();
             if (_groupHeaders.Count == 0) return;
             var allItems = _groupChildren.Values.SelectMany(c => c).ToList();
             SetItems(allItems, true);
@@ -261,6 +330,7 @@ namespace FastFluentFilesFolders.Helpers
 
         public void SortWithinGroups(string sortPath, bool ascending)
         {
+            SetActiveSort(sortPath, ascending);
             if (_groupChildren.Count == 0)
             {
                 // 平铺模式：直接对当前列表排序

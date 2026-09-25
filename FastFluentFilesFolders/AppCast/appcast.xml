@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>FastFluentFilesFolders</title>
+    <description>Most recent changes with links to updates</description>
+    <language>en</language>
+    <item>
+      <title>FastFluentFilesFolders 1.1.0</title>
+      <pubDate>Thu, 24 Sep 2026 22:07:03 +08:00</pubDate>
+      <sparkle:version>1.1.0</sparkle:version>
+      <sparkle:shortVersionString>1.1.0</sparkle:shortVersionString>
+      <enclosure url="https://v4.gh-proxy.org/https://github.com/Xhscfdj/FastFluentFilesFolders/releases/download/v1.1.0/FastFluentFilesFolders_1.1.0_Setup_arm64.exe" sparkle:version="1.1.0" sparkle:shortVersionString="1.1.0" length="46623089" sparkle:os="windows" type="application/x-msdos-program" sparkle:criticalUpdate="false" sparkle:signature="hp/z/aOTnCH2S3fEzUwQxiRnLmskBFK88G6PT40gOw7gq3qM1Drwth5ii2ZtDccYHBGnaQnucA6hVPXrD2VADg==" />
+    </item>
+    <item>
+      <title>FastFluentFilesFolders 1.0.2</title>
+      <pubDate>Thu, 20 Aug 2026 14:38:54 +08:00</pubDate>
+      <sparkle:version>1.0.2</sparkle:version>
+      <sparkle:shortVersionString>1.0.2</sparkle:shortVersionString>
+      <enclosure url="https://v4.gh-proxy.org/https://github.com/Xhscfdj/FastFluentFilesFolders/releases/download/v1.1.0/FastFluentFilesFolders_1.0.2_Setup_arm64.exe" sparkle:version="1.0.2" sparkle:shortVersionString="1.0.2" length="46623073" sparkle:os="windows" type="application/x-msdos-program" sparkle:criticalUpdate="false" sparkle:signature="WO0aDanRUSwoaoxOuwDjnUHLCMTA4qoYtGCgGJCS8cVEfYIlyqdCfCK5CKLmKa+XI2B6gM0MDUVFLl/7gzOnDQ==" />
+    </item>
+  </channel>
+</rss>
