@@ -16,6 +16,7 @@
           "Microsoft.Extensions.Configuration.Json": "9.0.0",
           "Microsoft.Extensions.DependencyInjection": "9.0.0",
           "Microsoft.WindowsAppSDK": "2.2.0",
+          "NetSparkleUpdater.SparkleUpdater": "3.1.0",
           "System.Drawing.Common": "10.0.9",
           "System.Security.Cryptography.Pkcs": "10.0.0",
           "WinUI.TableView": "1.0.0",
@@ -1158,6 +1159,25 @@
           }
         }
       },
+      "NetSparkleUpdater.Chaos.NaCl/0.9.4": {
+        "runtime": {
+          "lib/net8.0/Chaos.NaCl.dll": {
+            "assemblyVersion": "0.1.0.0",
+            "fileVersion": "0.1.0.0"
+          }
+        }
+      },
+      "NetSparkleUpdater.SparkleUpdater/3.1.0": {
+        "dependencies": {
+          "NetSparkleUpdater.Chaos.NaCl": "0.9.4"
+        },
+        "runtime": {
+          "lib/net8.0/NetSparkle.dll": {
+            "assemblyVersion": "3.1.0.0",
+            "fileVersion": "3.1.0.0"
+          }
+        }
+      },
       "System.Drawing.Common/10.0.9": {
         "dependencies": {
           "Microsoft.Win32.SystemEvents": "10.0.9"
@@ -1472,6 +1492,20 @@
       "sha512": "sha512-w8KuqJB7IphDRXAGNVuRq+oGeoGycc4ZAraA+OIpsGm/boEKHLkwXmzNDaNrVlnsDpjxQFWE2XVp0hXjlWJqxw==",
       "path": "microsoft.windowsappsdk.winui/2.2.1",
       "hashPath": "microsoft.windowsappsdk.winui.2.2.1.nupkg.sha512"
+    },
+    "NetSparkleUpdater.Chaos.NaCl/0.9.4": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-bGUdkGMW/CvKFm6AMsufYJB9XpoK0TlRfIJ5yANZKhFUTSJe2gf6EO32ZgF9rT+S4h2ETdWHN/33weOnVFjWDQ==",
+      "path": "netsparkleupdater.chaos.nacl/0.9.4",
+      "hashPath": "netsparkleupdater.chaos.nacl.0.9.4.nupkg.sha512"
+    },
+    "NetSparkleUpdater.SparkleUpdater/3.1.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-ohFNB4q1zDBBoi+j2SBy41NgIJCuXSDRuUY/2ZjQwAgjyZIK4uQkcJDsx0tu00wHCcpRdQijdtcaRG164haAEQ==",
+      "path": "netsparkleupdater.sparkleupdater/3.1.0",
+      "hashPath": "netsparkleupdater.sparkleupdater.3.1.0.nupkg.sha512"
     },
     "System.Drawing.Common/10.0.9": {
       "type": "package",

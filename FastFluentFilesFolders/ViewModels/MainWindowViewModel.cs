@@ -22,7 +22,11 @@ namespace FastFluentFilesFolders.ViewModels
 	public partial class MainWindowViewModel : ViewModelBase
 	{
 		private IFileOperator _fileOperator;
+		private AutoUpdateService _autoUpdateService;
 		private PropertiesWindow? _propertiesWindow;
+
+		/// <summary>更新服务（设置页“检查更新”卡片 / 更新弹窗使用）。</summary>
+		public AutoUpdateService AutoUpdateService => _autoUpdateService;
 		public MultiLanguageStringsViewModel ML { get; }
 		public MainWindowViewModel(IIconProvider iconProvider, Microsoft.UI.Dispatching.DispatcherQueue uiDispatcherQueue, Configs configs, IFileOperator fileOperator, MultiLanguageStringsViewModel ml)
 		{
@@ -32,9 +36,11 @@ namespace FastFluentFilesFolders.ViewModels
 			_uiDispatcherQueue = uiDispatcherQueue;
 			_iconProvider = iconProvider;
 			ML = ml;
+			_autoUpdateService = new AutoUpdateService();
 
-			// 初始标签页
+			// 初始标签页（沿用上次使用的排序，重启后依然是上次的排序状态）
 			var firstTab = new ExplorerTab { Title = GetTabTitle(configs.HomePageFullPath) };
+			ApplyPersistedSort(firstTab, configs);
 			firstTab.SearchResults = SearchResults;
 			Tabs.Add(firstTab);
 			SelectedTab = firstTab;
@@ -1399,15 +1405,56 @@ namespace FastFluentFilesFolders.ViewModels
 			_ = AddNewItemToViewAsync(destDir, defaultName, isDirectory);
 		}
 
+		// 刷新单飞：快速连点时只允许一次刷新在跑，后续点击直接忽略。
+		// 两次刷新并发会在后台同时枚举磁盘、各建一份完整的节点集合/表格数据源，
+		// 这是“500ms 内连点两次立刻涨 25~35MB”的直接原因。
+		private int _refreshRunning;
+
 		public async Task RefreshCurrentFolderAsync()
 		{
-			if (SelectedFolder != null)
+			if (Interlocked.CompareExchange(ref _refreshRunning, 1, 0) == 1)
+				return;
+
+			try
 			{
-				// 强制刷新：清空展示标记，使 UpdateCurrentFolderContentAsync 重建列表
+				var folder = SelectedFolder;
+				if (folder == null) return;
+
+				// 递增导航版本：刷新期间如果发生新的导航/刷新，旧的那次表格挂载会被版本守卫丢弃
+				var tab = CurrentTab;
+				var version = tab != null ? ++tab.NavigationVersion : (int?)null;
+
+				await folder.ReloadChildrenAsync();
+
+				// 刷新始终重建一次表格：既给用户明确的“已刷新”反馈，也保证元数据/顺序变化立即可见。
+				// 子项实例已按路径复用，加上 ItemsStackPanel CacheLength=0，重建不再造成原生内存上涨。
 				_displayedFolderNode = null;
-				await SelectedFolder.ReloadChildrenAsync();
-				await UpdateCurrentFolderContentAsync(SelectedFolder, version: null);
+				await UpdateCurrentFolderContentAsync(folder, version);
+
 				BreadcrumbRefreshRequested?.Invoke();
+			}
+			finally
+			{
+				Interlocked.Exchange(ref _refreshRunning, 0);
+			}
+		}
+
+		/// <summary>预热图标的最大条数（只影响解码排队，命中缓存后滚动时同步赋值）。</summary>
+		private const int IconPrefetchCount = 160;
+
+		/// <summary>
+		/// 加载完成后按当前文件夹的条目顺序异步预热图标。
+		/// 图标 getter 会把请求并入批量队列，解码在后台完成、赋值在 UI 批次里应用；
+		/// 这样即使 CacheLength=0（屏外行不实体化），滚动时新出现的行也能直接从缓存命中图标。
+		/// </summary>
+		private void PrefetchIcons(IReadOnlyList<FileSystemNodeViewModel> items)
+		{
+			var count = Math.Min(items.Count, IconPrefetchCount);
+			for (var i = 0; i < count; i++)
+			{
+				var node = items[i];
+				if (node == null || node.IsPlaceholder) continue;
+				_ = node.Icon;
 			}
 		}
 
@@ -1416,6 +1463,15 @@ namespace FastFluentFilesFolders.ViewModels
 			// 初始化完成前不保存（构造函数中 SelectedFolder=C:\ 会误触发）
 			if (AppConfigs == null || !IsReady) return;
 			AppConfigs.LastVisitedPath = path;
+			DebounceSaveConfig();
+		}
+
+		/// <summary>
+		/// 防抖写配置：连续操作（排序、导航等）只落盘一次，避免频繁写文件。
+		/// </summary>
+		private void DebounceSaveConfig()
+		{
+			if (AppConfigs == null || !IsReady) return;
 			_saveConfigCts?.Cancel();
 			_saveConfigCts = new CancellationTokenSource();
 			var token = _saveConfigCts.Token;
@@ -1466,11 +1522,73 @@ namespace FastFluentFilesFolders.ViewModels
 		public ExplorerTab? CurrentTab => SelectedTab;
 		private bool _isRestoringTab;
 
+		// ===== 排序状态（每个标签页独立；最后使用的一份持久化到 user_configs.json）=====
+		/// <summary>当前标签页的排序列（null = 未排序，沿用配置里的默认排序方式）。</summary>
+		public string? CurrentSortPath => CurrentTab?.SortPath;
+		public bool CurrentSortAscending => CurrentTab?.SortAscending ?? true;
+
+		// 当前表格内容实际已套用的排序：切换标签页时用来判断是否需要重建内容
+		private string? _appliedSortPath;
+		private bool _appliedSortAscending = true;
+
+		/// <summary>
+		/// 由文件表格回写：用户在表头 / 排序菜单里改变了排序。写入当前标签页并持久化，
+		/// 之后换目录、刷新、切回该标签页都会用这份状态重新排序。
+		/// </summary>
+		public void SetCurrentSort(string? sortPath, bool ascending)
+		{
+			var tab = CurrentTab;
+			if (tab == null) return;
+
+			var normalized = string.IsNullOrEmpty(sortPath) ? null : sortPath;
+			if (string.Equals(tab.SortPath, normalized, StringComparison.Ordinal) && tab.SortAscending == ascending)
+				return;
+
+			tab.SortPath = normalized;
+			tab.SortAscending = ascending;
+			// 表格刚刚已经按这个状态把当前内容排好了，标记为“已套用”，
+			// 免得后续因为“状态不一致”再多做一次整表重建
+			_appliedSortPath = normalized;
+			_appliedSortAscending = ascending;
+
+			if (AppConfigs != null)
+			{
+				AppConfigs.LastSortPath = normalized ?? string.Empty;
+				AppConfigs.LastSortAscending = ascending;
+				DebounceSaveConfig();
+			}
+		}
+
+		/// <summary>新标签页沿用上次使用的排序（未排序时不套用任何状态）。</summary>
+		private static void ApplyPersistedSort(ExplorerTab tab, Configs? configs)
+		{
+			if (tab == null || configs == null) return;
+			if (string.IsNullOrEmpty(configs.LastSortPath)) return;
+			tab.SortPath = configs.LastSortPath;
+			tab.SortAscending = configs.LastSortAscending;
+		}
+
+		/// <summary>
+		/// 按当前标签页的排序状态重建一次表格内容（不重新枚举磁盘，直接用已加载的 Children，
+		/// 它们始终保持“配置里的默认排序”）。用于“取消排序”后真正回到默认顺序。
+		/// </summary>
+		public void RequestContentRebuild()
+		{
+			var folder = SelectedFolder;
+			if (folder == null) return;
+
+			var tab = CurrentTab;
+			var version = tab != null ? ++tab.NavigationVersion : (int?)null;
+			_displayedFolderNode = null;
+			_ = UpdateCurrentFolderContentAsync(folder, version);
+		}
+
 		[RelayCommand]
 		private void NewTab()
 		{
 			var path = GetStartupPath();
 			var tab = new ExplorerTab();
+			ApplyPersistedSort(tab, AppConfigs);
 			if (!string.IsNullOrEmpty(path) && Directory.Exists(path))
 			{
 				tab.Path = path;
@@ -1560,7 +1678,18 @@ namespace FastFluentFilesFolders.ViewModels
 			// 恢复导航状态
 			var path = string.IsNullOrEmpty(tab.Path) ? GetStartupPath() : tab.Path;
 			CurrentBreadcrumbPath = path;
+
+			// 排序状态是每个标签页独立的：若与表格当前实际套用的排序不同，
+			// 必须让内容重建一次（否则 UpdateCurrentFolderContentAsync 的“同一文件夹”守卫会直接跳过，
+			// 切换标签页后排序不会生效），重建在后台构建时就套用该标签页的排序。
+			var sameSortPath = string.Equals(tab.SortPath ?? string.Empty, _appliedSortPath ?? string.Empty, StringComparison.Ordinal);
+			var sameSort = sameSortPath && (string.IsNullOrEmpty(tab.SortPath) || tab.SortAscending == _appliedSortAscending);
+			if (!sameSort)
+				_displayedFolderNode = null;
+
 			tab.IsNavigatingFromHistory = true;
+			// 切标签页时旧文件夹仍属于上一个标签页：只切换展示，不能释放它的子项缓存。
+			_suppressFolderRelease = true;
 			try
 			{
 				var target = tab.FolderNode
@@ -1580,6 +1709,7 @@ namespace FastFluentFilesFolders.ViewModels
 			finally
 			{
 				tab.IsNavigatingFromHistory = false;
+				_suppressFolderRelease = false;
 			}
 
 			CanGoBack = tab.BackStack.Count > 0;
@@ -2033,7 +2163,49 @@ namespace FastFluentFilesFolders.ViewModels
 		}
 
 		private Microsoft.UI.Dispatching.DispatcherQueue _uiDispatcherQueue;
-		[ObservableProperty] private FileSystemNodeViewModel? _selectedFolder;
+		private FileSystemNodeViewModel? _selectedFolder;
+		// 切换标签页时旧文件夹仍属于另一个标签页，只切换展示、不释放其子项缓存。
+		private bool _suppressFolderRelease;
+
+		/// <summary>
+		/// 当前浏览的文件夹。所有导航入口（表格双击、目录树、固定栏、地址栏、后退/前进/向上）
+		/// 都会经过这里，集中处理“离开旧文件夹时释放子项缓存”，避免每访问一个文件夹就把它的
+		/// 整份子项列表永久留下（内存随访问过的文件夹项数持续增长）。
+		/// </summary>
+		public FileSystemNodeViewModel? SelectedFolder
+		{
+			get => _selectedFolder;
+			set
+			{
+				if (ReferenceEquals(_selectedFolder, value)) return;
+
+				var oldFolder = _selectedFolder;
+				if (!_suppressFolderRelease)
+					TryReleaseChildrenOnLeaving(oldFolder, value);
+
+				OnPropertyChanging(nameof(SelectedFolder));
+				_selectedFolder = value;
+				OnSelectedFolderChanged(value);
+				OnPropertyChanged(nameof(SelectedFolder));
+			}
+		}
+
+		/// <summary>
+		/// 离开旧文件夹时释放它的子项缓存。只释放普通物理文件夹与驱动器根，且未在目录树中展开
+		/// （展开时释放会让树塌掉）、不是压缩包内部节点。
+		/// 此电脑/网络/WSL/回收站/云盘分组等特殊根由侧栏/驱动器缓存管理，不在这里释放。
+		/// </summary>
+		private void TryReleaseChildrenOnLeaving(FileSystemNodeViewModel? oldFolder, FileSystemNodeViewModel? newFolder)
+		{
+			if (oldFolder == null || oldFolder.IsPlaceholder || !oldFolder.IsDirectory) return;
+			if (ReferenceEquals(oldFolder, newFolder)) return;
+			// 只释放普通物理文件夹与驱动器根；此电脑/网络/WSL/回收站/云盘分组等特殊根
+			// 由侧栏与驱动器缓存管理，不在这里释放。
+			if (oldFolder.NodeKind is not (FileNodeKind.Folder or FileNodeKind.Drive)) return;
+			if (oldFolder.IsArchiveEntry) return;
+			if (oldFolder.IsExpanded) return;
+			oldFolder.ReleaseChildren();
+		}
 		// 当前表格正在展示其内容的文件夹节点：重复进入同一文件夹时跳过无谓的重建
 		private FileSystemNodeViewModel? _displayedFolderNode;
 
@@ -2042,9 +2214,16 @@ namespace FastFluentFilesFolders.ViewModels
 		internal GroupedFileList? PendingPrebuiltSource { get; set; }
 		internal int PendingPrebuiltVersion { get; set; }
 
-		public bool IsCurrentFolderSpecial => SelectedFolder?.WillSplitToDifferentSorts ?? false;
+		// 表格里**当前已展示内容**是否按时间分组。不能用 SelectedFolder 实时推导：
+		// 导航一开始 SelectedFolder 就换成新目录，而表格里还是旧目录的内容，
+		// 于是 MiddleFilesView 会读到「旧内容 + 新分组标志」的不匹配组合，
+		// 把旧内容重新挂载一遍（还按新标志加上分组头）—— 表现就是“进入目录时额外抖一次”，
+		// 之后真内容到达又换一次。这里改成只在内容提交时更新，与内容一起生效。
+		private bool _displayedFolderIsSpecial;
 
-		partial void OnSelectedFolderChanged(FileSystemNodeViewModel? value)
+		public bool IsCurrentFolderSpecial => _displayedFolderIsSpecial;
+
+		private void OnSelectedFolderChanged(FileSystemNodeViewModel? value)
 		{
 			var tab = CurrentTab;
 			var version = tab != null ? ++tab.NavigationVersion : 1;
@@ -2131,11 +2310,15 @@ namespace FastFluentFilesFolders.ViewModels
 				var items = folder.Children.Where(n => !n.IsPlaceholder).ToList();
 				var special = folder.WillSplitToDifferentSorts;
 				var v = version ?? (CurrentTab?.NavigationVersion ?? 1);
+				// 当前标签页的排序状态：在后台构建时一并套用，避免为了恢复排序在 UI 线程重排整表
+				var sortPath = CurrentSortPath;
+				var sortAscending = CurrentSortAscending;
 
 				var (prebuilt, newContent) = await Task.Run(() =>
 				{
 					var g = new GroupedFileList();
-					g.SetItems(items, special);
+					// 单遍构建：分组 + 组内排序 + RebuildFlat 一次完成，避免 SetItems 后再 SortWithinGroups 二次构建
+					g.SetItems(items, special, sortPath, sortAscending);
 					var nc = new ObservableCollection<FileSystemNodeViewModel>(items);
 					return (g, nc);
 				});
@@ -2143,12 +2326,21 @@ namespace FastFluentFilesFolders.ViewModels
 				await _uiDispatcherQueue.EnqueueAsync(() =>
 				{
 					if (v != (CurrentTab?.NavigationVersion ?? -1)) return;
+					_appliedSortPath = sortPath;
+					_appliedSortAscending = sortAscending;
+					// 必须**先**更新分组标志、再换 CurrentFolderContent：顺序反了的话，
+					// MiddleFilesView 会在换内容那次通知里读到“新标志 + 旧内容”，把旧内容再挂一遍（多抖一次）。
+					_displayedFolderIsSpecial = special;
 					PendingPrebuiltSource = prebuilt;
 					PendingPrebuiltVersion = v;
 					CurrentFolderContent = newContent;
 					OnPropertyChanged(nameof(IsCurrentFolderSpecial));
 					NotifyViewCountChanged();
 					_displayedFolderNode = folder;
+
+					// 加载完成后按参数异步预热图标：CacheLength=0 时屏外行不实体化，
+					// 滚动到新行时若图标已在缓存里就能同步命中、不再出现逐个“弹图标”的迟滞感。
+					PrefetchIcons(newContent);
 					var tab = CurrentTab;
 					if (tab?.PendingSelectPath != null)
 					{

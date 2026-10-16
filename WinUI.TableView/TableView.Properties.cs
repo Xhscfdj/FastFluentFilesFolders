@@ -1,4 +1,4 @@
-using Microsoft.UI.Xaml;
+﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Data;
@@ -429,6 +429,43 @@ public partial class TableView
         get => (bool)GetValue(ForceRowOrCellSelectionOnContextRequestedProperty);
         set => SetValue(ForceRowOrCellSelectionOnContextRequestedProperty, value);
     }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether rows realized right after the content was replaced as a whole
+    /// (again, see <see cref="BeginContentReplacement"/>) play an entrance fade. Off by default;
+    /// when on, the consumer calls <see cref="BeginContentReplacement"/> right before swapping the content.
+    /// </summary>
+    public bool AnimateContentReplacement { get; set; }
+
+    /// <summary>
+    /// Gets or sets the duration of the entrance animation described by <see cref="AnimateContentReplacement"/>.
+    /// </summary>
+    public TimeSpan ContentReplacementAnimationDuration { get; set; } = TimeSpan.FromMilliseconds(200);
+
+    /// <summary>
+    /// Gets or sets how long after <see cref="BeginContentReplacement"/> a realized row still counts as
+    /// belonging to that content replacement (and therefore plays the entrance animation). Long enough to cover the
+    /// layout pass(es) that realize the new rows, short enough that rows scrolled into view later don't replay it.
+    /// </summary>
+    public TimeSpan ContentReplacementAnimationWindow { get; set; } = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>
+    /// Gets or sets the extra delay per row of the content replacement entrance animation, so the rows walk in
+    /// one after another instead of fading in as one block. Zero disables the stagger.
+    /// </summary>
+    public TimeSpan ContentReplacementStagger { get; set; } = TimeSpan.FromMilliseconds(15);
+
+    /// <summary>
+    /// Gets or sets the upper bound of the stagger delay, so a long list doesn't keep animating rows for seconds.
+    /// </summary>
+    public TimeSpan ContentReplacementMaxStagger { get; set; } = TimeSpan.FromMilliseconds(150);
+
+    /// <summary>
+    /// Gets or sets how far below its final position a row starts, sliding up while it fades in. Around 30 matches
+    /// what the built-in <c>ContentThemeTransition</c>/<c>EntranceThemeTransition</c> do when they do get to run;
+    /// 0 leaves a plain fade.
+    /// </summary>
+    public double ContentReplacementSlideOffsetY { get; set; }
 
     /// <summary>
     /// Gets or sets the selection start cell slot.

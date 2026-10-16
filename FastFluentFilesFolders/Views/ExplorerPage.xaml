@@ -37,10 +37,10 @@
 					<TabViewItem IsClosable="True">
 						<TabViewItem.Header>
 							<StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-								<Image Source="{x:Bind FolderNode.Icon, Mode=OneWay}"
+								<Image Source="{Binding FolderNode.Icon}"
 									   Width="16" Height="16"
 									   VerticalAlignment="Center" />
-								<TextBlock Text="{x:Bind Title, Mode=OneWay}"
+								<TextBlock Text="{Binding Title}"
 										   VerticalAlignment="Center" />
 							</StackPanel>
 						</TabViewItem.Header>

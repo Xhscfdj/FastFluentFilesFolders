@@ -237,6 +237,7 @@ namespace FastFluentFilesFolders.ViewModels
             TransitionModeItems = new List<TransitionModeItem>
             {
                 new() { Value = "Default", Display = _ml.TransitionModeDefault },
+                new() { Value = "Stream", Display = _ml.TransitionModeStream },
                 new() { Value = "Fade", Display = _ml.TransitionModeFade },
                 new() { Value = "None", Display = _ml.TransitionModeNone },
             };

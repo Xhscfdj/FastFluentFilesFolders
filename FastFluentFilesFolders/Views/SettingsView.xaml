@@ -229,6 +229,17 @@
 						</ccl:SettingsCard>
 					</ccl:SettingsExpander.Items>
 				</ccl:SettingsExpander>
+
+				<ccl:SettingsCard Header="{Binding ML.CheckUpdate}"
+								  Description="{Binding ML.CheckUpdateDescription}">
+					<ccl:SettingsCard.HeaderIcon>
+						<FontIcon Glyph="&#xE895;" />
+					</ccl:SettingsCard.HeaderIcon>
+					<Button x:Name="CheckUpdateBtn"
+							Content="{Binding ML.CheckUpdateButton}"
+							Style="{StaticResource AccentButtonStyle}"
+							Click="OnCheckUpdateClick" />
+				</ccl:SettingsCard>
 			</StackPanel>
 		</ScrollViewer>
 	</Grid>

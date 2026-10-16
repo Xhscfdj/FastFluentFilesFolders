@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Application
     x:Class="FastFluentFilesFolders.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -6,12 +6,15 @@
     xmlns:local="using:FastFluentFilesFolders"
     xmlns:uc="using:FastFluentFilesFolders.UserControls">
     <Application.Resources>
-        <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
+		<ResourceDictionary>
+			<ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
                 <ResourceDictionary Source="ms-appx:///UserControls/ThemedIconResources.xaml"/>
             </ResourceDictionary.MergedDictionaries>
-            <!-- CopyAddressMenuFlyoutItem：ThemedIcon 图标 + 右对齐灰色快捷键提示 -->
+			<Style x:Key="DialogButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+				<Setter Property="CornerRadius" Value="4" />
+			</Style>
+			<!-- CopyAddressMenuFlyoutItem(ThemedIcon 图标及灰色快捷键提示) -->
             <Style x:Key="CopyAddressMenuFlyoutItemStyle" TargetType="uc:CopyAddressMenuFlyoutItem">
                 <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                 <Setter Property="VerticalContentAlignment" Value="Center"/>
@@ -61,6 +64,7 @@
                     </Setter.Value>
                 </Setter>
             </Style>
+			<x:Double x:Key="LRSBreadcrumbControlsHeight">50</x:Double>
 		</ResourceDictionary>
     </Application.Resources>
 </Application>

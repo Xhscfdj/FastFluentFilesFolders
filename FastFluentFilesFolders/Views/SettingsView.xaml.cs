@@ -1,4 +1,4 @@
-﻿using FastFluentFilesFolders.Extensions;
+using FastFluentFilesFolders.Extensions;
 using FastFluentFilesFolders.Extensions.Interfaces;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -191,6 +191,31 @@ namespace FastFluentFilesFolders.Views
             {
                 ShowMessageDialog(App.ML.Get("PluginImport.UninstallFailedTitle"),
                     App.ML.Get(message));
+            }
+        }
+
+        /// <summary>“检查更新”卡片：唤起更新弹窗（检查结果、下载进度、安装都在弹窗里）。</summary>
+        private async void OnCheckUpdateClick(object sender, RoutedEventArgs e)
+        {
+            var service = App.SharedViewModel?.AutoUpdateService;
+            if (service == null) return;
+
+            var xamlRoot = App.MainWindow?.Content?.XamlRoot;
+            if (xamlRoot == null) return;
+
+            CheckUpdateBtn.IsEnabled = false;
+            try
+            {
+                var dialog = new UpdateDialog(service) { XamlRoot = xamlRoot };
+                await dialog.ShowAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[SettingsView] 打开更新弹窗失败: {ex.Message}");
+            }
+            finally
+            {
+                CheckUpdateBtn.IsEnabled = true;
             }
         }
 

@@ -31,6 +31,17 @@ namespace FastFluentFilesFolders.Models
         public FileSystemNodeViewModel? FolderToRelease { get; set; }
         public string? PendingSelectPath { get; set; }
 
+        /// <summary>
+        /// 该标签页独立的排序状态：SortPath 为表头列的 SortMemberPath（"Name"/"LastModifiedTime"/
+        /// "FirstCreatedTime"/"ExactSize"），为空表示未排序（沿用配置里的默认排序方式）。
+        /// 换目录、刷新、切换标签页都靠它恢复，不再依赖表格控件内部的残留字段。
+        /// </summary>
+        public string? SortPath { get; set; }
+        public bool SortAscending { get; set; } = true;
+
+        /// <summary>该标签页当前是否处于自定义排序状态</summary>
+        public bool HasSort => !string.IsNullOrEmpty(SortPath);
+
         /// <summary>该标签页独立的搜索状态</summary>
         public bool IsSearchMode { get; set; }
         public string SearchText { get; set; } = string.Empty;

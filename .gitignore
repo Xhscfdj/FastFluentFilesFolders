@@ -364,3 +364,6 @@ FodyWeavers.xsd
 # agents
 AGENTS.md
 .omo
+
+./FastFluentFilesfolders/build.ps1
+*.iss

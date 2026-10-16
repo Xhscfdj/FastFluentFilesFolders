@@ -62,6 +62,8 @@ namespace FastFluentFilesFolders.Views
             FileGrid.ContextRequested += OnFileGridContextRequested;
             FileGrid.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(OnFileGridKeyDown), true);
             FileGrid.SelectionChanged += (_, _) => UpdateRecycleToolbarState();
+            // 用户在表头/排序菜单里改了排序 → 记到当前标签页并持久化（换目录、刷新、切标签页都靠它恢复）
+            FileGrid.SortChanged += OnFileGridSortChanged;
 
             App.SharedViewModel.RenameFocusRequested += OnRenameFocusRequested;
             App.SharedViewModel.SelectItemRequested += OnSelectItemRequested;
@@ -163,13 +165,26 @@ namespace FastFluentFilesFolders.Views
             }
         }
 
+        private void OnFileGridSortChanged(string? sortPath, bool ascending)
+        {
+            var vm = this.DataContext as MainWindowViewModel ?? App.SharedViewModel;
+            if (vm == null) return;
+
+            var cleared = string.IsNullOrEmpty(sortPath);
+            vm.SetCurrentSort(sortPath, ascending);
+
+            // 取消排序：表格自己只能把现有条目重铺一遍（顺序仍是排序后的），
+            // 让 VM 用文件夹原始的子项顺序重建一次，才算真正回到配置里的默认排序。
+            if (cleared) vm.RequestContentRebuild();
+        }
+
         private void UpdateGroupedSource(MainWindowViewModel vm)
         {
             if (vm.IsSearchMode)
             {
                 if (_watchedCollection != null) { _watchedCollection.CollectionChanged -= OnCurrentFolderCollectionChanged; _watchedCollection = null; }
                 _lastAppliedGroupedSource = null;
-                FileGrid.UpdateSource(vm.SearchResults, grouped: false);
+                FileGrid.UpdateSource(vm.SearchResults, grouped: false, vm.CurrentSortPath, vm.CurrentSortAscending);
                 return;
             }
 
@@ -191,7 +206,7 @@ namespace FastFluentFilesFolders.Views
 
                 if (vm.CurrentTab == null || prebuiltVersion == vm.CurrentTab.NavigationVersion)
                 {
-                    FileGrid.UpdateSourcePrebuilt(prebuilt);
+                    FileGrid.UpdateSourcePrebuilt(prebuilt, vm.CurrentSortPath, vm.CurrentSortAscending);
                     if (FileGrid.ItemsSource is GroupedFileList gl)
                         gl.SetDispatcher(Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread());
                 }
@@ -210,7 +225,7 @@ namespace FastFluentFilesFolders.Views
             _watchedCollection.CollectionChanged += OnCurrentFolderCollectionChanged;
 
             _lastAppliedGroupedSource = (items, special);
-            FileGrid.UpdateSource(items, special);
+            FileGrid.UpdateSource(items, special, vm.CurrentSortPath, vm.CurrentSortAscending);
             if (FileGrid.ItemsSource is GroupedFileList list)
                 list.SetDispatcher(Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread());
         }
@@ -236,7 +251,8 @@ namespace FastFluentFilesFolders.Views
                 }
                 else
                 {
-                    FileGrid.UpdateSource(vm.CurrentFolderContent ?? new(), vm.IsCurrentFolderSpecial);
+                    FileGrid.UpdateSource(vm.CurrentFolderContent ?? new(), vm.IsCurrentFolderSpecial,
+                        vm.CurrentSortPath, vm.CurrentSortAscending);
                 }
             }
             catch (Exception ex)
@@ -245,7 +261,8 @@ namespace FastFluentFilesFolders.Views
                 System.Diagnostics.Debug.WriteLine($"[FileGrid] 增量更新失败，回退整表刷新: {ex}");
                 try
                 {
-                    FileGrid.UpdateSource(vm.CurrentFolderContent ?? new(), vm.IsCurrentFolderSpecial);
+                    FileGrid.UpdateSource(vm.CurrentFolderContent ?? new(), vm.IsCurrentFolderSpecial,
+                        vm.CurrentSortPath, vm.CurrentSortAscending);
                 }
                 catch (Exception inner)
                 {

@@ -35,7 +35,8 @@ namespace FastFluentFilesFolders.ViewModels
             nameof(PluginsSection),
             nameof(SystemBackdropMode), nameof(BackdropMica), nameof(BackdropMicaAlt),
             nameof(BackdropAcrylic), nameof(BackdropAcrylicThin), nameof(BackdropNone),
-            nameof(TransitionMode), nameof(TransitionModeDefault), nameof(TransitionModeFade), nameof(TransitionModeNone),
+            nameof(TransitionMode), nameof(TransitionModeDefault), nameof(TransitionModeStream),
+            nameof(TransitionModeFade), nameof(TransitionModeNone),
             nameof(PluginManagement), nameof(PluginImport), nameof(PluginImportBtn), nameof(PluginInstalled),
             nameof(NavExplorer), nameof(NavPlugins), nameof(AppAuthorCredit),
             nameof(PluginsPageTitle), nameof(PluginsSettingsHeader),
@@ -57,6 +58,7 @@ namespace FastFluentFilesFolders.ViewModels
             nameof(NewFileDefault), nameof(NewFolderDefault), nameof(NewTextDocumentDefault),
             nameof(NewShortcutDefault), nameof(NewExcelDefault), nameof(NewWordDefault), nameof(NewPPTDefault),
             nameof(AppName), nameof(AppVersion),
+            nameof(CheckUpdate), nameof(CheckUpdateDescription), nameof(CheckUpdateButton),
             nameof(LanguageChinese), nameof(LanguageEnglish), nameof(LanguageFumo),
             nameof(TimeGroupToday), nameof(TimeGroupYesterday), nameof(TimeGroupEarlierThisWeek),
             nameof(TimeGroupLastWeek), nameof(TimeGroupEarlierThisMonth), nameof(TimeGroupLastMonth),
@@ -92,6 +94,7 @@ namespace FastFluentFilesFolders.ViewModels
         public string MiddleFilesHeight => _loc.GetString("MiddleFilesHeight");
         public string TransitionMode => _loc.GetString("TransitionMode");
         public string TransitionModeDefault => _loc.GetString("TransitionModeDefault");
+        public string TransitionModeStream => _loc.GetString("TransitionModeStream");
         public string TransitionModeFade => _loc.GetString("TransitionModeFade");
         public string TransitionModeNone => _loc.GetString("TransitionModeNone");
         public string AdvancedSection => _loc.GetString("AdvancedSection");
@@ -233,6 +236,11 @@ namespace FastFluentFilesFolders.ViewModels
 
         public string AppName => _loc.GetString("AppName");
         public string AppVersion => _loc.GetString("AppVersion");
+
+        // ===== 检查更新 =====
+        public string CheckUpdate => _loc.GetString("CheckUpdate");
+        public string CheckUpdateDescription => _loc.GetString("CheckUpdateDescription");
+        public string CheckUpdateButton => _loc.GetString("CheckUpdateButton");
 
         public string LanguageChinese => _loc.GetString("LanguageChinese");
         public string LanguageEnglish => _loc.GetString("LanguageEnglish");

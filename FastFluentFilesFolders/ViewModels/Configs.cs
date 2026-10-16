@@ -1,4 +1,4 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
@@ -10,7 +10,7 @@ namespace FastFluentFilesFolders.ViewModels
     public partial class Configs : ObservableObject
     {
         public static readonly bool IsDebugMode = true;
-        public static readonly string Version = "1.1.0";
+        public static readonly string Version = "1.1.1";
         private static readonly string DefaultConfigPath =
             Path.Combine(AppContext.BaseDirectory, "Configs", "configs.json");
 
@@ -30,6 +30,9 @@ namespace FastFluentFilesFolders.ViewModels
         [ObservableProperty] private string _homePageFullPath = DefaultDownloadsPath;
         [ObservableProperty] private string _lastVisitedPath = "";
         [ObservableProperty] private string _defaultOrderMode = "ModifiedDesc";
+        // 上次使用的排序状态（列 + 方向）：空字符串表示未排序。用于重启后保持排序。
+        [ObservableProperty] private string _lastSortPath = "";
+        [ObservableProperty] private bool _lastSortAscending = true;
         [ObservableProperty] private string _language = "zh-Hans";
         [ObservableProperty] private string _systemBackdropMode = "Mica";
         // 表格内容切换动画：Default = 控件默认过渡；Fade = 整表淡入（掩盖逐行覆盖）；None = 无动画
@@ -71,6 +74,8 @@ namespace FastFluentFilesFolders.ViewModels
             LastVisitedPath = configuration.GetValue("General:LastVisitedPath", "")!;
             IconParallelLoadingCount = configuration.GetValue("Performance:IconParallelLoadingCount", 0);
             DefaultOrderMode = configuration.GetValue("General:DefaultOrderMode", "ModifiedDesc")!;
+            LastSortPath = configuration.GetValue("General:LastSortPath", "")!;
+            LastSortAscending = configuration.GetValue("General:LastSortAscending", true);
             Language = configuration.GetValue("General:Language", "zh-Hans")!;
             SystemBackdropMode = configuration.GetValue("Appearance:SystemBackdropMode", "Mica")!;
             TransitionMode = configuration.GetValue("Appearance:TransitionMode", "Fade")!;
@@ -84,6 +89,7 @@ namespace FastFluentFilesFolders.ViewModels
         {
             var escapedPath = HomePageFullPath.Replace("\\", "\\\\").Replace("\"", "\\\"");
             var escapedLastVisited = LastVisitedPath.Replace("\\", "\\\\").Replace("\"", "\\\"");
+            var escapedLastSort = (LastSortPath ?? string.Empty).Replace("\\", "\\\\").Replace("\"", "\\\"");
             var json = string.Concat(
                 "{\n",
                 "  \"Appearance\": {\n",
@@ -98,6 +104,8 @@ namespace FastFluentFilesFolders.ViewModels
                $"    \"HomePageFullPath\": \"{escapedPath}\",\n",
                $"    \"LastVisitedPath\": \"{escapedLastVisited}\",\n",
                $"    \"DefaultOrderMode\": \"{DefaultOrderMode}\",\n",
+               $"    \"LastSortPath\": \"{escapedLastSort}\",\n",
+               $"    \"LastSortAscending\": {LastSortAscending.ToString().ToLower()},\n",
                $"    \"Language\": \"{Language}\"\n",
                 "  },\n",
                 "  \"Performance\": {\n",

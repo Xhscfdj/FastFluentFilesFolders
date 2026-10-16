@@ -39,6 +39,154 @@ public partial class TableViewRow : ListViewItem
     private bool _ensureCells = true;
     private Brush? _cellPresenterBackground;
     private Brush? _cellPresenterForeground;
+    private Storyboard? _entranceAnimationStoryboard;
+    private int _entranceAnimationToken = -1;
+    private bool _entranceAnimationStarted;
+
+    /// <summary>
+    /// Prepares the entrance animation for this row: pins <see cref="UIElement.Opacity"/> to 0 synchronously and
+    /// builds the storyboard (fade + optional slide, with <paramref name="delay"/> as its <c>BeginTime</c>), but
+    /// does <b>not</b> start it. <see cref="TableView"/> starts the whole batch at the end of the layout pass that
+    /// built it (<see cref="StartPreparedEntranceAnimation"/>).
+    /// <para>
+    /// Starting per row as each one is realized is what made the animation look like it "stuttered several times":
+    /// the panel builds the rows one at a time (~20-30ms each, cell templates dominate), so a per-row start turns
+    /// one entry animation into a dozen staggered micro-fades.
+    /// </para>
+    /// Returns false when this row already belongs to the given batch.
+    /// </summary>
+    internal bool PrepareEntranceAnimation(TimeSpan duration, int token, TimeSpan delay, double slideOffsetY)
+    {
+        if (_entranceAnimationToken == token) return false;
+
+        StopEntranceAnimation();
+        _entranceAnimationToken = token;
+        _entranceAnimationStarted = false;
+        Opacity = 0;
+        TableViewTransitionTrace.Write(
+            $"  row prepare: token={token} loaded={IsLoaded} duration={duration.TotalMilliseconds}ms " +
+            $"delay={delay.TotalMilliseconds:0}ms slide={slideOffsetY:0}px");
+
+        var storyboard = new Storyboard();
+        // 先快后慢更“利索”：线性曲线在同样的时长下会显得拖
+        var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
+        var fade = new DoubleAnimation
+        {
+            From = 0,
+            To = 1,
+            // 逐行错开就靠它：延迟计入动画时间线，Completed 也会相应往后推
+            BeginTime = delay,
+            Duration = new Duration(duration),
+            EasingFunction = easing,
+            EnableDependentAnimation = true,
+        };
+        Storyboard.SetTarget(fade, this);
+        Storyboard.SetTargetProperty(fade, "Opacity");
+        storyboard.Children.Add(fade);
+
+        // 上滑：行的 RenderTransform 库内没别处用（只有选中竖条用它自己的变换），所以这里可以安全占用；
+        // 它就是自带 ContentThemeTransition / EntranceThemeTransition 的等价效果（从下方偏移滑到位）。
+        TranslateTransform? slide = null;
+        if (slideOffsetY != 0)
+        {
+            slide = new TranslateTransform { Y = slideOffsetY };
+            RenderTransform = slide;
+
+            var slideAnimation = new DoubleAnimation
+            {
+                From = slideOffsetY,
+                To = 0,
+                BeginTime = delay,
+                Duration = new Duration(duration),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+                EnableDependentAnimation = true,
+            };
+            Storyboard.SetTarget(slideAnimation, slide);
+            Storyboard.SetTargetProperty(slideAnimation, "Y");
+            storyboard.Children.Add(slideAnimation);
+        }
+
+        storyboard.Completed += (_, _) =>
+        {
+            if (!ReferenceEquals(_entranceAnimationStoryboard, storyboard)) return;
+            _entranceAnimationStoryboard = null;
+            TableViewTransitionTrace.Write($"  row done: token={token} opacityAtEnd={Opacity:0.###}");
+            Opacity = 1;
+            if (slide is not null && ReferenceEquals(RenderTransform, slide))
+            {
+                slide.Y = 0;
+            }
+        };
+
+        _entranceAnimationStoryboard = storyboard;
+        return true;
+    }
+
+    /// <summary>
+    /// Whether this row has an entrance animation prepared for the given batch that hasn't started yet.
+    /// </summary>
+    internal bool HasPendingEntranceAnimation(int token) =>
+        _entranceAnimationToken == token && !_entranceAnimationStarted && _entranceAnimationStoryboard is not null;
+
+    /// <summary>
+    /// Starts the entrance animation prepared by <see cref="PrepareEntranceAnimation"/>. Called by
+    /// <see cref="TableView"/> for the whole batch at once, so the rows fade in together instead of dribbling in
+    /// one by one as they are realized.
+    /// </summary>
+    internal void StartPreparedEntranceAnimation(int token)
+    {
+        if (_entranceAnimationToken != token || _entranceAnimationStarted) return;
+
+        var storyboard = _entranceAnimationStoryboard;
+        if (storyboard is null) return;
+
+        _entranceAnimationStarted = true;
+
+        if (IsLoaded)
+        {
+            storyboard.Begin();
+            return;
+        }
+
+        // 还没进树的行上起动画会被丢掉，等 Loaded 再播
+        RoutedEventHandler? handler = null;
+        handler = (_, _) =>
+        {
+            Loaded -= handler;
+            if (_entranceAnimationToken == token && ReferenceEquals(_entranceAnimationStoryboard, storyboard))
+                storyboard.Begin();
+        };
+        Loaded += handler;
+    }
+
+    /// <summary>
+    /// Cancels a pending or running entrance animation and restores full opacity. Called when the container is
+    /// recycled, so a half-faded row can never be reused for another item.
+    /// </summary>
+    internal void CancelEntranceAnimation()
+    {
+        _entranceAnimationToken = -1;
+        StopEntranceAnimation();
+    }
+
+    /// <summary>
+    /// Stops the entrance animation and restores full opacity.
+    /// </summary>
+    private void StopEntranceAnimation()
+    {
+        if (_entranceAnimationStoryboard is null && Opacity >= 1) return;
+
+        _entranceAnimationStoryboard?.Stop();
+        _entranceAnimationStoryboard = null;
+        _entranceAnimationStarted = false;
+        Opacity = 1;
+
+        // 上滑用的变换是我们自己挂的，取消时把它归位，避免复用到别的条目上时带着偏移
+        if (RenderTransform is TranslateTransform slide)
+        {
+            slide.Y = 0;
+        }
+    }
 
     /// <summary>
     /// Initializes a new instance of the TableViewRow class.
@@ -614,27 +762,24 @@ public partial class TableViewRow : ListViewItem
     {
         await Task.Yield(); // let the animations and visual state changes complete
 
-        if (selectionIndicator is not null)
+        if (selectionIndicator is null)
         {
-            // Assign a TranslateTransform for animation
-            var translateTransform = new TranslateTransform();
-            selectionIndicator.RenderTransform = translateTransform;
-
-            var toValue = RowPresenter?.IsDetailsPanelVisible ?? false ? Math.Round(-detailsHeight / 2) : 0; // move up or down
-
-            var animation = new DoubleAnimation
-            {
-                To = toValue,
-                Duration = new Duration(TimeSpan.Zero)
-            };
-
-            var storyboard = new Storyboard();
-            Storyboard.SetTarget(animation, translateTransform);
-            Storyboard.SetTargetProperty(animation, "Y"); // vertical movement
-            storyboard.Children.Add(animation);
-
-            storyboard.Begin();
+            return;
         }
+
+        // 这里每次都换上一个全新的 CompositeTransform（而不是复用模板里的那个）：
+        // 模板的 Selected 视觉状态只把 ScaleY 动画到 1，Normal 状态并不把它还原，
+        // 残留的动画值会盖住本地值，让已经取消选中、尤其是行容器被回收给别的条目的行继续显示竖条
+        // —— 表现为“进入文件夹后有些项莫名其妙被选中”。
+        // 换成没有挂任何动画的新变换后，ScaleY 完全由本行的 IsSelected 决定，
+        // 模板里那些指向旧变换的动画也不再影响渲染（它们只会作用到已被替换掉的对象上）。
+        selectionIndicator.RenderTransform = new CompositeTransform
+        {
+            ScaleX = 1,
+            ScaleY = IsSelected ? 1 : 0,
+            // 行详情面板可见时把竖条上移半个面板高度，否则回到原位
+            TranslateY = RowPresenter?.IsDetailsPanelVisible ?? false ? Math.Round(-detailsHeight / 2) : 0
+        };
     }
 
     /// <summary>

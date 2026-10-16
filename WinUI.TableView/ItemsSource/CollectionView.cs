@@ -22,6 +22,10 @@ internal partial class CollectionView : ICollectionView, ISupportIncrementalLoad
     // the items currently visible under grouping (every leaf-level, expanded group's items, flattened in
     // group order) - the two only ever match when nothing is grouped.
     private readonly List<object?> _groupingSourceItems = [];
+    // 跟踪当前已附加 PropertyChanged 的条目（按引用比较）。
+    // ObservableCollection.Clear() 发出的 Reset 事件不带 OldItems，必须靠这份集合才能把旧条目的订阅解绑，
+    // 否则排序/分组重建（Clear + Add）会把上一批条目一直留在内存里。
+    private readonly HashSet<object> _propertyChangedAttached = new(ReferenceEqualityComparer.Instance);
     private readonly ObservableCollection<FilterDescription> _filterDescriptions = [];
     private readonly ObservableCollection<SortDescription> _sortDescriptions = [];
 #if WINDOWS
@@ -144,7 +148,10 @@ internal partial class CollectionView : ICollectionView, ISupportIncrementalLoad
 
         foreach (var item in items.OfType<INotifyPropertyChanged>())
         {
-            item.PropertyChanged += OnItemPropertyChanged;
+            // 幂等：已跟踪的条目不再重复订阅。否则 Reset/Replace 时
+            // “先解绑 OldItems、再对 Source 整体 Attach”会给未变化的条目叠加多份订阅。
+            if (_propertyChangedAttached.Add(item))
+                item.PropertyChanged += OnItemPropertyChanged;
         }
     }
 
@@ -158,8 +165,25 @@ internal partial class CollectionView : ICollectionView, ISupportIncrementalLoad
 
         foreach (var item in items.OfType<INotifyPropertyChanged>())
         {
-            item.PropertyChanged -= OnItemPropertyChanged;
+            if (_propertyChangedAttached.Remove(item))
+                item.PropertyChanged -= OnItemPropertyChanged;
         }
+    }
+
+    /// <summary>
+    /// 解绑当前已跟踪的全部条目。
+    /// ObservableCollection.Clear() 触发的 Reset 事件 OldItems 为 null，无法从事件参数拿到旧条目，
+    /// 只能靠跟踪集合把上一批订阅清干净，否则排序/分组重建（Clear + Add）会把旧条目一直留在内存里。
+    /// </summary>
+    private void DetachAllPropertyChangedHandlers()
+    {
+        foreach (var item in _propertyChangedAttached)
+        {
+            if (item is INotifyPropertyChanged inpc)
+                inpc.PropertyChanged -= OnItemPropertyChanged;
+        }
+
+        _propertyChangedAttached.Clear();
     }
 
     /// <summary>
@@ -210,7 +234,17 @@ internal partial class CollectionView : ICollectionView, ISupportIncrementalLoad
                     HandleSourceChanged();
                 }
 
-                DetachPropertyChangedHandlers(_itemsCopy);
+                // Reset 与 INotifyCollectionChanged 的 Clear 同理：快照可能不含全部旧条目，
+                // 直接按跟踪集合清空订阅，避免旧条目泄漏。
+                if (args.CollectionChange == CollectionChange.Reset)
+                {
+                    DetachAllPropertyChangedHandlers();
+                }
+                else
+                {
+                    DetachPropertyChangedHandlers(_itemsCopy);
+                }
+
                 AttachPropertyChangedHandlers(Source);
 
                 break;
@@ -271,12 +305,20 @@ internal partial class CollectionView : ICollectionView, ISupportIncrementalLoad
             case NotifyCollectionChangedAction.Move:
             case NotifyCollectionChangedAction.Replace:
             case NotifyCollectionChangedAction.Reset:
+                DetachPropertyChangedHandlers(e.OldItems);
+
+                // Reset（含 ObservableCollection.Clear()）不带 OldItems，必须把跟踪集合里的订阅全部解绑，
+                // 否则旧条目会经由 PropertyChanged 订阅被长期持有。
+                if (e.Action == NotifyCollectionChangedAction.Reset)
+                {
+                    DetachAllPropertyChangedHandlers();
+                }
+
                 if (_deferCounter <= 0)
                 {
                     HandleSourceChanged();
                 }
 
-                DetachPropertyChangedHandlers(e.OldItems);
                 AttachPropertyChangedHandlers(Source);
 
                 break;

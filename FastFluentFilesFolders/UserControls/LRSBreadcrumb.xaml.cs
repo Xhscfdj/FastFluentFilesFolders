@@ -1,4 +1,4 @@
-using Microsoft.UI.Composition;
+﻿using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
@@ -11,14 +11,11 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.System;
 using FastFluentFilesFolders.ViewModels;
-using FastFluentFilesFolders.Extensions;
-using FastFluentFilesFolders.Extensions.Interfaces;
 using FastFluentFilesFolders.Services;
 
 namespace FastFluentFilesFolders.UserControls
@@ -61,7 +58,7 @@ namespace FastFluentFilesFolders.UserControls
             DependencyProperty.Register(nameof(CanGoForward), typeof(bool), typeof(LRSBreadcrumb),
                 new PropertyMetadata(false));
 
-        public double controlHeight = 30.0;
+        public double ControlHeight { get; set; } = 40.0;
         public string CurrentPath
         {
             get => (string)GetValue(CurrentPathProperty);
@@ -126,8 +123,10 @@ namespace FastFluentFilesFolders.UserControls
         {
             this.InitializeComponent();
             CopyPathCommand = new RelayCommand(ExecuteCopyPath);
+            ActualThemeChanged += OnActualThemeChanged;
+            ControlHeight = 40;
 
-            ToolTipService.SetToolTip(BackButton, App.ML.TooltipBack);
+			ToolTipService.SetToolTip(BackButton, App.ML.TooltipBack);
             ToolTipService.SetToolTip(ForwardButton, App.ML.TooltipForward);
             ToolTipService.SetToolTip(UpButton, App.ML.TooltipUp);
             ToolTipService.SetToolTip(RefreshButton, App.ML.TooltipRefresh);
@@ -632,9 +631,19 @@ namespace FastFluentFilesFolders.UserControls
         public event PropertyChangedEventHandler PropertyChanged;
         private void OnPropertyChanged(string name) =>
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-    }
 
-    public class LastToVisibilityConverter : Microsoft.UI.Xaml.Data.IValueConverter
+		private void AddressBarArea_PointerEntered(object sender, PointerRoutedEventArgs e)
+		{
+			Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ControlFillColorDefaultBrush"];
+		}
+
+        private void OnActualThemeChanged(FrameworkElement sender, object args)
+		{
+            var brush = Application.Current.Resources["ControlFillColorDefaultBrush"] as SolidColorBrush;
+		}
+	}
+    
+	public class LastToVisibilityConverter : Microsoft.UI.Xaml.Data.IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {

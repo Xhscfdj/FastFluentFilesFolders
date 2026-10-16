@@ -598,9 +598,13 @@
                                        Background="{ThemeResource TableViewRowSelectionIndicatorBrush}"
                                        CornerRadius="{ThemeResource TableViewRowSelectionIndicatorCornerRadius}">
                                 <Border.RenderTransform>
-                                    <ScaleTransform x:Name="SelectionIndicatorScale"
-                                                    ScaleX="1"
-                                                    ScaleY="0" />
+                                    <!-- 用 CompositeTransform 而不是 ScaleTransform：
+                                         视觉状态动画它的 ScaleY（0 ↔ 1）显示/隐藏竖条，
+                                         代码（TableViewRow.EnsureSelectionIndicatorPosition）再改它的
+                                         TranslateY 做行详情面板偏移，两者互不覆盖。 -->
+                                    <CompositeTransform x:Name="SelectionIndicatorScale"
+                                                        ScaleX="1"
+                                                        ScaleY="0" />
                                 </Border.RenderTransform>
                             </Border>
 

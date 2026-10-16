@@ -1,4 +1,4 @@
-using Microsoft.UI.Xaml;
+﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Data;
@@ -34,6 +34,7 @@ public partial class TableView : ListView
     private bool _shouldThrowBaseProeprtyChangedException = true;
     private bool _ensureColumns = true;
     private bool _isItemsSourceSuspended;
+    private bool _isBaseItemsSourceResetPending;
     private readonly List<TableViewRow> _rows = [];
     private readonly CollectionView _collectionView = [];
     private Border? _dragRectangle;
@@ -57,6 +58,17 @@ public partial class TableView : ListView
     private readonly List<TableViewCell> _resizingDownstreamCells = [];
     private readonly List<(Panel Panel, TranslateTransform Shift)> _resizingScrollableShifts = [];
     // private bool _isScrollingRowIntoView;
+    // 内容被整体替换（换文件夹/刷新）后，本帧末要统一滚顶并按设置播放入场动画：见 BeginContentReplacement。
+    private long _contentReplacementEntranceStarted;
+    private long _contentReplacementEntranceUntil;
+    private long _contentReplacementEntranceLastArmTick;
+    private int _contentReplacementEntranceFirstIndex = -1;
+    private int _contentReplacementEntranceToken;
+    // 窗口开着：本批还在收行；已实体化出至少一行（可以统一开播了）
+    private bool _contentReplacementEntrancePending;
+    private bool _contentReplacementEntranceRealized;
+    // 本批是否已经滚回顶部（滚过就不再重复，等顶部那批行实体化后再开播）
+    private bool _contentReplacementScrolled;
 #if WINDOWS
     private readonly List<TableViewGroupHeaderRow> _groupHeaderRows = [];
 #endif
@@ -81,6 +93,7 @@ public partial class TableView : ListView
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         SelectionChanged += TableView_SelectionChanged;
+        ContainerContentChanging += OnContainerContentChangingForContentReplacement;
         _collectionView.ItemPropertyChanged += OnItemPropertyChanged;
 #if WINDOWS
         _collectionView.VectorChanged += OnCollectionViewVectorChanged;
@@ -197,8 +210,15 @@ public partial class TableView : ListView
 
         if (SelectedItems?.Count == 1)
         {
-            var index = Items.IndexOf(SelectedItem);
-            DispatcherQueue.TryEnqueue(async () => await ScrollRowIntoView(index));
+            var selectedItem = SelectedItem;
+            var index = Items.IndexOf(selectedItem);
+            // 排队到下一轮再滚动；期间如果选中项又变了（例如换文件夹时清空选中项），
+            // 就不能再按旧索引滚动，否则新文件夹会被滚到中间那一行。
+            DispatcherQueue.TryEnqueue(async () =>
+            {
+                if (!ReferenceEquals(SelectedItem, selectedItem)) return;
+                await ScrollRowIntoView(index);
+            });
         }
     }
 
@@ -229,6 +249,240 @@ public partial class TableView : ListView
         row?.EnsureCellsStyle(default, sender);
     }
 
+    /// <summary>
+    /// Tells the TableView that its content is about to be replaced as a whole (folder navigation, refresh, ...).
+    /// Call it right before swapping the content. Two things happen at the end of the layout pass that realizes the
+    /// new rows - i.e. inside the same frame, before anything is rendered:
+    /// <list type="number">
+    /// <item>the rows area is scrolled back to the top (unless something is selected, so "open file location" keeps
+    /// its target). Doing this later - from a low priority callback - is what made entries look like they "jump":
+    /// the panel anchors the old scroll offset across the content swap, so a frame showing the middle of the list
+    /// got presented before the correction arrived;</item>
+    /// <item>if <see cref="AnimateContentReplacement"/> is on, every row prepared by this replacement starts its
+    /// entrance animation together (see <see cref="TableViewRow.PrepareEntranceAnimation"/>) - starting per row as
+    /// each one is realized turns one fade into a dozen staggered micro-fades, because the panel builds the rows one
+    /// at a time.</item>
+    /// </list>
+    /// <para>
+    /// The animation itself exists because WinUI coalesces a Reset plus the inserts that follow it into a single
+    /// layout pass, so the built-in item container transitions (EntranceThemeTransition etc.) never run for an
+    /// in-place content swap.
+    /// </para>
+    /// </summary>
+    public void BeginContentReplacement()
+    {
+        _contentReplacementEntranceToken++;
+        _contentReplacementEntranceFirstIndex = -1;
+        _contentReplacementEntranceStarted = Environment.TickCount64;
+        _contentReplacementEntranceUntil = _contentReplacementEntranceStarted
+                                          + (long)ContentReplacementAnimationWindow.TotalMilliseconds;
+        _contentReplacementEntranceLastArmTick = _contentReplacementEntranceStarted;
+        _contentReplacementEntrancePending = true;
+        _contentReplacementEntranceRealized = false;
+        _contentReplacementScrolled = false;
+        LayoutUpdated -= OnContentReplacementLayoutUpdated;
+        LayoutUpdated += OnContentReplacementLayoutUpdated;
+
+        TableViewTransitionTrace.Write(
+            $"arm token={_contentReplacementEntranceToken} animate={AnimateContentReplacement} " +
+            $"window={ContentReplacementAnimationWindow.TotalMilliseconds}ms " +
+            $"duration={ContentReplacementAnimationDuration.TotalMilliseconds}ms slide={ContentReplacementSlideOffsetY:0}px " +
+            $"loaded={IsLoaded} rows={_rows.Count}");
+
+        if (TableViewTransitionTrace.Enabled)
+        {
+            // 100ms 后回读前几行的 Opacity：动画中途应该能读到 0~1 之间的值。
+            // 若读到恒为 0（直到完成才被写回 1），说明动画根本没在驱动渲染。
+            var token = _contentReplacementEntranceToken;
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(100);
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (token != _contentReplacementEntranceToken) return;
+                    var sample = string.Join(",", _rows.Take(5).Select(r => r.Opacity.ToString("0.##")));
+                    TableViewTransitionTrace.Write($"probe +100ms: token={token} rows={_rows.Count} opacities=[{sample}]");
+                });
+            });
+        }
+
+        // 安全网：万一本轮布局没有触发（或本批行没等到统一开播），到窗口上限时统一收尾（滚顶 + 开播），
+        // 绝不让行停在“已准备但没开播”的透明状态，也绝不让视图停在错误位置。
+        var fallbackToken = _contentReplacementEntranceToken;
+        var fallbackDelay = (int)ContentReplacementAnimationWindow.TotalMilliseconds + 50;
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(fallbackDelay);
+            DispatcherQueue.TryEnqueue(() => FinishContentReplacement(fallbackToken, "fallback"));
+        });
+    }
+
+    /// <summary>
+    /// Whether a content replacement is recent enough that a row realized right now still belongs to it.
+    /// </summary>
+    private bool IsContentReplacementEntranceActive =>
+        _contentReplacementEntrancePending
+        && _contentReplacementEntranceUntil > Environment.TickCount64;
+
+    /// <summary>
+    /// Whether it's worth tracing a realization step: only around an armed replacement (plus a short tail),
+    /// so scrolling later doesn't flood the log.
+    /// </summary>
+    private bool IsContentReplacementEntranceTraceWindow =>
+        _contentReplacementEntranceLastArmTick > 0
+        && Environment.TickCount64 - _contentReplacementEntranceLastArmTick < 2000;
+
+    /// <summary>
+    /// Prepares the entrance animation for a row belonging to the current content replacement, staggered by its
+    /// position in the batch. The animation is only <b>prepared</b> here; the batch is started together by
+    /// <see cref="FinishContentReplacement"/>.
+    /// </summary>
+    private void PlayContentReplacementEntrance(TableViewRow row, int itemIndex)
+    {
+        if (_contentReplacementEntranceFirstIndex < 0)
+        {
+            _contentReplacementEntranceFirstIndex = itemIndex;
+        }
+
+        var position = Math.Max(itemIndex - _contentReplacementEntranceFirstIndex, 0);
+        var staggerMs = Math.Min(position * ContentReplacementStagger.TotalMilliseconds,
+            ContentReplacementMaxStagger.TotalMilliseconds);
+
+        if (!row.PrepareEntranceAnimation(ContentReplacementAnimationDuration, _contentReplacementEntranceToken,
+                TimeSpan.FromMilliseconds(staggerMs), ContentReplacementSlideOffsetY))
+        {
+            return;
+        }
+
+        TableViewTransitionTrace.Write(
+            $"play token={_contentReplacementEntranceToken} index={itemIndex} stagger={staggerMs:0}ms " +
+            $"slide={ContentReplacementSlideOffsetY:0}px (prepared)");
+    }
+
+    /// <summary>
+    /// Ends the content replacement window at the end of the layout pass that realized the new rows, i.e. still
+    /// inside the frame that is about to be rendered - so nothing the user sees is later corrected.
+    /// </summary>
+    private void OnContentReplacementLayoutUpdated(object? sender, object e)
+    {
+        if (!_contentReplacementEntrancePending)
+        {
+            LayoutUpdated -= OnContentReplacementLayoutUpdated;
+            return;
+        }
+
+        // 这一轮布局还没实体化出任何行 —— 继续等下一轮（窗口本身有上限兜底）
+        if (!_contentReplacementEntranceRealized) return;
+
+        OnContentReplacementLayoutUpdatedOrFinish(_contentReplacementEntranceToken, "layout");
+    }
+
+    /// <summary>
+    /// Scrolls the rows area back to the top, then starts the entrance animation batch - but only after the top
+    /// rows have been realized.
+    /// <para>
+    /// The three steps are deliberately ordered, because the panel anchors the previous scroll offset across an
+    /// in-place content swap:
+    /// </para>
+    /// <list type="number">
+    /// <item>the layout pass that follows the swap builds the rows for that <b>anchored</b> offset (measured: 1344px
+    /// into a grouped folder) - not for the top. Animating those rows is pointless: the very next thing we do is
+    /// scroll to the top, which pushes them out of view, so the user sees the jump but never the fade;</item>
+    /// <item>so the first pass only scrolls back to the top (inside the frame, before it is rendered) and defers;</item>
+    /// <item>the pass that builds the rows for the top then plays the animation on them - which is what the user
+    /// actually looks at.</item>
+    /// </list>
+    /// </summary>
+    private void OnContentReplacementLayoutUpdatedOrFinish(int token, string reason)
+    {
+        if (token != _contentReplacementEntranceToken) return;
+        if (!_contentReplacementEntrancePending) return;
+
+        // 有选中项时不动滚动位置（“打开文件所在位置”会在换内容后主动选中目标并滚到它那里）
+        if (!_contentReplacementScrolled && SelectedItems.Count == 0
+            && _scrollViewer is { } scrollViewer && scrollViewer.VerticalOffset > 0.5)
+        {
+            var offsetBefore = (int)scrollViewer.VerticalOffset;
+            scrollViewer.ChangeView(null, 0, null, true);
+            _contentReplacementScrolled = true;
+            _contentReplacementEntranceRealized = false;   // 等下一轮布局把“顶部那批行”实体化
+
+            // 滚动之后还会有一轮布局（可视范围变了），把窗口续一下，保证那一批行还在窗口内
+            _contentReplacementEntranceUntil = Environment.TickCount64
+                                               + (long)ContentReplacementAnimationWindow.TotalMilliseconds;
+
+            TableViewTransitionTrace.Write(
+                $"scrolled to top (layout) token={token} offsetBefore={offsetBefore} - waiting for the next pass to animate");
+            return;
+        }
+
+        FinishContentReplacement(token, reason);
+    }
+
+    /// <summary>
+    /// Starts the entrance animation batch (rows prepared for the top of the list) and closes the window.
+    /// </summary>
+    private void FinishContentReplacement(int token, string reason)
+    {
+        if (token != _contentReplacementEntranceToken) return;
+        if (!_contentReplacementEntrancePending) return;
+
+        // 兜底滚顶：正常路径已经在上一轮布局里滚过了（那时还没渲染）；这里只在偏移确实非 0 时再动一次
+        var scrolledToTop = false;
+        if (SelectedItems.Count == 0 && _scrollViewer is { } scrollViewer && scrollViewer.VerticalOffset > 0.5)
+        {
+            scrollViewer.ChangeView(null, 0, null, true);
+            scrolledToTop = true;
+        }
+
+        // 统一开播这一批（整批同时开始，避免“一行一行滴进来”）
+        var started = 0;
+        if (AnimateContentReplacement)
+        {
+            foreach (var row in _rows)
+            {
+                if (row.HasPendingEntranceAnimation(token))
+                {
+                    row.StartPreparedEntranceAnimation(token);
+                    started++;
+                }
+            }
+        }
+
+        _contentReplacementEntrancePending = false;
+        _contentReplacementEntranceRealized = false;
+        _contentReplacementScrolled = false;
+        LayoutUpdated -= OnContentReplacementLayoutUpdated;
+
+        TableViewTransitionTrace.Write(
+            $"window closed ({reason}) token={token} started={started} scrolledToTop={scrolledToTop} " +
+            $"offset={(int)(_scrollViewer?.VerticalOffset ?? 0)}");
+    }
+
+    /// <summary>
+    /// Same as <see cref="PrepareContainerForItemOverride"/>, but for the containers the ListView only re-targets
+    /// at its content level (a reused container doesn't have to go through the prepare override for every change).
+    /// The row side de-duplicates by token, so a container that hits both hooks is still animated only once.
+    /// </summary>
+    private void OnContainerContentChangingForContentReplacement(ListViewBase sender, ContainerContentChangingEventArgs args)
+    {
+        if (TableViewTransitionTrace.Enabled && IsContentReplacementEntranceTraceWindow && !args.InRecycleQueue)
+        {
+            TableViewTransitionTrace.Write(
+                $"ccc active={IsContentReplacementEntranceActive} index={args.ItemIndex} container={args.ItemContainer?.GetType().Name}");
+        }
+
+        if (args.InRecycleQueue || !IsContentReplacementEntranceActive) return;
+
+        // 这一轮布局已经实体化出新内容了 —— 收尾（滚顶 + 统一开播）可以在本帧末执行
+        _contentReplacementEntranceRealized = true;
+
+        if (args.ItemContainer is TableViewRow row && AnimateContentReplacement)
+        {
+            PlayContentReplacementEntrance(row, args.ItemIndex);
+        }
+    }
+
     /// <inheritdoc/>
     protected override void PrepareContainerForItemOverride(DependencyObject element, object item)
     {
@@ -242,6 +496,23 @@ public partial class TableView : ListView
             if (!_rows.Contains(syncRow))
             {
                 _rows.Add(syncRow);
+            }
+
+            if (TableViewTransitionTrace.Enabled && IsContentReplacementEntranceTraceWindow)
+            {
+                TableViewTransitionTrace.Write(
+                    $"prepare active={IsContentReplacementEntranceActive} index={syncRow.Index} rows={_rows.Count}");
+            }
+
+            if (IsContentReplacementEntranceActive)
+            {
+                // 不论动画开关如何，都要标记“本轮布局已实体化出新内容”，本帧末才好统一滚顶
+                _contentReplacementEntranceRealized = true;
+
+                if (AnimateContentReplacement)
+                {
+                    PlayContentReplacementEntrance(syncRow, syncRow.Index);
+                }
             }
         }
 
@@ -286,6 +557,9 @@ public partial class TableView : ListView
     {
         if (element is TableViewRow row)
         {
+            // 回收的容器可能还挂着没播完的入场淡入，先取消并恢复不透明度，
+            // 否则复用到别的条目上时会以半透明状态出现
+            row.CancelEntranceAnimation();
             _rows.Remove(row);
             row.TableView = null;
         }
@@ -1596,26 +1870,9 @@ public partial class TableView : ListView
     {
         DetailsPaneStates.Clear();
 
-        // 换数据源时同步取消拖拽选择残留状态。双击进入文件夹时，第二次按下会启动拖拽选择，
-        // 但换源发生在拖拽释放之前；晚到的 PointerMoved/释放会再次调用 SelectRowsInDragRect，
-        // 拿旧锚点和新数据组合出 0..N 的大范围，把新文件夹"全选"（竖条全亮）。这里清掉拖拽状态即可根治。
-        if (IsDragSelecting)
-        {
-            StopAutoScroll();
-            _pointerCaptureElement?.ReleasePointerCaptures();
-            _pointerCaptureElement = null;
-            _tableViewDragPointer = null;
-            _scrollViewer?.ViewChanged -= OnScrollViewerViewChangedDuringDrag;
-            if (_dragRectangle is not null) _dragRectangle.Visibility = Visibility.Collapsed;
-            IsDragSelecting = false;
-        }
-
-        _dragStartPoint = null;
-        _lastDragCanvasPoint = null;
-        _lastDragSelectionRowRange = null;
-        _lastDragSelectionCellRange = null;
-        SelectionStartCellSlot = null;
-        SelectionStartRowIndex = null;
+        // 换数据源时同步取消拖拽选择残留状态（详见 CancelDragSelection / ClearSelectionAnchors 注释）。
+        CancelDragSelection();
+        ClearSelectionAnchors();
 
         using var defer = _collectionView.DeferRefresh();
         _collectionView.Source = null!;
@@ -1627,7 +1884,117 @@ public partial class TableView : ListView
             if (!_isItemsSourceSuspended)
             {
                 _collectionView.Source = source;
+                PruneStaleRows();
+                ForceContainerRebuild();
             }
+        }
+    }
+
+    /// <summary>
+    /// 取消正在进行的拖拽选择：停掉自动滚动、释放指针捕获、隐藏拖拽框并结束拖拽状态。
+    /// 换数据源、或同一个数据源原地换内容（换文件夹/刷新）时都必须调用，
+    /// 否则晚到的 PointerMoved / PointerReleased 会拿旧锚点和新数据组合出选择范围。
+    /// </summary>
+    private void CancelDragSelection()
+    {
+        if (!IsDragSelecting)
+        {
+            return;
+        }
+
+        StopAutoScroll();
+        _pointerCaptureElement?.ReleasePointerCaptures();
+        _pointerCaptureElement = null;
+        _tableViewDragPointer = null;
+        _scrollViewer?.ViewChanged -= OnScrollViewerViewChangedDuringDrag;
+        if (_dragRectangle is not null) _dragRectangle.Visibility = Visibility.Collapsed;
+        IsDragSelecting = false;
+    }
+
+    /// <summary>
+    /// 清空本次拖拽/选择遗留的锚点：这些锚点都是按“行索引”记录的，
+    /// 内容被整体替换后会指向另一批条目，必须一起清掉。
+    /// </summary>
+    private void ClearSelectionAnchors()
+    {
+        _dragStartPoint = null;
+        _lastDragCanvasPoint = null;
+        _lastDragSelectionRowRange = null;
+        _lastDragSelectionCellRange = null;
+        SelectionStartCellSlot = null;
+        SelectionStartRowIndex = null;
+        CurrentRowIndex = null;
+        LastSelectionUnit = TableViewSelectionUnit.Row;
+    }
+
+    /// <summary>
+    /// 数据源内容即将被整体替换（同一个 ItemsSource 实例原地换内容，例如切换文件夹）时调用。
+    /// 换 ItemsSource 实例时 ListView 会自行丢弃选中项和拖拽状态，原地换内容则不会：
+    /// ① 双击进入文件夹时，第二次按下会启动拖拽选择，而换内容发生在指针释放之前，
+    ///    晚到的 PointerMoved / 释放会再次调用 SelectRowsInDragRect，拿旧锚点和新数据组合出
+    ///    0..N 的大范围，把新文件夹“全选”（竖条全亮）；
+    /// ② 选中项/当前单元格是按行索引记录的，换内容后会落到新文件夹里不对应的行上，
+    ///    TableView 又会把“刚选中的那一行”滚进视图，于是表现为“有些项莫名其妙被选中、视图不在顶部”。
+    /// 因此替换前显式取消拖拽、清空锚点与当前单元格，并清空选中项。
+    /// </summary>
+    public void ResetInteractionStateForContentReplacement()
+    {
+        CancelDragSelection();
+        ClearSelectionAnchors();
+
+        // DeselectAll 同时会清空 CurrentCellSlot（当前单元格指示条），
+        // 否则它会继续停在新内容里索引相同的行上。
+        DeselectAll();
+    }
+
+    /// <summary>
+    /// 强制 ListView 丢弃当前缓存的行容器并重建（换目录/刷新后释放原生 XAML 资源）。
+    /// WinUI 的 ItemsStackPanel 在自定义 ICollectionView 发出 Reset 时不会真正回收上一批容器，
+    /// 即使数据源是稳定实例、只是原地换内容，屏外缓存容器也会连同其原生 XAML 资源一起留下；
+    /// 把 base.ItemsSource 断开再接回（与 CollectionGroups 变化时同样的做法）能让 ListView
+    /// 真正清空并重建面板，因此可以把 ItemsStackPanel.CacheLength 调回较大值换取顺滑滚动。
+    /// </summary>
+    protected async void ForceContainerRebuild()
+    {
+        // 控件尚未加载时不要断开 base.ItemsSource，避免打断 ListView 初始化；
+        // 加载后的每次换源都执行强制重建（换源瞬间 _rows 可能已经是 0，所以不能按行数判断）。
+        if (_isItemsSourceSuspended || _isBaseItemsSourceResetPending || !IsLoaded)
+        {
+            return;
+        }
+
+        _isBaseItemsSourceResetPending = true;
+        _shouldThrowBaseProeprtyChangedException = false;
+        try
+        {
+            base.ItemsSource = null;
+            await Task.Yield();
+            base.ItemsSource = _collectionView;
+        }
+        finally
+        {
+            _shouldThrowBaseProeprtyChangedException = true;
+            _isBaseItemsSourceResetPending = false;
+        }
+    }
+
+    /// <summary>
+    /// 换数据源后清理不再属于当前视图的行容器（兜底）。
+    /// 极端情况下 ListView 仍可能残留尚未 Clear 的行：这些行会继续持有旧数据项并订阅
+    /// Columns 事件，这里按“行内容是否仍在当前视图中”判断并移除，同时解除事件订阅。
+    /// </summary>
+    private void PruneStaleRows()
+    {
+        for (var i = _rows.Count - 1; i >= 0; i--)
+        {
+            var row = _rows[i];
+            if (row.Content is { } item && _collectionView.Contains(item))
+            {
+                continue;
+            }
+
+            _rows.RemoveAt(i);
+            row.TableView = null;
         }
     }
 

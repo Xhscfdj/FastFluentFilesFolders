@@ -26,6 +26,9 @@ namespace FastFluentFilesFolders.Helpers
         private bool _isBatchUpdating;
         private bool _isGrouped;
 
+        /// <summary>当前是否按时间分组（供外部在复用同一数据源时传递分组状态）。</summary>
+        public bool IsGrouped => _isGrouped;
+
         // 当前排序状态：用于新增条目时“插到正确位置”，而不是重置整个 ItemsSource（会滚回顶部）
         private string? _sortPath;
         private bool _sortAscending;
@@ -37,6 +40,10 @@ namespace FastFluentFilesFolders.Helpers
         {
             _dispatcher = dispatcher;
         }
+
+        /// <summary>当前生效的排序列（未排序时为 null）。用于判断新挂载的内容是否已按目标排序排好。</summary>
+        public string? ActiveSortPath => _hasActiveSort ? _sortPath : null;
+        public bool ActiveSortAscending => _sortAscending;
 
         /// <summary>记录当前排序（由 LrsTableView 在排序时设置）。</summary>
         public void SetActiveSort(string sortPath, bool ascending)
@@ -55,22 +62,40 @@ namespace FastFluentFilesFolders.Helpers
         private Comparison<FileSystemNodeViewModel>? GetActiveComparison()
         {
             if (!_hasActiveSort || string.IsNullOrEmpty(_sortPath)) return null;
-            bool asc = _sortAscending;
-            return _sortPath switch
+            return GetComparison(_sortPath, _sortAscending);
+        }
+
+        /// <summary>
+        /// 构造排序比较器：第一优先级“目录在文件前面”（升/降序都不受影响），
+        /// 第二优先级才按所选列比较。
+        /// </summary>
+        private static Comparison<FileSystemNodeViewModel>? GetComparison(string sortPath, bool ascending)
+        {
+            Comparison<FileSystemNodeViewModel>? keyCompare = sortPath switch
             {
-                "Name" => (a, b) => asc
+                "Name" => (a, b) => ascending
                     ? string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase)
                     : string.Compare(b.Name, a.Name, StringComparison.CurrentCultureIgnoreCase),
-                "LastModifiedTime" => (a, b) => asc
+                "LastModifiedTime" => (a, b) => ascending
                     ? a.LastModifiedTime.CompareTo(b.LastModifiedTime)
                     : b.LastModifiedTime.CompareTo(a.LastModifiedTime),
-                "FirstCreatedTime" => (a, b) => asc
+                "FirstCreatedTime" => (a, b) => ascending
                     ? a.FirstCreatedTime.CompareTo(b.FirstCreatedTime)
                     : b.FirstCreatedTime.CompareTo(a.FirstCreatedTime),
-                "ExactSize" => (a, b) => asc
+                "ExactSize" => (a, b) => ascending
                     ? a.ExactSize.CompareTo(b.ExactSize)
                     : b.ExactSize.CompareTo(a.ExactSize),
                 _ => null
+            };
+
+            if (keyCompare == null) return null;
+
+            return (a, b) =>
+            {
+                // 目录永远排在文件前面（true 当作 1）
+                var dirCompare = (b.IsDirectory ? 1 : 0).CompareTo(a.IsDirectory ? 1 : 0);
+                if (dirCompare != 0) return dirCompare;
+                return keyCompare(a, b);
             };
         }
 
@@ -87,21 +112,32 @@ namespace FastFluentFilesFolders.Helpers
             return lo;
         }
 
-        public void SetItems(IEnumerable<FileSystemNodeViewModel> items, bool grouped)
+        public void SetItems(IEnumerable<FileSystemNodeViewModel> items, bool grouped,
+            string? sortPath = null, bool ascending = true)
         {
             _isGrouped = grouped;
             _groupChildren.Clear();
             _groupHeaders.Clear();
 
-            if (!grouped || !items.Any())
+            if (!string.IsNullOrEmpty(sortPath))
+                SetActiveSort(sortPath, ascending);
+            else
+                ClearActiveSort();
+
+            var list = items.ToList();
+            var comparison = string.IsNullOrEmpty(sortPath) ? null : GetComparison(sortPath, ascending);
+
+            if (!grouped || list.Count == 0)
             {
                 Clear();
-                foreach (var item in items)
+                if (comparison != null && list.Count > 0)
+                    list.Sort(comparison);
+                foreach (var item in list)
                     Add(item);
                 return;
             }
 
-            foreach (var item in items)
+            foreach (var item in list)
             {
                 var key = string.IsNullOrEmpty(item.SortByTime)
                     ? GetTimeGroup(item.LastModifiedTime)
@@ -112,6 +148,13 @@ namespace FastFluentFilesFolders.Helpers
                 if (!_groupChildren.ContainsKey(key))
                     _groupChildren[key] = new List<FileSystemNodeViewModel>();
                 _groupChildren[key].Add(item);
+            }
+
+            // 只在第一次 RebuildFlat 之前排好各组，避免“先建一遍、再排一遍”的重复构建
+            if (comparison != null)
+            {
+                foreach (var (key, children) in _groupChildren)
+                    children.Sort(comparison);
             }
 
             RebuildFlat();
@@ -331,52 +374,24 @@ namespace FastFluentFilesFolders.Helpers
         public void SortWithinGroups(string sortPath, bool ascending)
         {
             SetActiveSort(sortPath, ascending);
+            var comparison = GetComparison(sortPath, ascending);
+            if (comparison == null) return;
+
             if (_groupChildren.Count == 0)
             {
                 // 平铺模式：直接对当前列表排序
                 var all = this.ToList();
-                var sorted = ascending
-                    ? SortByPath(all, sortPath).ToList()
-                    : SortByPathDescending(all, sortPath).ToList();
+                all.Sort(comparison);
                 Clear();
-                foreach (var item in sorted)
+                foreach (var item in all)
                     Add(item);
                 return;
             }
 
             foreach (var (key, children) in _groupChildren)
-            {
-                var sorted = ascending
-                    ? SortByPath(children, sortPath).ToList()
-                    : SortByPathDescending(children, sortPath).ToList();
-                _groupChildren[key] = sorted;
-            }
+                children.Sort(comparison);
 
             RebuildFlat();
-        }
-
-        private static IEnumerable<FileSystemNodeViewModel> SortByPath(List<FileSystemNodeViewModel> items, string path)
-        {
-            return path switch
-            {
-                "Name" => items.OrderBy(f => f.Name, StringComparer.CurrentCultureIgnoreCase),
-                "LastModifiedTime" => items.OrderBy(f => f.LastModifiedTime),
-                "FirstCreatedTime" => items.OrderBy(f => f.FirstCreatedTime),
-                "ExactSize" => items.OrderBy(f => f.ExactSize),
-                _ => items
-            };
-        }
-
-        private static IEnumerable<FileSystemNodeViewModel> SortByPathDescending(List<FileSystemNodeViewModel> items, string path)
-        {
-            return path switch
-            {
-                "Name" => items.OrderByDescending(f => f.Name, StringComparer.CurrentCultureIgnoreCase),
-                "LastModifiedTime" => items.OrderByDescending(f => f.LastModifiedTime),
-                "FirstCreatedTime" => items.OrderByDescending(f => f.FirstCreatedTime),
-                "ExactSize" => items.OrderByDescending(f => f.ExactSize),
-                _ => items
-            };
         }
 
         public static string GetTimeGroup(DateTime dateTime)

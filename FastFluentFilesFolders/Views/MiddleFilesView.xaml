@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Page
     x:Class="FastFluentFilesFolders.Views.MiddleFilesView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -40,8 +40,8 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0">
-            <CommandBar HorizontalAlignment="Left" OverflowButtonVisibility="Collapsed" IsDynamicOverflowEnabled="False" x:Name="ToolbarCmd"/>
+		<Grid Grid.Row="0">
+			<CommandBar HorizontalAlignment="Left" OverflowButtonVisibility="Collapsed" IsDynamicOverflowEnabled="False" x:Name="ToolbarCmd"/>
             <uc:FileOperationsButton x:Name="FileOpsBtn" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0"/>
         </Grid>
 
@@ -61,26 +61,26 @@
                 <tv:TableViewTemplateColumn x:Name="ColName" Width="4*" CanSort="True" SortMemberPath="Name">
                     <tv:TableViewTemplateColumn.CellTemplate>
                         <DataTemplate x:DataType="vm:FileSystemNodeViewModel">
-                            <Grid DoubleTapped="OnRowDoubleTapped" Opacity="{x:Bind RowOpacity, Mode=OneWay}">
+                            <Grid DoubleTapped="OnRowDoubleTapped" Opacity="{Binding RowOpacity}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <Button Grid.Column="0"
-                                        Visibility="{x:Bind IsPlaceholder, Converter={StaticResource BoolToVisibilityConverter}, Mode=OneTime}"
+                                        Visibility="{Binding IsPlaceholder, Converter={StaticResource BoolToVisibilityConverter}, Mode=OneTime}"
                                         Style="{StaticResource SubtleButtonStyle}"
                                         BorderThickness="0" Padding="2" Width="20" Height="20"
-                                        Click="OnGroupToggleClick" Tag="{x:Bind}">
+                                        Click="OnGroupToggleClick" Tag="{Binding}">
                                     <FontIcon FontSize="10"
                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                              Glyph="{x:Bind IsGroupExpanded, Converter={StaticResource ExpandGlyphConverter}, Mode=OneWay}"/>
+                                              Glyph="{Binding IsGroupExpanded, Converter={StaticResource ExpandGlyphConverter}}"/>
                                 </Button>
-                                <Image Grid.Column="0" Source="{x:Bind Icon, Mode=OneWay}"
+                                <Image Grid.Column="0" Source="{Binding Icon}"
                                        Margin="0,0,10,0"
-                                       Visibility="{x:Bind IsPlaceholder, Converter={StaticResource InvertVisibilityConverter}, Mode=OneTime}"
+                                       Visibility="{Binding IsPlaceholder, Converter={StaticResource InvertVisibilityConverter}, Mode=OneTime}"
                                        Width="20" Height="20" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="NameText" Grid.Column="2" Text="{x:Bind Name, Mode=OneWay}"
+                                <TextBlock x:Name="NameText" Grid.Column="2" Text="{Binding Name}"
                                            VerticalAlignment="Center"
                                            TextTrimming="CharacterEllipsis"/>
                             </Grid>
@@ -92,10 +92,10 @@
                     <tv:TableViewTemplateColumn.CellTemplate>
                         <DataTemplate x:DataType="vm:FileSystemNodeViewModel">
                             <TextBlock DoubleTapped="OnRowDoubleTapped"
-                                       Text="{x:Bind LastModifiedTimeString, Mode=OneTime}"
+                                       Text="{Binding LastModifiedTimeString, Mode=OneTime}"
 									   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                       Visibility="{x:Bind IsPlaceholder, Converter={StaticResource InvertVisibilityConverter}, Mode=OneTime}"
-                                       Opacity="{x:Bind RowOpacity, Mode=OneWay}"
+                                       Visibility="{Binding IsPlaceholder, Converter={StaticResource InvertVisibilityConverter}, Mode=OneTime}"
+                                       Opacity="{Binding RowOpacity}"
                                        VerticalAlignment="Center"/>
                         </DataTemplate>
                     </tv:TableViewTemplateColumn.CellTemplate>
@@ -106,9 +106,9 @@
                         <DataTemplate x:DataType="vm:FileSystemNodeViewModel">
                             <TextBlock DoubleTapped="OnRowDoubleTapped"
 									   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                       Text="{x:Bind FirstCreatedTimeString, Mode=OneTime}"
-                                       Visibility="{x:Bind IsPlaceholder, Converter={StaticResource InvertVisibilityConverter}, Mode=OneTime}"
-                                       Opacity="{x:Bind RowOpacity, Mode=OneWay}"
+                                       Text="{Binding FirstCreatedTimeString, Mode=OneTime}"
+                                       Visibility="{Binding IsPlaceholder, Converter={StaticResource InvertVisibilityConverter}, Mode=OneTime}"
+                                       Opacity="{Binding RowOpacity}"
                                        VerticalAlignment="Center"/>
                         </DataTemplate>
                     </tv:TableViewTemplateColumn.CellTemplate>
@@ -117,18 +117,18 @@
                 <tv:TableViewTemplateColumn x:Name="ColSize" Width="*" CanSort="True" SortMemberPath="ExactSize">
                     <tv:TableViewTemplateColumn.CellTemplate>
                         <DataTemplate x:DataType="vm:FileSystemNodeViewModel">
-                            <Grid DoubleTapped="OnRowDoubleTapped" Opacity="{x:Bind RowOpacity, Mode=OneWay}">
+                            <Grid DoubleTapped="OnRowDoubleTapped" Opacity="{Binding RowOpacity}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="1" Text="{x:Bind VisualSize, Mode=OneWay}"
-                                           Visibility="{x:Bind SizeTextVisibility, Mode=OneWay}"
+                                <TextBlock Grid.Column="1" Text="{Binding VisualSize}"
+                                           Visibility="{Binding SizeTextVisibility}"
 										   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                            HorizontalAlignment="Right"
                                            VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" Text="{x:Bind ML.CalculateSize, Mode=OneTime}"
-                                           Visibility="{x:Bind CalculateSizeButtonVisibility, Mode=OneWay}"
+                                <TextBlock Grid.Column="1" Text="{Binding ML.CalculateSize, Mode=OneTime}"
+                                           Visibility="{Binding CalculateSizeButtonVisibility}"
                                            Foreground="{StaticResource AccentAAFillColorSecondaryBrush}"
                                            HorizontalAlignment="Right"
                                            VerticalAlignment="Center"
@@ -144,10 +144,10 @@
                     <tv:TableViewTemplateColumn.CellTemplate>
                         <DataTemplate x:DataType="vm:FileSystemNodeViewModel">
                             <TextBlock DoubleTapped="OnRowDoubleTapped"
-                                       Text="{x:Bind RecycleOriginalLocation, Mode=OneWay}"
+                                       Text="{Binding RecycleOriginalLocation}"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        TextTrimming="CharacterEllipsis"
-                                       ToolTipService.ToolTip="{x:Bind RecycleOriginalLocation, Mode=OneWay}"
+                                       ToolTipService.ToolTip="{Binding RecycleOriginalLocation}"
                                        VerticalAlignment="Center"/>
                         </DataTemplate>
                     </tv:TableViewTemplateColumn.CellTemplate>
