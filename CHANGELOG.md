@@ -4,7 +4,7 @@
 
 格式遵循 [Keep a Changelog 2.0.0](https://keepachangelog.com/en/2.0.0/)，版本号遵循 [语义化版本 2.0.0](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
-## [Unreleased]
+## [1.2.0]
 
 > 已知问题：AOT 发布命令里**不能**加 `-p:PublishTrimmed=false`：AOT 必然裁剪，会直接报 `PublishTrimmed is implied by native compilation and cannot be disabled`（这条与 `WinUI.TableView` 无关，它只会出 `WMC1510` 警告）；正确命令是 `dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:WindowsPackageType=None -p:PublishAot=true -p:PlatformTarget=x64`。
 > 另：不要给工程直接加 `Microsoft.Windows.CsWinRT` 包。它会把 `cswinrt.exe` 拉进构建重新生成整套 WinRT 投影，而本机只有 Windows SDK `10.0.22621.0` / `10.0.26100.0`，缺 `Platforms\UAP\10.0.19041.0\Platform.xml`，构建会直接失败（`Could not read the Windows SDK's Platform.xml`）。AOT 需要的 unsafe 生成已由 `<AllowUnsafeBlocks>true</AllowUnsafeBlocks>` 满足（app 与 `WinUI.TableView` 都设了）。
