@@ -168,7 +168,7 @@ namespace FastFluentFilesFolders.UserControls
             if (geom == null) return;
             try
             {
-                LayerRoot.Children.Add(new Path { Data = geom, Fill = fill, Opacity = opacity });
+                LayerRoot.Children.Add(new Microsoft.UI.Xaml.Shapes.Path { Data = geom, Fill = fill, Opacity = opacity });
             }
             catch (System.Exception ex)
             {
@@ -184,7 +184,7 @@ namespace FastFluentFilesFolders.UserControls
             if (geom == null) return;
             try
             {
-                LayerRoot.Children.Add(new Path
+                LayerRoot.Children.Add(new Microsoft.UI.Xaml.Shapes.Path
                 {
                     Data = geom,
                     Stroke = strokeBrush,

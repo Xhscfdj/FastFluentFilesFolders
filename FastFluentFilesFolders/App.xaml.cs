@@ -63,11 +63,13 @@ namespace FastFluentFilesFolders
 
             var configs = Services.GetRequiredService<Configs>();
             SharedIconProvider = Services.GetRequiredService<MainIconProvider>();
+
             var locService = Services.GetRequiredService<LocalizationService>();
             locService.SetLanguage(configs.Language);
             LocalizationService = locService;
             ML = Services.GetRequiredService<MultiLanguageStringsViewModel>();
             ShellIconHelper.Configs = configs;
+            QuickAccessHelper.Configs = configs;
             this.UnhandledException += (s, e) =>
             {
                 Debug.WriteLine("未处理异常: " + e.Exception);

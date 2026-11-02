@@ -11,7 +11,7 @@ namespace FastFluentFilesFolders.Models
         Canceled
     }
 
-    public class FileOperationItem : INotifyPropertyChanged
+    public partial class FileOperationItem : INotifyPropertyChanged
     {
         private string _text = "";
         private double _progress;

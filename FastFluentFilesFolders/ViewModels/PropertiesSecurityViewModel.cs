@@ -45,51 +45,51 @@ namespace FastFluentFilesFolders.ViewModels
 		public string OwnerChangeLabel => App.ML.Get("PropertiesSecurityOwnerChange");
 		public string OwnerPendingHint => App.ML.Get("PropertiesSecurityOwnerPendingHint");
 
-		[ObservableProperty] private SecurityPrincipalInfo? selectedPrincipal;
-		[ObservableProperty] private string objectCaption = string.Empty;
-		[ObservableProperty] private string ownerCaption = string.Empty;
-		[ObservableProperty] private bool hasOwner;
-		[ObservableProperty] private bool hasPrincipals;
-		[ObservableProperty] private bool hasNoPrincipals;
-		[ObservableProperty] private bool hasError;
-		[ObservableProperty] private string errorMessage = string.Empty;
-		[ObservableProperty] private bool advancedEnabled;
-		[ObservableProperty] private bool isDirectory;
-		[ObservableProperty] private string permissionsTitle = string.Empty;
-		[ObservableProperty] private bool showListDirectoryRow;
-		[ObservableProperty] private bool showSpecialRow;
-		[ObservableProperty] private string ownerDisplay = string.Empty;
-		[ObservableProperty] private bool ownerPending;
+		[ObservableProperty] public partial SecurityPrincipalInfo? SelectedPrincipal { get; set; }
+		[ObservableProperty] public partial string ObjectCaption { get; set; } = string.Empty;
+		[ObservableProperty] public partial string OwnerCaption { get; set; } = string.Empty;
+		[ObservableProperty] public partial bool HasOwner { get; set; }
+		[ObservableProperty] public partial bool HasPrincipals { get; set; }
+		[ObservableProperty] public partial bool HasNoPrincipals { get; set; }
+		[ObservableProperty] public partial bool HasError { get; set; }
+		[ObservableProperty] public partial string ErrorMessage { get; set; } = string.Empty;
+		[ObservableProperty] public partial bool AdvancedEnabled { get; set; }
+		[ObservableProperty] public partial bool IsDirectory { get; set; }
+		[ObservableProperty] public partial string PermissionsTitle { get; set; } = string.Empty;
+		[ObservableProperty] public partial bool ShowListDirectoryRow { get; set; }
+		[ObservableProperty] public partial bool ShowSpecialRow { get; set; }
+		[ObservableProperty] public partial string OwnerDisplay { get; set; } = string.Empty;
+		[ObservableProperty] public partial bool OwnerPending { get; set; }
 
 		// 允许/拒绝矩阵（TwoWay 绑定）
-		[ObservableProperty] private bool allowFullControl;
-		[ObservableProperty] private bool denyFullControl;
-		[ObservableProperty] private bool allowModify;
-		[ObservableProperty] private bool denyModify;
-		[ObservableProperty] private bool allowReadExecute;
-		[ObservableProperty] private bool denyReadExecute;
-		[ObservableProperty] private bool allowListDirectory;
-		[ObservableProperty] private bool denyListDirectory;
-		[ObservableProperty] private bool allowRead;
-		[ObservableProperty] private bool denyRead;
-		[ObservableProperty] private bool allowWrite;
-		[ObservableProperty] private bool denyWrite;
-		[ObservableProperty] private bool allowSpecial;
-		[ObservableProperty] private bool denySpecial;
+		[ObservableProperty] public partial bool AllowFullControl { get; set; }
+		[ObservableProperty] public partial bool DenyFullControl { get; set; }
+		[ObservableProperty] public partial bool AllowModify { get; set; }
+		[ObservableProperty] public partial bool DenyModify { get; set; }
+		[ObservableProperty] public partial bool AllowReadExecute { get; set; }
+		[ObservableProperty] public partial bool DenyReadExecute { get; set; }
+		[ObservableProperty] public partial bool AllowListDirectory { get; set; }
+		[ObservableProperty] public partial bool DenyListDirectory { get; set; }
+		[ObservableProperty] public partial bool AllowRead { get; set; }
+		[ObservableProperty] public partial bool DenyRead { get; set; }
+		[ObservableProperty] public partial bool AllowWrite { get; set; }
+		[ObservableProperty] public partial bool DenyWrite { get; set; }
+		[ObservableProperty] public partial bool AllowSpecial { get; set; }
+		[ObservableProperty] public partial bool DenySpecial { get; set; }
 
 		// 可编辑状态（继承项置灰）
-		[ObservableProperty] private bool allowFullControlEnabled;
-		[ObservableProperty] private bool denyFullControlEnabled;
-		[ObservableProperty] private bool allowModifyEnabled;
-		[ObservableProperty] private bool denyModifyEnabled;
-		[ObservableProperty] private bool allowReadExecuteEnabled;
-		[ObservableProperty] private bool denyReadExecuteEnabled;
-		[ObservableProperty] private bool allowListDirectoryEnabled;
-		[ObservableProperty] private bool denyListDirectoryEnabled;
-		[ObservableProperty] private bool allowReadEnabled;
-		[ObservableProperty] private bool denyReadEnabled;
-		[ObservableProperty] private bool allowWriteEnabled;
-		[ObservableProperty] private bool denyWriteEnabled;
+		[ObservableProperty] public partial bool AllowFullControlEnabled { get; set; }
+		[ObservableProperty] public partial bool DenyFullControlEnabled { get; set; }
+		[ObservableProperty] public partial bool AllowModifyEnabled { get; set; }
+		[ObservableProperty] public partial bool DenyModifyEnabled { get; set; }
+		[ObservableProperty] public partial bool AllowReadExecuteEnabled { get; set; }
+		[ObservableProperty] public partial bool DenyReadExecuteEnabled { get; set; }
+		[ObservableProperty] public partial bool AllowListDirectoryEnabled { get; set; }
+		[ObservableProperty] public partial bool DenyListDirectoryEnabled { get; set; }
+		[ObservableProperty] public partial bool AllowReadEnabled { get; set; }
+		[ObservableProperty] public partial bool DenyReadEnabled { get; set; }
+		[ObservableProperty] public partial bool AllowWriteEnabled { get; set; }
+		[ObservableProperty] public partial bool DenyWriteEnabled { get; set; }
 
 		public string? LastError { get; private set; }
 

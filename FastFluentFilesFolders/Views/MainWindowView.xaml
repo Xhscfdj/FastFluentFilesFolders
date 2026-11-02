@@ -1,4 +1,4 @@
-﻿<Window
+<Window
     x:Class="FastFluentFilesFolders.Views.MainWindowView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -9,68 +9,66 @@
     xmlns:views="using:FastFluentFilesFolders.Views"
     xmlns:ctrls="using:Microsoft.UI.Xaml.Controls"
 	xmlns:CTKTCtrls="using:CommunityToolkit.WinUI.Controls" 
+	Title="FastFluentFilesFolders"
     mc:Ignorable="d">
 
-    <Grid x:Name="RootGrid">
-        <ctrls:NavigationView x:Name="MainNav" PaneDisplayMode="LeftCompact"
+	<Grid x:Name="RootGrid">
+		<Grid>
+			<Grid x:Name="AppTitleBar" 
+              Height="32" 
+              VerticalAlignment="Top" 
+              Background="Transparent" />
+		</Grid>
+		<ctrls:NavigationView x:Name="MainNav" PaneDisplayMode="LeftCompact"
                               IsBackButtonVisible="Collapsed"
                               IsSettingsVisible="True"
                               SelectionChanged="OnNavSelectionChanged">
-            <ctrls:NavigationView.PaneHeader>
-                <StackPanel Orientation="Horizontal" Spacing="4">
-                    <FontIcon Glyph="&#xE838;" FontSize="16" />
-                    <TextBlock Text="{Binding ML.AppName}" FontSize="14" FontWeight="SemiBold"
+			<ctrls:NavigationView.PaneHeader>
+				<StackPanel Orientation="Horizontal" Spacing="4">
+					<FontIcon Glyph="&#xE838;" FontSize="16" />
+					<TextBlock Text="{Binding ML.AppName}" FontSize="14" FontWeight="SemiBold"
                                VerticalAlignment="Center" Margin="4,0,0,0"/>
-                </StackPanel>
-            </ctrls:NavigationView.PaneHeader>
+				</StackPanel>
+			</ctrls:NavigationView.PaneHeader>
 
-            <ctrls:NavigationView.MenuItems>
-                <ctrls:NavigationViewItem Icon="Folder" Content="{Binding ML.NavExplorer}" Tag="explorer"/>
-                <ctrls:NavigationViewItem Icon="AllApps" Content="{Binding ML.NavPlugins}" Tag="plugins"/>
-            </ctrls:NavigationView.MenuItems>
+			<ctrls:NavigationView.MenuItems>
+				<ctrls:NavigationViewItem Icon="Folder" Content="{Binding ML.NavExplorer}" Tag="explorer"/>
+				<ctrls:NavigationViewItem Icon="AllApps" Content="{Binding ML.NavPlugins}" Tag="plugins"/>
+			</ctrls:NavigationView.MenuItems>
 
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-                
-                <TitleBar Height="0" x:Name="AppTitleBar"
-                      Title="{Binding ML.AppName}" Subtitle="v1.0.2">
-                    <TitleBar.IconSource>
-                        <FontIconSource Glyph="&#xE838;"/>
-                    </TitleBar.IconSource>
-                </TitleBar>
+			<Grid>
+				<Grid.RowDefinitions>
+					<RowDefinition Height="Auto" />
+					<RowDefinition Height="*" />
+				</Grid.RowDefinitions>
 
-                <!-- Explorer Area: collapsed initially, shown when ready -->
-                <views:ExplorerPage x:Name="ExplorerArea" Grid.Row="1" Visibility="Collapsed" />
+				<views:ExplorerPage x:Name="ExplorerArea" Grid.Row="1" Visibility="Collapsed" />
 
-                <!-- Frame for plugins/settings: lightweight pages with animation -->
-                <Frame x:Name="ContentFrame" Grid.Row="1" Visibility="Collapsed">
-                    <Frame.ContentTransitions>
-                        <TransitionCollection>
-                            <NavigationThemeTransition />
-                        </TransitionCollection>
-                    </Frame.ContentTransitions>
-                </Frame>
-            </Grid>
-        </ctrls:NavigationView>
+				<Frame x:Name="ContentFrame" Grid.Row="1" Visibility="Collapsed">
+					<Frame.ContentTransitions>
+						<TransitionCollection>
+							<NavigationThemeTransition />
+						</TransitionCollection>
+					</Frame.ContentTransitions>
+				</Frame>
+			</Grid>
+		</ctrls:NavigationView>
 
-        <!-- 启动加载遮罩，覆盖全窗口（包括 NavigationView 面板） -->
-        <Border x:Name="SplashOverlay" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="16">
-                <ProgressRing IsActive="True" Width="48" Height="48"
-                              Foreground="{ThemeResource AccentFillColorDefaultBrush}"/>
-                <TextBlock Text="{Binding ML.AppName}" FontSize="18" FontWeight="SemiBold"
-                           HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-            </StackPanel>
-            <Border.Resources>
-                <Storyboard x:Name="SplashFadeOut" Completed="OnSplashFadeOutCompleted">
-                    <DoubleAnimation Storyboard.TargetName="SplashOverlay"
-                                     Storyboard.TargetProperty="Opacity"
-                                     From="1" To="0" Duration="0:0:0.3"/>
-                </Storyboard>
-            </Border.Resources>
-        </Border>
-    </Grid>
+		<!-- 启动加载遮罩，覆盖全窗口 -->
+	    <Border x:Name="SplashOverlay" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
+		    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="16">
+			    <ProgressRing IsActive="True" Width="48" Height="48"
+                                  Foreground="{ThemeResource AccentFillColorDefaultBrush}"/>
+			    <TextBlock Text="{Binding ML.AppName}" FontSize="18" FontWeight="SemiBold"
+                               HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+		    </StackPanel>
+		    <Border.Resources>
+			    <Storyboard x:Name="SplashFadeOut" Completed="OnSplashFadeOutCompleted">
+				    <DoubleAnimation Storyboard.TargetName="SplashOverlay"
+                                         Storyboard.TargetProperty="Opacity"
+                                         From="1" To="0" Duration="0:0:0.3"/>
+			    </Storyboard>
+		    </Border.Resources>
+	    </Border>
+	</Grid>
 </Window>

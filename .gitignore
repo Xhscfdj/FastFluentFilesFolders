@@ -364,3 +364,20 @@ FodyWeavers.xsd
 # agents
 AGENTS.md
 .omo
+
+FastFluentFilesfolders/build.ps1
+*.iss
+
+_scan.ps1
+_shot.ps1
+drag.ps1
+
+tools
+
+FastFluentFilesFolders/AppCast/
+
+FastFluentFilesFolders/Output/
+
+FastFluentFilesFolders/publish_arm64/
+FastFluentFilesFolders/publish_x64/
+

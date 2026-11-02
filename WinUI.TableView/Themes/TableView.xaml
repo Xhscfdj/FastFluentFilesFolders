@@ -77,7 +77,9 @@
         <Setter Property="ItemsPanel">
             <Setter.Value>
                 <ItemsPanelTemplate>
-                    <ItemsStackPanel Orientation="Vertical" />
+                    <!-- CacheLength 由默认 4 个视口降为 1 个：大文件夹换目录时实体化的行/单元格大幅减少，
+                         避免每次导航都创建上百个 XAML 容器（实测这是工作集每次涨 ~30MB 的主要来源）。 -->
+                    <ItemsStackPanel Orientation="Vertical" CacheLength="0" />
                 </ItemsPanelTemplate>
             </Setter.Value>
         </Setter>

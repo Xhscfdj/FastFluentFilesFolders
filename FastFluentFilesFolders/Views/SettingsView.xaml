@@ -12,99 +12,122 @@
     xmlns:vm="using:FastFluentFilesFolders.ViewModels"
     mc:Ignorable="d"
     NavigationCacheMode="Disabled"
+	Unloaded="SV_Unloaded"
     IsTabStop="True">
 	<Grid>
 		<ScrollViewer>
 			<StackPanel Padding="24" Spacing="14" HorizontalAlignment="Stretch" x:Name="SettingsStack">
-				<TextBlock Text="{Binding ML.SettingsTitle}"  Style="{StaticResource TitleTextBlockStyle}"/>
+				<TextBlock Text="{x:Bind _settingsVm.SettingsTitle, Mode=OneWay}"  Style="{StaticResource TitleTextBlockStyle}"/>
 				<!--General-->
-				<TextBlock Text="{Binding ML.GeneralSection}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,12,0,0" />
-				<ccl:SettingsCard Header="{Binding ML.HomePagePath}">
+				<TextBlock Text="{x:Bind _settingsVm.GeneralSection, Mode=OneWay}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,12,0,0" />
+				<ccl:SettingsCard Header="{x:Bind _settingsVm.HomePagePath, Mode=OneWay}">
 					<ccl:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE80F;" />
 					</ccl:SettingsCard.HeaderIcon>
-					<TextBox Text="{Binding AppConfigs.HomePageFullPath, Mode=TwoWay}" />
+					<TextBox Text="{x:Bind _settingsVm.HomePageFullPath, Mode=TwoWay}" />
 				</ccl:SettingsCard>
 
-				<ccl:SettingsCard Header="{Binding ML.LanguageLabel}">
+				<ccl:SettingsCard Header="{x:Bind _settingsVm.LanguageLabel, Mode=OneWay}">
 					<ccl:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE8B1;" />
 					</ccl:SettingsCard.HeaderIcon>
-					<ComboBox ItemsSource="{Binding LanguageOptions}"
-							  SelectedItem="{Binding SelectedLanguage, Mode=TwoWay}"
-							  DisplayMemberPath="DisplayName" />
+					<ComboBox ItemsSource="{x:Bind _settingsVm.LanguageOptions, Mode=OneWay}"
+							  SelectedItem="{x:Bind _settingsVm.SelectedLanguage, Mode=TwoWay}">
+						<ComboBox.ItemTemplate>
+							<DataTemplate x:DataType="vm:LanguageOption">
+								<TextBlock Text="{x:Bind DisplayName}" />
+							</DataTemplate>
+						</ComboBox.ItemTemplate>
+					</ComboBox>
 				</ccl:SettingsCard>
 
-				<ccl:SettingsExpander Header="{Binding ML.DefaultSortOrder}">
+				<ccl:SettingsExpander Header="{x:Bind _settingsVm.DefaultSortOrder, Mode=OneWay}">
 					<ccl:SettingsExpander.HeaderIcon>
 						<FontIcon Glyph="&#xE8CB;" />
 					</ccl:SettingsExpander.HeaderIcon>
 					<ccl:SettingsExpander.Items>
-						<ccl:SettingsCard Header="{Binding ML.SortBy}">
+						<ccl:SettingsCard Header="{x:Bind _settingsVm.SortBy, Mode=OneWay}">
 							<ccl:SettingsCard.HeaderIcon>
 								<FontIcon Glyph="&#xE8CB;" />
 							</ccl:SettingsCard.HeaderIcon>
-							<ComboBox SelectedItem="{Binding SelectedOrderModeItem, Mode=TwoWay}" ItemsSource="{Binding OrderModeItems}" DisplayMemberPath="Display"/>
+							<ComboBox SelectedItem="{x:Bind _settingsVm.SelectedOrderModeItem, Mode=TwoWay}"
+									  ItemsSource="{x:Bind _settingsVm.OrderModeItems, Mode=OneWay}">
+								<ComboBox.ItemTemplate>
+									<DataTemplate x:DataType="vm:SortModeItem">
+										<TextBlock Text="{x:Bind Display}" />
+									</DataTemplate>
+								</ComboBox.ItemTemplate>
+							</ComboBox>
 						</ccl:SettingsCard>
 					</ccl:SettingsExpander.Items>
 				</ccl:SettingsExpander>
 
 				<!--Appearance-->
-				<TextBlock Text="{Binding ML.AppearanceSection}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
-                <ccl:SettingsCard Header="{Binding ML.MiddleFilesHeight}">
+				<TextBlock Text="{x:Bind _settingsVm.AppearanceSection, Mode=OneWay}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+				<ccl:SettingsCard Header="{x:Bind _settingsVm.MiddleFilesHeightLabel, Mode=OneWay}">
                     <ccl:SettingsCard.HeaderIcon>
                         <FontIcon Glyph="&#xE752;" />
                     </ccl:SettingsCard.HeaderIcon>
-                    <ctrls:NumberBox Value="{Binding AppConfigs.MiddleFilesHeight, Mode=TwoWay}"
+                    <ctrls:NumberBox Value="{x:Bind _settingsVm.MiddleFilesHeight, Mode=TwoWay}"
                                      Minimum="20" Maximum="200"
                                      SpinButtonPlacementMode="Inline" />
                 </ccl:SettingsCard>
 
-                <ccl:SettingsCard Header="{Binding ML.SystemBackdropMode}">
+				<ccl:SettingsCard Header="{x:Bind _settingsVm.SystemBackdropMode, Mode=OneWay}">
                     <ccl:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xEF1F;" />
                     </ccl:SettingsCard.HeaderIcon>
-                    <ComboBox ItemsSource="{Binding BackdropOptions}"
-                              SelectedItem="{Binding SelectedBackdrop, Mode=TwoWay}"
-                              DisplayMemberPath="DisplayName" />
+					<ComboBox ItemsSource="{x:Bind _settingsVm.BackdropOptions, Mode=OneWay}"
+                              SelectedItem="{x:Bind _settingsVm.SelectedBackdrop, Mode=TwoWay}">
+						<ComboBox.ItemTemplate>
+							<DataTemplate x:DataType="vm:BackdropOption">
+								<TextBlock Text="{x:Bind DisplayName}" />
+							</DataTemplate>
+						</ComboBox.ItemTemplate>
+					</ComboBox>
                 </ccl:SettingsCard>
 
-                <ccl:SettingsCard Header="{Binding ML.TransitionMode}">
+				<ccl:SettingsCard Header="{x:Bind _settingsVm.TransitionMode, Mode=OneWay}">
                     <ccl:SettingsCard.HeaderIcon>
                         <FontIcon Glyph="&#xE768;" />
                     </ccl:SettingsCard.HeaderIcon>
-                    <ComboBox ItemsSource="{Binding TransitionModeItems}"
-                              SelectedItem="{Binding SelectedTransitionModeItem, Mode=TwoWay}"
-                              DisplayMemberPath="Display" />
+					<ComboBox ItemsSource="{x:Bind _settingsVm.TransitionModeItems, Mode=OneWay}"
+                              SelectedItem="{x:Bind _settingsVm.SelectedTransitionModeItem, Mode=TwoWay}">
+						<ComboBox.ItemTemplate>
+							<DataTemplate x:DataType="vm:TransitionModeItem">
+								<TextBlock Text="{x:Bind Display}" />
+							</DataTemplate>
+						</ComboBox.ItemTemplate>
+					</ComboBox>
                 </ccl:SettingsCard>
 
-                <TextBlock Text="{Binding ML.AdvancedSection}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,12,0,0" />
-				<ccl:SettingsCard Header="{Binding ML.UseWin32Icon}">
+				<TextBlock Text="{x:Bind _settingsVm.AdvancedSection, Mode=OneWay}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,12,0,0" />
+				<ccl:SettingsCard Header="{x:Bind _settingsVm.UseWin32Icon, Mode=OneWay}">
 					<ccl:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE770;"/>
 					</ccl:SettingsCard.HeaderIcon>
-					<ToggleSwitch IsOn="{Binding AppConfigs.IfUsesWin32APIToGetIcon, Mode=TwoWay}" />
+					<ToggleSwitch IsOn="{x:Bind _settingsVm.UseWin32ApiIcon, Mode=TwoWay}" />
 				</ccl:SettingsCard>
 
-				<TextBlock Text="{Binding ML.PerformanceSection}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,12,0,0" />
-				<ccl:SettingsCard Header="{Binding ML.IconParallelLoading}">
+				<TextBlock Text="{x:Bind _settingsVm.PerformanceSection, Mode=OneWay}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,12,0,0" />
+				<ccl:SettingsCard Header="{x:Bind _settingsVm.IconParallelLoading, Mode=OneWay}">
 					<ccl:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE8B9;"/>
 					</ccl:SettingsCard.HeaderIcon>
-					<ctrls:NumberBox Value="{Binding AppConfigs.IconParallelLoadingCount, Mode=TwoWay}"
+					<ctrls:NumberBox Value="{x:Bind _settingsVm.IconParallelLoadingCount, Mode=TwoWay}"
 									 Minimum="0" Maximum="200"
 									 SpinButtonPlacementMode="Inline" />
 				</ccl:SettingsCard>
 
-				<TextBlock Text="{Binding ML.DebugSection}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,12,0,0"/>
+				<TextBlock Text="{x:Bind _settingsVm.DebugSection, Mode=OneWay}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,12,0,0"/>
 
-				<ccl:SettingsExpander Header="{Binding ML.TimeGroupedFoldersHeader}">
+				<ccl:SettingsExpander Header="{x:Bind _settingsVm.TimeGroupedFoldersHeader, Mode=OneWay}">
 					<ccl:SettingsExpander.HeaderIcon>
 						<FontIcon Glyph="&#xE8B7;" />
 					</ccl:SettingsExpander.HeaderIcon>
 					<ccl:SettingsExpander.Items>
 						<ccl:SettingsCard>
-							<ListView ItemsSource="{Binding TimeGroupedFolders}" Height="120"
+							<ListView ItemsSource="{x:Bind _settingsVm.TimeGroupedFolders, Mode=OneWay}" Height="120"
 									  SelectionMode="None">
 								<ListView.ItemTemplate>
 									<DataTemplate x:DataType="x:String">
@@ -113,14 +136,14 @@
 												<ColumnDefinition Width="*"/>
 												<ColumnDefinition Width="Auto"/>
 											</Grid.ColumnDefinitions>
-											<TextBlock Text="{Binding}" VerticalAlignment="Center"
+											<TextBlock Text="{x:Bind}" VerticalAlignment="Center"
 													   TextTrimming="CharacterEllipsis"/>
 											<Button Grid.Column="1"
 													Content="&#xE74D;"
 													FontFamily="{StaticResource SymbolThemeFontFamily}"
 													Style="{StaticResource SubtleButtonStyle}"
-													Command="{Binding DataContext.DeleteTimeGroupedFolderCommand, ElementName=SV}"
-													CommandParameter="{Binding}"
+													Click="OnDeleteTimeGroupedFolderClick"
+													Tag="{x:Bind}"
 													Width="32" Height="32"/>
 										</Grid>
 									</DataTemplate>
@@ -129,43 +152,43 @@
 						</ccl:SettingsCard>
 						<ccl:SettingsCard>
 							<StackPanel Spacing="8" Orientation="Horizontal">
-								<TextBox Text="{Binding NewTimeGroupedFolderPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-										 PlaceholderText="{Binding ML.TimeGroupedFolderPlaceholder}"
+								<TextBox Text="{x:Bind _settingsVm.NewTimeGroupedFolderPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+										 PlaceholderText="{x:Bind _settingsVm.TimeGroupedFolderPlaceholder, Mode=OneWay}"
 										 MinWidth="280"/>
-								<Button Command="{Binding AddTimeGroupedFolderCommand}"
-										Content="{Binding ML.AddTimeGroupedFolder}"
+								<Button Command="{x:Bind _settingsVm.AddTimeGroupedFolderCommand, Mode=OneWay}"
+										Content="{x:Bind _settingsVm.AddTimeGroupedFolderLabel, Mode=OneWay}"
 										Style="{StaticResource AccentButtonStyle}"/>
 							</StackPanel>
 						</ccl:SettingsCard>
 					</ccl:SettingsExpander.Items>
 				</ccl:SettingsExpander>
 
-				<TextBlock Text="{Binding ML.DebugSection}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,12,0,0"/>
-				<ccl:SettingsCard Header="{Binding ML.UserConfigPath}">
+				<TextBlock Text="{x:Bind _settingsVm.DebugSection, Mode=OneWay}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,12,0,0"/>
+				<ccl:SettingsCard Header="{x:Bind _settingsVm.UserConfigPathLabel, Mode=OneWay}">
 					<ccl:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE756;" />
 					</ccl:SettingsCard.HeaderIcon>
-					<TextBlock Text="{Binding ConfigFilePath}" />
+					<TextBlock Text="{x:Bind _settingsVm.UserConfigPath, Mode=OneWay}" />
 				</ccl:SettingsCard>
 
 				<!-- Plugins Section -->
 				<StackPanel x:Name="PluginsSection" Visibility="Collapsed">
-					<TextBlock Text="{Binding ML.PluginsSection}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,10"/>
+					<TextBlock Text="{x:Bind _settingsVm.PluginsSection, Mode=OneWay}" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,10"/>
 					<StackPanel x:Name="PluginSettingsStack" Spacing="14" />
 				</StackPanel>
 
-				<TextBlock Text="{Binding ML.PluginManagement}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,12,0,0"/>
-				<ccl:SettingsCard Header="{Binding ML.PluginImport}">
+				<TextBlock Text="{x:Bind _settingsVm.PluginManagement, Mode=OneWay}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,12,0,0"/>
+				<ccl:SettingsCard Header="{x:Bind _settingsVm.PluginImport, Mode=OneWay}">
 					<ccl:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE8A7;" />
 					</ccl:SettingsCard.HeaderIcon>
 					<Button x:Name="ImportPluginBtn" Click="OnImportPluginClick"
 							Style="{StaticResource AccentButtonStyle}"
-							Content="{Binding ML.PluginImportBtn}" />
+							Content="{x:Bind _settingsVm.PluginImportBtn, Mode=OneWay}" />
 				</ccl:SettingsCard>
 
 				<ccl:SettingsCard x:Name="InstalledPluginsCard"
-									   Header="{Binding ML.PluginInstalled}"
+									   Header="{x:Bind _settingsVm.PluginInstalled, Mode=OneWay}"
 									   Visibility="Collapsed">
 					<ccl:SettingsCard.HeaderIcon>
 						<FontIcon Glyph="&#xE943;" />
@@ -180,7 +203,7 @@
 										<ColumnDefinition Width="Auto"/>
 									</Grid.ColumnDefinitions>
 									<StackPanel VerticalAlignment="Center">
-										<TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis"
+										<TextBlock Text="{x:Bind}" TextTrimming="CharacterEllipsis"
 												   FontWeight="SemiBold"/>
 									</StackPanel>
 									<Button Grid.Column="1"
@@ -188,7 +211,7 @@
 											FontFamily="{StaticResource SymbolThemeFontFamily}"
 											Style="{StaticResource SubtleButtonStyle}"
 											Click="OnUninstallPluginClick"
-											Tag="{Binding}"
+											Tag="{x:Bind}"
 											Width="32" Height="32"/>
 								</Grid>
 							</DataTemplate>
@@ -196,12 +219,12 @@
 					</ListView>
 				</ccl:SettingsCard>
 
-				<TextBlock Text="{Binding ML.AboutSection}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,12,0,0"/>
+				<TextBlock Text="{x:Bind _settingsVm.AboutSection, Mode=OneWay}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,12,0,0"/>
 				<ccl:SettingsExpander>
 					<ccl:SettingsExpander.Header>
 						<StackPanel>
-							<TextBlock Text="{Binding ML.AppName}" />
-                <TextBlock Text="{Binding ML.AppAuthorCredit}" Foreground="Gray" FontSize="14"/>
+							<TextBlock Text="{x:Bind _settingsVm.AppName, Mode=OneWay}" />
+                <TextBlock Text="{x:Bind _settingsVm.AppAuthorCredit, Mode=OneWay}" Foreground="Gray" FontSize="14"/>
 						</StackPanel>
 					</ccl:SettingsExpander.Header>
 					<ccl:SettingsExpander.Content>
@@ -214,7 +237,7 @@
 						<ccl:SettingsCard>
 							<HyperlinkButton NavigateUri="https://www.github.com/Xhscfdj/">
 								<StackPanel Orientation="Horizontal">
-									<TextBlock Text="{Binding ML.AuthorTip}" Margin="0,0,10,0" />
+									<TextBlock Text="{x:Bind _settingsVm.AuthorTip, Mode=OneWay}" Margin="0,0,10,0" />
 									<TextBlock Text="Xhscfdj" />
 								</StackPanel>
 							</HyperlinkButton>
@@ -222,13 +245,24 @@
 						<ccl:SettingsCard>
 							<HyperlinkButton NavigateUri="https://www.github.com/Xhscfdj/FastFluentFilesFolders">
 								<StackPanel Orientation="Horizontal">
-									<TextBlock Text="{Binding ML.RepositoryTip}" Margin="0,0,10,0" />
+									<TextBlock Text="{x:Bind _settingsVm.RepositoryTip, Mode=OneWay}" Margin="0,0,10,0" />
 									<TextBlock Text="FastFluentFilesFolders" />
 								</StackPanel>
 							</HyperlinkButton>
 						</ccl:SettingsCard>
 					</ccl:SettingsExpander.Items>
 				</ccl:SettingsExpander>
+
+				<ccl:SettingsCard Header="{x:Bind _settingsVm.CheckUpdate, Mode=OneWay}"
+								  Description="{x:Bind _settingsVm.CheckUpdateDescription, Mode=OneWay}">
+					<ccl:SettingsCard.HeaderIcon>
+						<FontIcon Glyph="&#xE895;" />
+					</ccl:SettingsCard.HeaderIcon>
+					<Button x:Name="CheckUpdateBtn"
+							Content="{x:Bind _settingsVm.CheckUpdateButton, Mode=OneWay}"
+							Style="{StaticResource AccentButtonStyle}"
+							Click="OnCheckUpdateClick" />
+				</ccl:SettingsCard>
 			</StackPanel>
 		</ScrollViewer>
 	</Grid>

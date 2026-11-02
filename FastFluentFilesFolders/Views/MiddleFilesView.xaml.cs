@@ -56,12 +56,14 @@ namespace FastFluentFilesFolders.Views
         {
             InitializeComponent();
             RefreshHeaders();
-            App.ML.PropertyChanged += OnMLPropertyChanged;
+            App.ML.LanguageChanged += OnLanguageChanged;
             this.DataContext = App.SharedViewModel;
 
             FileGrid.ContextRequested += OnFileGridContextRequested;
             FileGrid.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(OnFileGridKeyDown), true);
             FileGrid.SelectionChanged += (_, _) => UpdateRecycleToolbarState();
+            // 用户在表头/排序菜单里改了排序 → 记到当前标签页并持久化（换目录、刷新、切标签页都靠它恢复）
+            FileGrid.SortChanged += OnFileGridSortChanged;
 
             App.SharedViewModel.RenameFocusRequested += OnRenameFocusRequested;
             App.SharedViewModel.SelectItemRequested += OnSelectItemRequested;
@@ -120,13 +122,20 @@ namespace FastFluentFilesFolders.Views
                 currentVm.PropertyChanged += OnViewModelPropertyChanged;
                 UpdateGroupedSource(currentVm);
             }
+
+            UpdateSearchProgressVisibility();
         }
 
-        private void OnMLPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => RefreshAllStrings();
+        /// <summary>
+        /// 语言切换后**整体刷新一次**（列头 / 工具栏 / 分组头 / 右键菜单）。
+        /// 以前是订阅 PropertyChanged 逐条响应，一次切换会被调用 ~150 次，
+        /// 等于把工具栏重建 150 遍（实测一次切换临时分配 ~46MB、卡好几秒）。
+        /// </summary>
+        private void OnLanguageChanged(object? sender, EventArgs e) => RefreshAllStrings();
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
-            App.ML.PropertyChanged -= OnMLPropertyChanged;
+            App.ML.LanguageChanged -= OnLanguageChanged;
             App.SharedViewModel.RenameFocusRequested -= OnRenameFocusRequested;
             App.SharedViewModel.SelectItemRequested -= OnSelectItemRequested;
             App.SharedViewModel.ConflictResolutionRequested -= OnConflictResolutionRequested;
@@ -141,6 +150,9 @@ namespace FastFluentFilesFolders.Views
 
         private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
+            if (e.PropertyName == nameof(MainWindowViewModel.IsSearching))
+                UpdateSearchProgressVisibility();
+
             if (e.PropertyName == nameof(MainWindowViewModel.CurrentFolderContent) ||
                 e.PropertyName == nameof(MainWindowViewModel.IsCurrentFolderSpecial) ||
                 e.PropertyName == nameof(MainWindowViewModel.IsSearchMode) ||
@@ -163,13 +175,40 @@ namespace FastFluentFilesFolders.Views
             }
         }
 
+        /// <summary>
+        /// 搜索进度条的可见性：直接在代码里跟随 <see cref="MainWindowViewModel.IsSearching"/>。
+        /// 之前是 <c>{Binding IsSearching, Converter={StaticResource BoolToVisibilityConverter}}</c>，
+        /// 一旦绑定没生效，ProgressBar 会停在默认的 Visible 上一直滚动（Native AOT 下出现过），
+        /// 所以改成代码直连 + XAML 初始 Collapsed 兜底。
+        /// </summary>
+        private void UpdateSearchProgressVisibility()
+        {
+            var searching = (this.DataContext as MainWindowViewModel ?? App.SharedViewModel)?.IsSearching == true;
+            var target = searching ? Visibility.Visible : Visibility.Collapsed;
+            if (SearchProgressBar.Visibility != target)
+                SearchProgressBar.Visibility = target;
+        }
+
+        private void OnFileGridSortChanged(string? sortPath, bool ascending)
+        {
+            var vm = this.DataContext as MainWindowViewModel ?? App.SharedViewModel;
+            if (vm == null) return;
+
+            var cleared = string.IsNullOrEmpty(sortPath);
+            vm.SetCurrentSort(sortPath, ascending);
+
+            // 取消排序：表格自己只能把现有条目重铺一遍（顺序仍是排序后的），
+            // 让 VM 用文件夹原始的子项顺序重建一次，才算真正回到配置里的默认排序。
+            if (cleared) vm.RequestContentRebuild();
+        }
+
         private void UpdateGroupedSource(MainWindowViewModel vm)
         {
             if (vm.IsSearchMode)
             {
                 if (_watchedCollection != null) { _watchedCollection.CollectionChanged -= OnCurrentFolderCollectionChanged; _watchedCollection = null; }
                 _lastAppliedGroupedSource = null;
-                FileGrid.UpdateSource(vm.SearchResults, grouped: false);
+                FileGrid.UpdateSource(vm.SearchResults, grouped: false, vm.CurrentSortPath, vm.CurrentSortAscending);
                 return;
             }
 
@@ -191,7 +230,7 @@ namespace FastFluentFilesFolders.Views
 
                 if (vm.CurrentTab == null || prebuiltVersion == vm.CurrentTab.NavigationVersion)
                 {
-                    FileGrid.UpdateSourcePrebuilt(prebuilt);
+                    FileGrid.UpdateSourcePrebuilt(prebuilt, vm.CurrentSortPath, vm.CurrentSortAscending);
                     if (FileGrid.ItemsSource is GroupedFileList gl)
                         gl.SetDispatcher(Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread());
                 }
@@ -210,7 +249,7 @@ namespace FastFluentFilesFolders.Views
             _watchedCollection.CollectionChanged += OnCurrentFolderCollectionChanged;
 
             _lastAppliedGroupedSource = (items, special);
-            FileGrid.UpdateSource(items, special);
+            FileGrid.UpdateSource(items, special, vm.CurrentSortPath, vm.CurrentSortAscending);
             if (FileGrid.ItemsSource is GroupedFileList list)
                 list.SetDispatcher(Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread());
         }
@@ -236,7 +275,8 @@ namespace FastFluentFilesFolders.Views
                 }
                 else
                 {
-                    FileGrid.UpdateSource(vm.CurrentFolderContent ?? new(), vm.IsCurrentFolderSpecial);
+                    FileGrid.UpdateSource(vm.CurrentFolderContent ?? new(), vm.IsCurrentFolderSpecial,
+                        vm.CurrentSortPath, vm.CurrentSortAscending);
                 }
             }
             catch (Exception ex)
@@ -245,7 +285,8 @@ namespace FastFluentFilesFolders.Views
                 System.Diagnostics.Debug.WriteLine($"[FileGrid] 增量更新失败，回退整表刷新: {ex}");
                 try
                 {
-                    FileGrid.UpdateSource(vm.CurrentFolderContent ?? new(), vm.IsCurrentFolderSpecial);
+                    FileGrid.UpdateSource(vm.CurrentFolderContent ?? new(), vm.IsCurrentFolderSpecial,
+                        vm.CurrentSortPath, vm.CurrentSortAscending);
                 }
                 catch (Exception inner)
                 {
@@ -1560,28 +1601,32 @@ namespace FastFluentFilesFolders.Views
         }
     }
 
-    public class BoolToVisibilityConverter : Microsoft.UI.Xaml.Data.IValueConverter
+    // 四个转换器都必须 partial：它们实现 WinRT 的 IValueConverter，经 Binding.Converter 跨 ABI 传递，
+    // 而 Native AOT / 关闭 BuiltInComInterop 的构建只有 partial 类型才会由 CsWinRT 生成 AOT 安全的
+    // COM 虚表；漏掉 partial 时转换器封送失败，XAML 报
+    // "Failed to assign to property 'Microsoft.UI.Xaml.UIElement.Visibility'"（0x802B000A → 0xc000027b 崩溃）。
+    public sealed partial class BoolToVisibilityConverter : Microsoft.UI.Xaml.Data.IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
             => value is true ? Visibility.Visible : Visibility.Collapsed;
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
 
-    public class InvertBoolConverter : Microsoft.UI.Xaml.Data.IValueConverter
+    public sealed partial class InvertBoolConverter : Microsoft.UI.Xaml.Data.IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
             => value is bool b ? !b : value;
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
 
-    public class InvertVisibilityConverter : Microsoft.UI.Xaml.Data.IValueConverter
+    public sealed partial class InvertVisibilityConverter : Microsoft.UI.Xaml.Data.IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
             => value is true ? Visibility.Collapsed : Visibility.Visible;
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
 
-    public class ExpandGlyphConverter : Microsoft.UI.Xaml.Data.IValueConverter
+    public sealed partial class ExpandGlyphConverter : Microsoft.UI.Xaml.Data.IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
             => value is true ? "\uE96E" : "\uE970";

@@ -16,7 +16,7 @@ namespace FastFluentFilesFolders.UserControls
         public FileOperationsButton()
         {
             InitializeComponent();
-            App.ML.PropertyChanged += OnMLPropertyChanged;
+            App.ML.LanguageChanged += OnLanguageChanged;
             ApplyLocalizedStrings();
         }
 
@@ -109,6 +109,7 @@ namespace FastFluentFilesFolders.UserControls
             EmptyText.Text = App.ML.NoFileOperations;
         }
 
-        private void OnMLPropertyChanged(object? sender, PropertyChangedEventArgs e) => ApplyLocalizedStrings();
+        /// <summary>语言切换后刷新一次（只需一次，不必逐条响应 ~150 条属性通知）。</summary>
+        private void OnLanguageChanged(object? sender, System.EventArgs e) => ApplyLocalizedStrings();
     }
 }

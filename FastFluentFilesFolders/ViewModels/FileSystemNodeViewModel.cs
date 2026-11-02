@@ -2,9 +2,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI;
 using FastFluentFilesFolders.Services;
-using FastFluentFilesFolders.Extensions;
-using FastFluentFilesFolders.Extensions.Interfaces;
-using FastFluentFilesFolders.Helpers;
 using FastFluentFilesFolders.Models;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml.Media;
@@ -39,7 +36,9 @@ namespace FastFluentFilesFolders.ViewModels
 		RecycleItem
 	}
 
-	public partial class FileSystemNodeViewModel : ViewModelBase
+	// {Binding} 需要 ICustomProperty；Release/AOT 下反射版被关闭，必须由源生成器提供。
+	[WinRT.GeneratedBindableCustomProperty]
+	public partial class FileSystemNodeViewModel : ObservableObject
 	{
 		// 构造函数（统一入口）
 		public FileSystemNodeViewModel(
@@ -262,14 +261,14 @@ namespace FastFluentFilesFolders.ViewModels
 		}
 
 		// 基础属性
-		[ObservableProperty] private TagViewModel _tag = new();
-		[ObservableProperty] private bool _isPlaceholder = false;
-		[ObservableProperty] private bool _isSpecialFolder = false;
-		[ObservableProperty] private bool _willSplitToDifferentSorts = false;
-		[ObservableProperty] private string _name = string.Empty;
-		[ObservableProperty] private string _fullPath = string.Empty;
-		[ObservableProperty] private bool _isDirectory = true;
-		[ObservableProperty] private string _extension = string.Empty;
+		[ObservableProperty] public partial TagViewModel Tag { get; set; } = new();
+		[ObservableProperty] public partial bool IsPlaceholder { get; set; } = false;
+		[ObservableProperty] public partial bool IsSpecialFolder { get; set; } = false;
+		[ObservableProperty] public partial bool WillSplitToDifferentSorts { get; set; } = false;
+		[ObservableProperty] public partial string Name { get; set; } = string.Empty;
+		[ObservableProperty] public partial string FullPath { get; set; } = string.Empty;
+		[ObservableProperty] public partial bool IsDirectory { get; set; } = true;
+		[ObservableProperty] public partial string Extension { get; set; } = string.Empty;
 #if !RELEASE
 		internal static bool IconLoadingEnabled = true;
 #endif
@@ -294,18 +293,18 @@ namespace FastFluentFilesFolders.ViewModels
 			}
 			set => SetProperty(ref _icon, value);
 		}
-		[ObservableProperty] private long _exactSize = 0;
-		[ObservableProperty] private string _visualSize = "0B";
-		[ObservableProperty] private DateTime _lastModifiedTime = DateTime.MinValue;
-		[ObservableProperty] private DateTime _firstCreatedTime = DateTime.MinValue;
-		[ObservableProperty] private string _lastModifiedTimeString = string.Empty;
-		[ObservableProperty] private string _firstCreatedTimeString = string.Empty;
-		[ObservableProperty] private bool _isSelected = false;
-		[ObservableProperty] private bool _isRenaming = false;
-		[ObservableProperty] private bool _isCutPending = false;
-		[ObservableProperty] private bool _isSizeCalculated = false;
-		[ObservableProperty] private bool _isHidden = false;
-		[ObservableProperty] private bool _isSystem = false;
+		[ObservableProperty] public partial long ExactSize { get; set; } = 0;
+		[ObservableProperty] public partial string VisualSize { get; set; } = "0B";
+		[ObservableProperty] public partial DateTime LastModifiedTime { get; set; } = DateTime.MinValue;
+		[ObservableProperty] public partial DateTime FirstCreatedTime { get; set; } = DateTime.MinValue;
+		[ObservableProperty] public partial string LastModifiedTimeString { get; set; } = string.Empty;
+		[ObservableProperty] public partial string FirstCreatedTimeString { get; set; } = string.Empty;
+		[ObservableProperty] public partial bool IsSelected { get; set; } = false;
+		[ObservableProperty] public partial bool IsRenaming { get; set; } = false;
+		[ObservableProperty] public partial bool IsCutPending { get; set; } = false;
+		[ObservableProperty] public partial bool IsSizeCalculated { get; set; } = false;
+		[ObservableProperty] public partial bool IsHidden { get; set; } = false;
+		[ObservableProperty] public partial bool IsSystem { get; set; } = false;
 
 		// 使用进程（懒加载，类似 Icon）
 		private string _processesUsingThisFile = string.Empty;
@@ -325,7 +324,7 @@ namespace FastFluentFilesFolders.ViewModels
 		}
 
 		// 压缩包预览相关：当节点位于压缩包内部时为 true
-		[ObservableProperty] private bool _isArchiveEntry = false;
+		[ObservableProperty] public partial bool IsArchiveEntry { get; set; } = false;
 		// 物理压缩包文件的完整路径
 		public string ArchiveFilePath { get; private set; } = string.Empty;
 		// 在压缩包内部的相对路径
@@ -389,7 +388,7 @@ namespace FastFluentFilesFolders.ViewModels
 			get => _children ??= [];
 			set => SetProperty(ref _children, value);
 		}
-		[ObservableProperty] private string _childrenCountText = string.Empty;
+		[ObservableProperty] public partial string ChildrenCountText { get; set; } = string.Empty;
 		private int? _cachedChildrenCount;
 
 		public bool IsLoaded => _isLoaded;
@@ -398,10 +397,13 @@ namespace FastFluentFilesFolders.ViewModels
 		/// 释放子项缓存（内存优化）。同时把加载状态重置为未加载，
 		/// 保证之后再次导航回该文件夹时会重新枚举磁盘，
 		/// 否则会出现“返回后文件夹为空、刷新才恢复”的问题。
+		/// 目录会补回一个占位项：目录树靠它保留展开箭头，展开/重新进入时才能触发重新加载。
 		/// </summary>
 		public void ReleaseChildren()
 		{
 			Children.Clear();
+			if (IsDirectory && !IsPlaceholder)
+				Children.Add(new PlaceholderNodeViewModel());
 			_isLoaded = false;
 			_cachedChildrenCount = null;
 			ChildrenCountText = string.Empty;
@@ -1188,6 +1190,101 @@ namespace FastFluentFilesFolders.ViewModels
 
 			_childrenRetryScheduled = false;
 
+			// 刷新（当前已经有子项）时按路径复用旧的 FileSystemNodeViewModel 实例：
+			// 静态文件夹反复刷新不会重新构造整批节点，表格里的行/绑定/数据项也就不会整批重建，
+			// 避免每次刷新都产生一份新的节点集合与容器（内存随刷新次数上涨的主因之一）。
+			var hasExistingChildren = false;
+			foreach (var child in Children)
+			{
+				if (!child.IsPlaceholder)
+				{
+					hasExistingChildren = true;
+					break;
+				}
+			}
+
+			if (hasExistingChildren)
+			{
+				// 1) 先在 UI 线程快照现有子项（用于按引用复用与顺序比较）。
+				var existingList = new List<FileSystemNodeViewModel>();
+				var existingByPath = new Dictionary<string, FileSystemNodeViewModel>(StringComparer.OrdinalIgnoreCase);
+				await _uiDispatcherQueue.EnqueueAsync(() =>
+				{
+					foreach (var child in Children)
+					{
+						if (child.IsPlaceholder) continue;
+						existingList.Add(child);
+						if (!existingByPath.ContainsKey(child.FullPath))
+							existingByPath[child.FullPath] = child;
+					}
+				});
+
+				// 2) 只对真正新增/类型变化的条目做实例化：按当前排序/分组等参数在后台异步构造，
+				//    不阻塞 UI，也不为已存在的条目重复创建对象。
+				var newEntries = new List<FileSystemEntryInfo>();
+				foreach (var entry in entries)
+				{
+					if (existingByPath.TryGetValue(entry.FullPath, out var existing) &&
+						existing.IsDirectory == entry.IsDirectory)
+					{
+						continue;
+					}
+					newEntries.Add(entry);
+				}
+
+				var (newDirNodes, newFileNodes) = await BuildChildNodesAsync(newEntries);
+				var newNodes = new Queue<FileSystemNodeViewModel>(newDirNodes.Count + newFileNodes.Count);
+				foreach (var node in newDirNodes) newNodes.Enqueue(node);
+				foreach (var node in newFileNodes) newNodes.Enqueue(node);
+
+				// 3) 回到 UI 线程合并：复用旧实例的条目在此更新元数据，新增条目直接用后台实例化结果。
+				await _uiDispatcherQueue.EnqueueAsync(() =>
+				{
+					var merged = new List<FileSystemNodeViewModel>(entries.Count);
+					foreach (var entry in entries)
+					{
+						if (existingByPath.TryGetValue(entry.FullPath, out var existing) &&
+							existing.IsDirectory == entry.IsDirectory)
+						{
+							existing.Parent = this;
+							existing.ApplyMetadata(entry.IsDirectory, entry.Size, entry.LastWriteTimeUtc, entry.CreationTimeUtc, entry.IsHidden, entry.IsSystem);
+							merged.Add(existing);
+						}
+						else if (newNodes.Count > 0)
+						{
+							var node = newNodes.Dequeue();
+							node.Parent = this;
+							merged.Add(node);
+						}
+					}
+
+					// 实例与顺序都没变化时不要 Clear/Add：避免左侧目录树跟着整批 Reset/Add 重建容器。
+					var unchanged = merged.Count == existingList.Count;
+					if (unchanged)
+					{
+						for (var i = 0; i < merged.Count; i++)
+						{
+							if (!ReferenceEquals(merged[i], existingList[i]))
+							{
+								unchanged = false;
+								break;
+							}
+						}
+					}
+
+					if (!unchanged)
+					{
+						Children.Clear();
+						foreach (var node in merged)
+							AddChildWithSort(node);
+					}
+
+					var actualCount = merged.Count;
+					ChildrenCountText = actualCount > 0 ? $"[{actualCount}]" : "[?]";
+				});
+				return;
+			}
+
 			var (dirNodes, fileNodes) = await BuildChildNodesAsync(entries);
 
 			var allNodes = new List<FileSystemNodeViewModel>(dirNodes.Count + fileNodes.Count);
@@ -1451,11 +1548,7 @@ namespace FastFluentFilesFolders.ViewModels
 			}
 			return count > 0 ? $" [{count}]" : string.Empty;
 		}
-
-		// 节点类型名称（用于调试）
 		public string NodeTypeName => this.GetType().Name;
-
-		// 扩展：展开/折叠（若需要）
 		private bool _isExpanded;
 		public bool IsExpanded
 		{
