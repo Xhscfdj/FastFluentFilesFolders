@@ -1,4 +1,4 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI;
 using FastFluentFilesFolders.Services;
@@ -36,6 +36,8 @@ namespace FastFluentFilesFolders.ViewModels
 		RecycleItem
 	}
 
+	// {Binding} 需要 ICustomProperty；Release/AOT 下反射版被关闭，必须由源生成器提供。
+	[WinRT.GeneratedBindableCustomProperty]
 	public partial class FileSystemNodeViewModel : ObservableObject
 	{
 		// 构造函数（统一入口）
@@ -259,14 +261,14 @@ namespace FastFluentFilesFolders.ViewModels
 		}
 
 		// 基础属性
-		[ObservableProperty] private TagViewModel _tag = new();
-		[ObservableProperty] private bool _isPlaceholder = false;
-		[ObservableProperty] private bool _isSpecialFolder = false;
-		[ObservableProperty] private bool _willSplitToDifferentSorts = false;
-		[ObservableProperty] private string _name = string.Empty;
-		[ObservableProperty] private string _fullPath = string.Empty;
-		[ObservableProperty] private bool _isDirectory = true;
-		[ObservableProperty] private string _extension = string.Empty;
+		[ObservableProperty] public partial TagViewModel Tag { get; set; } = new();
+		[ObservableProperty] public partial bool IsPlaceholder { get; set; } = false;
+		[ObservableProperty] public partial bool IsSpecialFolder { get; set; } = false;
+		[ObservableProperty] public partial bool WillSplitToDifferentSorts { get; set; } = false;
+		[ObservableProperty] public partial string Name { get; set; } = string.Empty;
+		[ObservableProperty] public partial string FullPath { get; set; } = string.Empty;
+		[ObservableProperty] public partial bool IsDirectory { get; set; } = true;
+		[ObservableProperty] public partial string Extension { get; set; } = string.Empty;
 #if !RELEASE
 		internal static bool IconLoadingEnabled = true;
 #endif
@@ -291,18 +293,18 @@ namespace FastFluentFilesFolders.ViewModels
 			}
 			set => SetProperty(ref _icon, value);
 		}
-		[ObservableProperty] private long _exactSize = 0;
-		[ObservableProperty] private string _visualSize = "0B";
-		[ObservableProperty] private DateTime _lastModifiedTime = DateTime.MinValue;
-		[ObservableProperty] private DateTime _firstCreatedTime = DateTime.MinValue;
-		[ObservableProperty] private string _lastModifiedTimeString = string.Empty;
-		[ObservableProperty] private string _firstCreatedTimeString = string.Empty;
-		[ObservableProperty] private bool _isSelected = false;
-		[ObservableProperty] private bool _isRenaming = false;
-		[ObservableProperty] private bool _isCutPending = false;
-		[ObservableProperty] private bool _isSizeCalculated = false;
-		[ObservableProperty] private bool _isHidden = false;
-		[ObservableProperty] private bool _isSystem = false;
+		[ObservableProperty] public partial long ExactSize { get; set; } = 0;
+		[ObservableProperty] public partial string VisualSize { get; set; } = "0B";
+		[ObservableProperty] public partial DateTime LastModifiedTime { get; set; } = DateTime.MinValue;
+		[ObservableProperty] public partial DateTime FirstCreatedTime { get; set; } = DateTime.MinValue;
+		[ObservableProperty] public partial string LastModifiedTimeString { get; set; } = string.Empty;
+		[ObservableProperty] public partial string FirstCreatedTimeString { get; set; } = string.Empty;
+		[ObservableProperty] public partial bool IsSelected { get; set; } = false;
+		[ObservableProperty] public partial bool IsRenaming { get; set; } = false;
+		[ObservableProperty] public partial bool IsCutPending { get; set; } = false;
+		[ObservableProperty] public partial bool IsSizeCalculated { get; set; } = false;
+		[ObservableProperty] public partial bool IsHidden { get; set; } = false;
+		[ObservableProperty] public partial bool IsSystem { get; set; } = false;
 
 		// 使用进程（懒加载，类似 Icon）
 		private string _processesUsingThisFile = string.Empty;
@@ -322,7 +324,7 @@ namespace FastFluentFilesFolders.ViewModels
 		}
 
 		// 压缩包预览相关：当节点位于压缩包内部时为 true
-		[ObservableProperty] private bool _isArchiveEntry = false;
+		[ObservableProperty] public partial bool IsArchiveEntry { get; set; } = false;
 		// 物理压缩包文件的完整路径
 		public string ArchiveFilePath { get; private set; } = string.Empty;
 		// 在压缩包内部的相对路径
@@ -386,7 +388,7 @@ namespace FastFluentFilesFolders.ViewModels
 			get => _children ??= [];
 			set => SetProperty(ref _children, value);
 		}
-		[ObservableProperty] private string _childrenCountText = string.Empty;
+		[ObservableProperty] public partial string ChildrenCountText { get; set; } = string.Empty;
 		private int? _cachedChildrenCount;
 
 		public bool IsLoaded => _isLoaded;

@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Data;
@@ -61,7 +61,6 @@ public partial class TableView : ListView
     // 内容被整体替换（换文件夹/刷新）后，本帧末要统一滚顶并按设置播放入场动画：见 BeginContentReplacement。
     private long _contentReplacementEntranceStarted;
     private long _contentReplacementEntranceUntil;
-    private long _contentReplacementEntranceLastArmTick;
     private int _contentReplacementEntranceFirstIndex = -1;
     private int _contentReplacementEntranceToken;
     // 窗口开着：本批还在收行；已实体化出至少一行（可以统一开播了）
@@ -276,35 +275,11 @@ public partial class TableView : ListView
         _contentReplacementEntranceStarted = Environment.TickCount64;
         _contentReplacementEntranceUntil = _contentReplacementEntranceStarted
                                           + (long)ContentReplacementAnimationWindow.TotalMilliseconds;
-        _contentReplacementEntranceLastArmTick = _contentReplacementEntranceStarted;
         _contentReplacementEntrancePending = true;
         _contentReplacementEntranceRealized = false;
         _contentReplacementScrolled = false;
         LayoutUpdated -= OnContentReplacementLayoutUpdated;
         LayoutUpdated += OnContentReplacementLayoutUpdated;
-
-        TableViewTransitionTrace.Write(
-            $"arm token={_contentReplacementEntranceToken} animate={AnimateContentReplacement} " +
-            $"window={ContentReplacementAnimationWindow.TotalMilliseconds}ms " +
-            $"duration={ContentReplacementAnimationDuration.TotalMilliseconds}ms slide={ContentReplacementSlideOffsetY:0}px " +
-            $"loaded={IsLoaded} rows={_rows.Count}");
-
-        if (TableViewTransitionTrace.Enabled)
-        {
-            // 100ms 后回读前几行的 Opacity：动画中途应该能读到 0~1 之间的值。
-            // 若读到恒为 0（直到完成才被写回 1），说明动画根本没在驱动渲染。
-            var token = _contentReplacementEntranceToken;
-            _ = Task.Run(async () =>
-            {
-                await Task.Delay(100);
-                DispatcherQueue.TryEnqueue(() =>
-                {
-                    if (token != _contentReplacementEntranceToken) return;
-                    var sample = string.Join(",", _rows.Take(5).Select(r => r.Opacity.ToString("0.##")));
-                    TableViewTransitionTrace.Write($"probe +100ms: token={token} rows={_rows.Count} opacities=[{sample}]");
-                });
-            });
-        }
 
         // 安全网：万一本轮布局没有触发（或本批行没等到统一开播），到窗口上限时统一收尾（滚顶 + 开播），
         // 绝不让行停在“已准备但没开播”的透明状态，也绝不让视图停在错误位置。
@@ -313,7 +288,7 @@ public partial class TableView : ListView
         _ = Task.Run(async () =>
         {
             await Task.Delay(fallbackDelay);
-            DispatcherQueue.TryEnqueue(() => FinishContentReplacement(fallbackToken, "fallback"));
+            DispatcherQueue.TryEnqueue(() => FinishContentReplacement(fallbackToken));
         });
     }
 
@@ -323,14 +298,6 @@ public partial class TableView : ListView
     private bool IsContentReplacementEntranceActive =>
         _contentReplacementEntrancePending
         && _contentReplacementEntranceUntil > Environment.TickCount64;
-
-    /// <summary>
-    /// Whether it's worth tracing a realization step: only around an armed replacement (plus a short tail),
-    /// so scrolling later doesn't flood the log.
-    /// </summary>
-    private bool IsContentReplacementEntranceTraceWindow =>
-        _contentReplacementEntranceLastArmTick > 0
-        && Environment.TickCount64 - _contentReplacementEntranceLastArmTick < 2000;
 
     /// <summary>
     /// Prepares the entrance animation for a row belonging to the current content replacement, staggered by its
@@ -348,15 +315,8 @@ public partial class TableView : ListView
         var staggerMs = Math.Min(position * ContentReplacementStagger.TotalMilliseconds,
             ContentReplacementMaxStagger.TotalMilliseconds);
 
-        if (!row.PrepareEntranceAnimation(ContentReplacementAnimationDuration, _contentReplacementEntranceToken,
-                TimeSpan.FromMilliseconds(staggerMs), ContentReplacementSlideOffsetY))
-        {
-            return;
-        }
-
-        TableViewTransitionTrace.Write(
-            $"play token={_contentReplacementEntranceToken} index={itemIndex} stagger={staggerMs:0}ms " +
-            $"slide={ContentReplacementSlideOffsetY:0}px (prepared)");
+        row.PrepareEntranceAnimation(ContentReplacementAnimationDuration, _contentReplacementEntranceToken,
+            TimeSpan.FromMilliseconds(staggerMs), ContentReplacementSlideOffsetY);
     }
 
     /// <summary>
@@ -374,7 +334,7 @@ public partial class TableView : ListView
         // 这一轮布局还没实体化出任何行 —— 继续等下一轮（窗口本身有上限兜底）
         if (!_contentReplacementEntranceRealized) return;
 
-        OnContentReplacementLayoutUpdatedOrFinish(_contentReplacementEntranceToken, "layout");
+        OnContentReplacementLayoutUpdatedOrFinish(_contentReplacementEntranceToken);
     }
 
     /// <summary>
@@ -393,7 +353,7 @@ public partial class TableView : ListView
     /// actually looks at.</item>
     /// </list>
     /// </summary>
-    private void OnContentReplacementLayoutUpdatedOrFinish(int token, string reason)
+    private void OnContentReplacementLayoutUpdatedOrFinish(int token)
     {
         if (token != _contentReplacementEntranceToken) return;
         if (!_contentReplacementEntrancePending) return;
@@ -402,7 +362,6 @@ public partial class TableView : ListView
         if (!_contentReplacementScrolled && SelectedItems.Count == 0
             && _scrollViewer is { } scrollViewer && scrollViewer.VerticalOffset > 0.5)
         {
-            var offsetBefore = (int)scrollViewer.VerticalOffset;
             scrollViewer.ChangeView(null, 0, null, true);
             _contentReplacementScrolled = true;
             _contentReplacementEntranceRealized = false;   // 等下一轮布局把“顶部那批行”实体化
@@ -410,33 +369,27 @@ public partial class TableView : ListView
             // 滚动之后还会有一轮布局（可视范围变了），把窗口续一下，保证那一批行还在窗口内
             _contentReplacementEntranceUntil = Environment.TickCount64
                                                + (long)ContentReplacementAnimationWindow.TotalMilliseconds;
-
-            TableViewTransitionTrace.Write(
-                $"scrolled to top (layout) token={token} offsetBefore={offsetBefore} - waiting for the next pass to animate");
             return;
         }
 
-        FinishContentReplacement(token, reason);
+        FinishContentReplacement(token);
     }
 
     /// <summary>
     /// Starts the entrance animation batch (rows prepared for the top of the list) and closes the window.
     /// </summary>
-    private void FinishContentReplacement(int token, string reason)
+    private void FinishContentReplacement(int token)
     {
         if (token != _contentReplacementEntranceToken) return;
         if (!_contentReplacementEntrancePending) return;
 
         // 兜底滚顶：正常路径已经在上一轮布局里滚过了（那时还没渲染）；这里只在偏移确实非 0 时再动一次
-        var scrolledToTop = false;
         if (SelectedItems.Count == 0 && _scrollViewer is { } scrollViewer && scrollViewer.VerticalOffset > 0.5)
         {
             scrollViewer.ChangeView(null, 0, null, true);
-            scrolledToTop = true;
         }
 
         // 统一开播这一批（整批同时开始，避免“一行一行滴进来”）
-        var started = 0;
         if (AnimateContentReplacement)
         {
             foreach (var row in _rows)
@@ -444,7 +397,6 @@ public partial class TableView : ListView
                 if (row.HasPendingEntranceAnimation(token))
                 {
                     row.StartPreparedEntranceAnimation(token);
-                    started++;
                 }
             }
         }
@@ -453,10 +405,76 @@ public partial class TableView : ListView
         _contentReplacementEntranceRealized = false;
         _contentReplacementScrolled = false;
         LayoutUpdated -= OnContentReplacementLayoutUpdated;
+    }
 
-        TableViewTransitionTrace.Write(
-            $"window closed ({reason}) token={token} started={started} scrolledToTop={scrolledToTop} " +
-            $"offset={(int)(_scrollViewer?.VerticalOffset ?? 0)}");
+    /// <summary>
+    /// Replays the content-replacement entrance animation on the rows that are already realized, without
+    /// replacing the content.
+    /// <para>
+    /// It exists for one case: a refresh where the folder on disk is unchanged. The consumer
+    /// hands in an equivalent item sequence, the underlying list short-circuits (no container is re-prepared), so
+    /// <see cref="BeginContentReplacement"/> never sees a realized row and no animation is ever armed - clicking
+    /// refresh then looks like nothing happened at all. Replaying the same entrance animation (same parameters the
+    /// current <see cref="AnimateContentReplacement"/> settings give the visible rows) is that feedback.
+    /// </para>
+    /// No-ops when <see cref="AnimateContentReplacement"/> is off (the settings' "None" mode) or when no row is
+    /// realized. Rows that are already mid-animation are restarted, never left half faded.
+    /// </summary>
+    public void ReplayContentReplacementEntrance()
+    {
+        if (!AnimateContentReplacement || _rows.Count == 0)
+        {
+            return;
+        }
+
+        // 作废上一批：它挂着的 LayoutUpdated 与兜底回调都不该再开播（否则会把这批打断一次）
+        _contentReplacementEntrancePending = false;
+        LayoutUpdated -= OnContentReplacementLayoutUpdated;
+
+        var token = ++_contentReplacementEntranceToken;
+        var firstIndex = -1;
+
+        // _rows 只含已实体化的行容器（CacheLength=0 时就是视口内那批），正好是用户能看到的范围
+        for (var i = 0; i < _rows.Count; i++)
+        {
+            var row = _rows[i];
+            if (row is null || !row.IsLoaded)
+            {
+                continue;
+            }
+
+            int index;
+            try
+            {
+                index = row.Index;
+            }
+            catch (Exception)
+            {
+                // 容器还没真正登记到 ItemsSource 上（极少数过渡态）：跳过这一行，不影响其余行的动画
+                continue;
+            }
+
+            if (index < 0)
+            {
+                continue;
+            }
+
+            if (firstIndex < 0)
+            {
+                firstIndex = index;
+            }
+
+            var position = Math.Max(index - firstIndex, 0);
+            var staggerMs = Math.Min(position * ContentReplacementStagger.TotalMilliseconds,
+                ContentReplacementMaxStagger.TotalMilliseconds);
+
+            // 行已经是“早就进树”的状态，不用等本帧末的布局：准备好就地开播
+            if (row.PrepareEntranceAnimation(ContentReplacementAnimationDuration, token,
+                    TimeSpan.FromMilliseconds(staggerMs), ContentReplacementSlideOffsetY))
+            {
+                row.StartPreparedEntranceAnimation(token);
+            }
+        }
     }
 
     /// <summary>
@@ -466,12 +484,6 @@ public partial class TableView : ListView
     /// </summary>
     private void OnContainerContentChangingForContentReplacement(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
-        if (TableViewTransitionTrace.Enabled && IsContentReplacementEntranceTraceWindow && !args.InRecycleQueue)
-        {
-            TableViewTransitionTrace.Write(
-                $"ccc active={IsContentReplacementEntranceActive} index={args.ItemIndex} container={args.ItemContainer?.GetType().Name}");
-        }
-
         if (args.InRecycleQueue || !IsContentReplacementEntranceActive) return;
 
         // 这一轮布局已经实体化出新内容了 —— 收尾（滚顶 + 统一开播）可以在本帧末执行
@@ -496,12 +508,6 @@ public partial class TableView : ListView
             if (!_rows.Contains(syncRow))
             {
                 _rows.Add(syncRow);
-            }
-
-            if (TableViewTransitionTrace.Enabled && IsContentReplacementEntranceTraceWindow)
-            {
-                TableViewTransitionTrace.Write(
-                    $"prepare active={IsContentReplacementEntranceActive} index={syncRow.Index} rows={_rows.Count}");
             }
 
             if (IsContentReplacementEntranceActive)

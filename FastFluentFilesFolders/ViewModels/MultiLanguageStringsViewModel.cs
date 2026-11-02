@@ -1,9 +1,12 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using FastFluentFilesFolders.Services;
+using System;
 using System.Collections.Generic;
 
 namespace FastFluentFilesFolders.ViewModels
 {
+    // {Binding} 需要 ICustomProperty；Release/AOT 下反射版被关闭，必须由源生成器提供。
+    [WinRT.GeneratedBindableCustomProperty]
     public partial class MultiLanguageStringsViewModel : ObservableObject
     {
         private readonly LocalizationService _loc;
@@ -278,6 +281,18 @@ namespace FastFluentFilesFolders.ViewModels
         {
             foreach (var propName in AllPropertyNames)
                 OnPropertyChanged(propName);
+            LanguageChanged?.Invoke(this, EventArgs.Empty);
         }
+
+        /// <summary>
+        /// 语言切换完成（所有文案属性都已逐个通知完之后）触发**一次**。
+        ///
+        /// 需要“整体刷新”的订阅者（工具栏、右键菜单、列头这类一改就要重建/重算一批东西的）
+        /// 必须订阅这个事件，而不是逐条响应 <see cref="CommunityToolkit.Mvvm.ComponentModel.ObservableObject.PropertyChanged"/>：
+        /// 一次切换会发 ~150 条属性通知，逐条响应等于把同一个整体刷新执行 150 遍
+        /// （实测切一次语言因此临时分配 ~46MB，工具栏重建 150 次，切换卡好几秒）。
+        /// 正常绑定（XAML <c>{Binding}</c> / <c>x:Bind</c>）继续用属性通知，不受影响。
+        /// </summary>
+        public event EventHandler? LanguageChanged;
     }
 }

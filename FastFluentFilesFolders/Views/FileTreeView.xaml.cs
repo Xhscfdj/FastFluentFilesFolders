@@ -112,7 +112,7 @@ namespace FastFluentFilesFolders.Views
     }
 
     /// <summary>Icon == null → Visible（用于显示字形回退）。</summary>
-    public sealed class NullToVisibleConverter : Microsoft.UI.Xaml.Data.IValueConverter
+    public sealed partial class NullToVisibleConverter : Microsoft.UI.Xaml.Data.IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
             => value == null ? Visibility.Visible : Visibility.Collapsed;
@@ -121,7 +121,7 @@ namespace FastFluentFilesFolders.Views
     }
 
     /// <summary>Icon == null → Collapsed（用于隐藏空的 Image 占位）。</summary>
-    public sealed class NullToCollapsedConverter : Microsoft.UI.Xaml.Data.IValueConverter
+    public sealed partial class NullToCollapsedConverter : Microsoft.UI.Xaml.Data.IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
             => value == null ? Visibility.Collapsed : Visibility.Visible;

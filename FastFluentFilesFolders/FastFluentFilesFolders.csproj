@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
+	<CsWinRTAotWarningLevel>2</CsWinRTAotWarningLevel>
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
@@ -9,6 +10,7 @@
     <Platforms>x64;x86;arm64</Platforms>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <PublishProfile>win-$(Platform).pubxml</PublishProfile>
+	<PlatformTarget>$(Platform)</PlatformTarget>
     <UseWinUI>true</UseWinUI>
     <WinUISDKReferences>false</WinUISDKReferences>
 	<WindowsPackageType>None</WindowsPackageType>
@@ -16,7 +18,19 @@
     <EnableXamlDiagnostics>false</EnableXamlDiagnostics>
     <Nullable>enable</Nullable>
 	<LangVersion>preview</LangVersion>
-  </PropertyGroup>
+	<!--
+	  必须开启：AOT / trimming 时 SDK 会默认打开 Configuration.Binder 源生成器，
+	  它生成的代码用 HashSet<> 等类型但**不带 using**（依赖隐式 using）。不开启时会报
+	  CS0246: 未能找到类型或命名空间名"HashSet<>"，进而让 XAML 编译器 Pass1 汇编编译失败，
+	  连锁出一堆 WMC0001/WMC1111 假错误（看起来像 x:Bind 写错，实际与 XAML 无关）。
+	-->
+	<ImplicitUsings>enable</ImplicitUsings>
+    <!--目前PublishAot不稳定，先不开-->
+
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <SelfContained>true</SelfContained>
+    <InvariantGlobalization>true</InvariantGlobalization>
+</PropertyGroup>
   <ItemGroup>
     <Content Remove="Assets\BadgeLogo.scale-100.png" />
     <Content Remove="Assets\BadgeLogo.scale-125.png" />
@@ -97,16 +111,22 @@
     <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" Version="8.2.251219" />
     <PackageReference Include="CommunityToolkit.WinUI.Controls.Sizers" Version="8.2.251219" />
     <PackageReference Include="NetSparkleUpdater.SparkleUpdater" Version="3.1.0" />
-    <PackageReference Include="System.Text.Encoding.CodePages" Version="10.0.13" />
-
+    <!--
+      注意：不要在这里直接引用 Microsoft.Windows.CsWinRT 包。
+      它会把 cswinrt.exe 拉进构建并尝试生成整套 WinRT 投影，本机缺
+      Windows SDK 的 UAP Platform.xml 时会直接构建失败：
+        Could not read the Windows SDK's Platform.xml at ...\Platforms\UAP\10.0.19041.0\Platform.xml
+      AOT 相关的 unsafe 代码生成由 WindowsAppSDK 自带的 CsWinRT 版本负责，
+      而本项目已开启 <AllowUnsafeBlocks>true</AllowUnsafeBlocks>（见上方 PropertyGroup）。
+    -->
+	<PackageReference Include="XBindLeakFix" Version="1.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.13" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.13" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
   </ItemGroup>
-  <!-- 临时禁用 Configuration.Binder 源生成器（Release 模式下有 bug） -->
-  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <EnableConfigurationBindingGenerator>false</EnableConfigurationBindingGenerator>
-  </PropertyGroup>
+  <!-- Configuration.Binder 源生成器不再需要按配置关闭：
+       之前 Release 报的 "bug" 其实就是它依赖隐式 using 导致的 CS0246，
+       现已通过上面的 ImplicitUsings=enable 修复，AOT 发布也能用上生成器（trim/AOT 安全）。 -->
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />

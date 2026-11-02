@@ -7,10 +7,12 @@ using System.IO;
 
 namespace FastFluentFilesFolders.ViewModels
 {
+    // {Binding} 需要 ICustomProperty；Release/AOT 下反射版被关闭，必须由源生成器提供。
+    [WinRT.GeneratedBindableCustomProperty]
     public partial class Configs : ObservableObject
     {
         public static readonly bool IsDebugMode = true;
-        public static readonly string Version = "1.1.1";
+        public static readonly string Version = "1.2.0";
         private static readonly string DefaultConfigPath =
             Path.Combine(AppContext.BaseDirectory, "Configs", "configs.json");
 
@@ -21,23 +23,26 @@ namespace FastFluentFilesFolders.ViewModels
             Path.Combine(UserConfigDir, "user_configs.json");
 
         public IConfiguration configuration;
-        [ObservableProperty] private int _middleFilesHeight = 40;
-        [ObservableProperty] private bool _ifUsesWin32APIToGetIcon = true;
-        [ObservableProperty] private bool _ifLimitIconLoadingConcurrency = false;
+		[ObservableProperty] public partial int MiddleFilesHeight { get; set; } = 40;
+        [ObservableProperty] public partial bool IfUsesWin32APIToGetIcon { get; set; } = true;
+        [ObservableProperty] public partial bool IfLimitIconLoadingConcurrency { get; set; } = false;
         // 0 = 自动（默认，使用安全并发上限 16，避免 Shell/GDI+ 并发过高偶发失败）；
         // >0 表示最多同时解码多少个图标
-        [ObservableProperty] private int _iconParallelLoadingCount = 0;
-        [ObservableProperty] private string _homePageFullPath = DefaultDownloadsPath;
-        [ObservableProperty] private string _lastVisitedPath = "";
-        [ObservableProperty] private string _defaultOrderMode = "ModifiedDesc";
+        [ObservableProperty] public partial int IconParallelLoadingCount { get; set; } = 0;
+        [ObservableProperty] public partial string HomePageFullPath { get; set; } = DefaultDownloadsPath;
+        [ObservableProperty] public partial string LastVisitedPath { get; set; } = "";
+        [ObservableProperty] public partial string DefaultOrderMode { get; set; } = "ModifiedDesc";
         // 上次使用的排序状态（列 + 方向）：空字符串表示未排序。用于重启后保持排序。
-        [ObservableProperty] private string _lastSortPath = "";
-        [ObservableProperty] private bool _lastSortAscending = true;
-        [ObservableProperty] private string _language = "zh-Hans";
-        [ObservableProperty] private string _systemBackdropMode = "Mica";
+        [ObservableProperty] public partial string LastSortPath { get; set; } = "";
+        [ObservableProperty] public partial bool LastSortAscending { get; set; } = true;
+        [ObservableProperty] public partial string Language { get; set; } = "zh-Hans";
+        [ObservableProperty] public partial string SystemBackdropMode { get; set; } = "Mica";
         // 表格内容切换动画：Default = 控件默认过渡；Fade = 整表淡入（掩盖逐行覆盖）；None = 无动画
-        [ObservableProperty] private string _transitionMode = "Fade";
-        [ObservableProperty] private System.Collections.ObjectModel.ObservableCollection<string> _timeGroupedFolders = new();
+        [ObservableProperty] public partial string TransitionMode { get; set; } = "Fade";
+        [ObservableProperty] public partial System.Collections.ObjectModel.ObservableCollection<string> TimeGroupedFolders { get; set; } = new();
+        // Native AOT 版没有内置 COM，改不了系统「快速访问」的固定项，这里自己存一份
+        // （普通构建不使用它，仍以系统快速访问为准）。
+        [ObservableProperty] public partial System.Collections.ObjectModel.ObservableCollection<string> AotPinnedFolders { get; set; } = new();
         private static readonly string DefaultDownloadsPath =
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
 
@@ -83,6 +88,9 @@ namespace FastFluentFilesFolders.ViewModels
             var folderArray = configuration.GetSection("Special:TimeGroupedFolders").Get<string[]>();
             TimeGroupedFolders = new System.Collections.ObjectModel.ObservableCollection<string>(
                 folderArray != null && folderArray.Length > 0 ? folderArray : new[] { DefaultDownloadsPath });
+            var aotPinned = configuration.GetSection("General:AotPinnedFolders").Get<string[]>();
+            AotPinnedFolders = new System.Collections.ObjectModel.ObservableCollection<string>(
+                aotPinned ?? Array.Empty<string>());
         }
 
         public void SaveConfig()
@@ -106,7 +114,8 @@ namespace FastFluentFilesFolders.ViewModels
                $"    \"DefaultOrderMode\": \"{DefaultOrderMode}\",\n",
                $"    \"LastSortPath\": \"{escapedLastSort}\",\n",
                $"    \"LastSortAscending\": {LastSortAscending.ToString().ToLower()},\n",
-               $"    \"Language\": \"{Language}\"\n",
+               $"    \"Language\": \"{Language}\",\n",
+               $"    \"AotPinnedFolders\": [{BuildStringArrayJson(AotPinnedFolders)}]\n",
                 "  },\n",
                 "  \"Performance\": {\n",
                $"    \"IconParallelLoadingCount\": {IconParallelLoadingCount}\n",
@@ -142,6 +151,17 @@ namespace FastFluentFilesFolders.ViewModels
                 escaped.Add($"\"{f.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"");
             }
             return string.Join(",\n      ", escaped);
+        }
+
+        private static string BuildStringArrayJson(System.Collections.Generic.IEnumerable<string> values)
+        {
+            var escaped = new List<string>();
+            foreach (var v in values)
+            {
+                if (string.IsNullOrWhiteSpace(v)) continue;
+                escaped.Add($"\"{v.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"");
+            }
+            return string.Join(", ", escaped);
         }
     }
 }

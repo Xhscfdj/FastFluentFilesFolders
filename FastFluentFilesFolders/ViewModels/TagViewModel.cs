@@ -1,4 +1,4 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 //using Microsoft.UI.Xaml.Media;
 //using System;
 //using System.Collections.Generic;
@@ -8,7 +8,7 @@ namespace FastFluentFilesFolders.ViewModels
 {
     public partial class TagViewModel : ObservableObject
     {
-        [ObservableProperty] private string _name = "Unknown";
-        [ObservableProperty] private string _glyph = "\uE9CE";
+        [ObservableProperty] public partial string Name { get; set; } = "Unknown";
+        [ObservableProperty] public partial string Glyph { get; set; } = "\uE9CE";
 	}
 }

@@ -56,7 +56,7 @@ namespace FastFluentFilesFolders.Views
         {
             InitializeComponent();
             RefreshHeaders();
-            App.ML.PropertyChanged += OnMLPropertyChanged;
+            App.ML.LanguageChanged += OnLanguageChanged;
             this.DataContext = App.SharedViewModel;
 
             FileGrid.ContextRequested += OnFileGridContextRequested;
@@ -122,13 +122,20 @@ namespace FastFluentFilesFolders.Views
                 currentVm.PropertyChanged += OnViewModelPropertyChanged;
                 UpdateGroupedSource(currentVm);
             }
+
+            UpdateSearchProgressVisibility();
         }
 
-        private void OnMLPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => RefreshAllStrings();
+        /// <summary>
+        /// 语言切换后**整体刷新一次**（列头 / 工具栏 / 分组头 / 右键菜单）。
+        /// 以前是订阅 PropertyChanged 逐条响应，一次切换会被调用 ~150 次，
+        /// 等于把工具栏重建 150 遍（实测一次切换临时分配 ~46MB、卡好几秒）。
+        /// </summary>
+        private void OnLanguageChanged(object? sender, EventArgs e) => RefreshAllStrings();
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
-            App.ML.PropertyChanged -= OnMLPropertyChanged;
+            App.ML.LanguageChanged -= OnLanguageChanged;
             App.SharedViewModel.RenameFocusRequested -= OnRenameFocusRequested;
             App.SharedViewModel.SelectItemRequested -= OnSelectItemRequested;
             App.SharedViewModel.ConflictResolutionRequested -= OnConflictResolutionRequested;
@@ -143,6 +150,9 @@ namespace FastFluentFilesFolders.Views
 
         private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
+            if (e.PropertyName == nameof(MainWindowViewModel.IsSearching))
+                UpdateSearchProgressVisibility();
+
             if (e.PropertyName == nameof(MainWindowViewModel.CurrentFolderContent) ||
                 e.PropertyName == nameof(MainWindowViewModel.IsCurrentFolderSpecial) ||
                 e.PropertyName == nameof(MainWindowViewModel.IsSearchMode) ||
@@ -163,6 +173,20 @@ namespace FastFluentFilesFolders.Views
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// 搜索进度条的可见性：直接在代码里跟随 <see cref="MainWindowViewModel.IsSearching"/>。
+        /// 之前是 <c>{Binding IsSearching, Converter={StaticResource BoolToVisibilityConverter}}</c>，
+        /// 一旦绑定没生效，ProgressBar 会停在默认的 Visible 上一直滚动（Native AOT 下出现过），
+        /// 所以改成代码直连 + XAML 初始 Collapsed 兜底。
+        /// </summary>
+        private void UpdateSearchProgressVisibility()
+        {
+            var searching = (this.DataContext as MainWindowViewModel ?? App.SharedViewModel)?.IsSearching == true;
+            var target = searching ? Visibility.Visible : Visibility.Collapsed;
+            if (SearchProgressBar.Visibility != target)
+                SearchProgressBar.Visibility = target;
         }
 
         private void OnFileGridSortChanged(string? sortPath, bool ascending)
@@ -1577,28 +1601,32 @@ namespace FastFluentFilesFolders.Views
         }
     }
 
-    public class BoolToVisibilityConverter : Microsoft.UI.Xaml.Data.IValueConverter
+    // 四个转换器都必须 partial：它们实现 WinRT 的 IValueConverter，经 Binding.Converter 跨 ABI 传递，
+    // 而 Native AOT / 关闭 BuiltInComInterop 的构建只有 partial 类型才会由 CsWinRT 生成 AOT 安全的
+    // COM 虚表；漏掉 partial 时转换器封送失败，XAML 报
+    // "Failed to assign to property 'Microsoft.UI.Xaml.UIElement.Visibility'"（0x802B000A → 0xc000027b 崩溃）。
+    public sealed partial class BoolToVisibilityConverter : Microsoft.UI.Xaml.Data.IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
             => value is true ? Visibility.Visible : Visibility.Collapsed;
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
 
-    public class InvertBoolConverter : Microsoft.UI.Xaml.Data.IValueConverter
+    public sealed partial class InvertBoolConverter : Microsoft.UI.Xaml.Data.IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
             => value is bool b ? !b : value;
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
 
-    public class InvertVisibilityConverter : Microsoft.UI.Xaml.Data.IValueConverter
+    public sealed partial class InvertVisibilityConverter : Microsoft.UI.Xaml.Data.IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
             => value is true ? Visibility.Collapsed : Visibility.Visible;
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
 
-    public class ExpandGlyphConverter : Microsoft.UI.Xaml.Data.IValueConverter
+    public sealed partial class ExpandGlyphConverter : Microsoft.UI.Xaml.Data.IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
             => value is true ? "\uE96E" : "\uE970";

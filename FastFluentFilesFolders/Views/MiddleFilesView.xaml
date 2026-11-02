@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Page
     x:Class="FastFluentFilesFolders.Views.MiddleFilesView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -155,9 +155,12 @@
             </tv:TableView.Columns>
         </uc:LrsTableView>
 
-        <ProgressBar Grid.Row="1"
+        <!-- 搜索进度条：可见性由代码后置根据 VM.IsSearching 直接设置（不用 {Binding+Converter}，
+             AOT 下绑定失效时会因默认 Visible 而一直滚动）；初始 Collapsed 即兜底。 -->
+        <ProgressBar x:Name="SearchProgressBar"
+                     Grid.Row="1"
                      IsIndeterminate="True"
-                     Visibility="{Binding IsSearching, Converter={StaticResource BoolToVisibilityConverter}}"
+                     Visibility="Collapsed"
                      VerticalAlignment="Top"/>
 
         <StackPanel Orientation="Horizontal" Grid.Row="2" Padding="20,10,20,10">

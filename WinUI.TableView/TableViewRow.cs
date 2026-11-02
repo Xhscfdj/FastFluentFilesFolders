@@ -63,9 +63,6 @@ public partial class TableViewRow : ListViewItem
         _entranceAnimationToken = token;
         _entranceAnimationStarted = false;
         Opacity = 0;
-        TableViewTransitionTrace.Write(
-            $"  row prepare: token={token} loaded={IsLoaded} duration={duration.TotalMilliseconds}ms " +
-            $"delay={delay.TotalMilliseconds:0}ms slide={slideOffsetY:0}px");
 
         var storyboard = new Storyboard();
         // 先快后慢更“利索”：线性曲线在同样的时长下会显得拖
@@ -110,7 +107,6 @@ public partial class TableViewRow : ListViewItem
         {
             if (!ReferenceEquals(_entranceAnimationStoryboard, storyboard)) return;
             _entranceAnimationStoryboard = null;
-            TableViewTransitionTrace.Write($"  row done: token={token} opacityAtEnd={Opacity:0.###}");
             Opacity = 1;
             if (slide is not null && ReferenceEquals(RenderTransform, slide))
             {

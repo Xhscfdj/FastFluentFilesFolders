@@ -98,6 +98,7 @@ namespace FastFluentFilesFolders.Views
         private void NavigateTo(string pageTag)
         {
             if (_currentPage == pageTag) return;
+
             _currentPage = pageTag;
 
             Debug.WriteLine($"[MainWindowView] NavigateTo: {pageTag}");

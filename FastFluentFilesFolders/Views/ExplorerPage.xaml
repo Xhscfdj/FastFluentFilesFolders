@@ -23,30 +23,21 @@
             <ColumnDefinition Width="7*" />
         </Grid.ColumnDefinitions>
 
+        <!--
+          注意：不要用 TabItemsSource 绑定托管集合（如 ObservableCollection<ExplorerTab>）。
+          Native AOT 下 TabView 把 ItemsSource 转成 IBindableIterable / IIterable 会失败，
+          布局阶段直接抛 COMException 0x80004005（事件日志 0xc000027b），
+          见 microsoft-ui-xaml#11248 / #10409 / #11065。
+          改为在代码里显式维护 TabItems（TabViewItem 是原生类型，不过 ABI 传集合）。
+        -->
         <TabView x:Name="TabsCtrl"
                  Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
-                 TabItemsSource="{Binding Tabs}"
                  IsAddTabButtonVisible="True"
                  CanReorderTabs="True"
                  SelectionChanged="OnTabsSelectionChanged"
                  TabCloseRequested="OnTabsCloseRequested"
                  AddTabButtonClick="OnTabsAddTabClick"
                  Margin="8,4,8,0">
-            <TabView.TabItemTemplate>
-                <DataTemplate x:DataType="models:ExplorerTab">
-					<TabViewItem IsClosable="True">
-						<TabViewItem.Header>
-							<StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-								<Image Source="{Binding FolderNode.Icon}"
-									   Width="16" Height="16"
-									   VerticalAlignment="Center" />
-								<TextBlock Text="{Binding Title}"
-										   VerticalAlignment="Center" />
-							</StackPanel>
-						</TabViewItem.Header>
-					</TabViewItem>
-				</DataTemplate>
-            </TabView.TabItemTemplate>
         </TabView>
 
         <views:TopView Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"/>

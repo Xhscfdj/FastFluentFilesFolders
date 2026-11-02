@@ -19,6 +19,8 @@ using System.Runtime.InteropServices;
 
 namespace FastFluentFilesFolders.ViewModels
 {
+	// {Binding} 需要 ICustomProperty；Release/AOT 下反射版被关闭，必须由源生成器提供。
+	[WinRT.GeneratedBindableCustomProperty]
 	public partial class MainWindowViewModel : ViewModelBase
 	{
 		private IFileOperator _fileOperator;
@@ -32,6 +34,9 @@ namespace FastFluentFilesFolders.ViewModels
 		{
 			AppConfigs = configs;
 			_fileOperator = fileOperator;
+			// AOT 版的固定项存在配置里，pin/unpin 后走防抖落盘
+			Services.QuickAccessHelper.Configs = configs;
+			Services.QuickAccessHelper.PinsChanged = DebounceSaveConfig;
 			CurrentBreadcrumbPath = configs.HomePageFullPath;
 			_uiDispatcherQueue = uiDispatcherQueue;
 			_iconProvider = iconProvider;
@@ -450,19 +455,19 @@ namespace FastFluentFilesFolders.ViewModels
 				return AppConfigs.HomePageFullPath;
 			return string.Empty;
 		}
-		[RelayCommand]
-		private void testFunction()
-		{
-			Debug.WriteLine("[DebugButton] Pressed.");
-			var folder = RootDirectories.FirstOrDefault(); // 取第一个驱动器
-			_ = UpdateCurrentFolderContentAsync(folder, version: null);
-			TestString = "Modified by testFunction.";
-			Debug.WriteLine($"[DebugButton] CurrentFolderContent count is {CurrentFolderContent.Count}");
-			foreach (var item in CurrentFolderContent)
-			{
-				Debug.WriteLine($"[DebugButton]Item: {item.Name}, Type is {item.NodeTypeName}");
-			}
-		}
+		//[RelayCommand]
+		//private void testFunction()
+		//{
+		//	Debug.WriteLine("[DebugButton] Pressed.");
+		//	var folder = RootDirectories.FirstOrDefault(); // 取第一个驱动器
+		//	_ = UpdateCurrentFolderContentAsync(folder, version: null);
+		//	TestString = "Modified by testFunction.";
+		//	Debug.WriteLine($"[DebugButton] CurrentFolderContent count is {CurrentFolderContent.Count}");
+		//	foreach (var item in CurrentFolderContent)
+		//	{
+		//		Debug.WriteLine($"[DebugButton]Item: {item.Name}, Type is {item.NodeTypeName}");
+		//	}
+		//}
 
 		/// <summary>把操作岛条目交给页面（FileOperationReporter 已在 MiddleFilesView 订阅）。</summary>
 		private void ReportOperationToIsland(FileOperationItem item)
@@ -1011,6 +1016,10 @@ namespace FastFluentFilesFolders.ViewModels
 		private void InvalidateFolderByPath(string folderPath)
 		{
 			if (string.IsNullOrWhiteSpace(folderPath) || IsVirtualRootToken(folderPath)) return;
+
+			// 目标目录内容变了：热缓存里留着的旧快照不能再复用（否则回访看到的是操作前的样子）
+			ClearWarmFolders();
+
 			var selected = SelectedFolder;
 			foreach (var node in CollectLoadedDirectoryNodes())
 			{
@@ -1201,7 +1210,7 @@ namespace FastFluentFilesFolders.ViewModels
 
 		public void AddItemToCurrentView(string fullPath, bool isDirectory)
 		{
-			var node = new FileSystemNodeViewModel(fullPath, isDirectory, false, _appConfigs, _uiDispatcherQueue, false);
+			var node = new FileSystemNodeViewModel(fullPath, isDirectory, false, AppConfigs, _uiDispatcherQueue, false);
 			PrepareNodeForGroupedView(node);
 			_ = node.InitAsync(node.FullPath, isDirectory);
 			_uiDispatcherQueue.TryEnqueue(() =>
@@ -1439,6 +1448,37 @@ namespace FastFluentFilesFolders.ViewModels
 			}
 		}
 
+		/// <summary>
+		/// 后台把子项整理成“可以直接挂进表格”的顺序：按当前排序排好，分组目录把时间组键写回节点。
+		/// 与 <see cref="GroupedFileList.SetItems"/> 共用同一套比较器与分组规则，因此前台只需一次 SetItems。
+		/// </summary>
+		private static List<FileSystemNodeViewModel> BuildSortedSnapshot(
+			List<FileSystemNodeViewModel> items, bool grouped, string? sortPath, bool ascending)
+		{
+			if (!string.IsNullOrEmpty(sortPath) && items.Count > 1)
+			{
+				var comparison = GroupedFileList.GetComparison(sortPath, ascending);
+				if (comparison != null)
+					items.Sort(comparison);
+			}
+
+			if (grouped)
+			{
+				foreach (var item in items)
+				{
+					if (item.IsPlaceholder) continue;
+					var key = string.IsNullOrEmpty(item.SortByTime)
+						? GroupedFileList.GetTimeGroup(item.LastModifiedTime)
+						: item.SortByTime;
+					// 仅在实际变化时写回，避免后台对已设置过的 SortByTime 重复触发 PropertyChanged
+					if (!string.IsNullOrEmpty(key) && item.SortByTime != key)
+						item.SortByTime = key;
+				}
+			}
+
+			return items;
+		}
+
 		/// <summary>预热图标的最大条数（只影响解码排队，命中缓存后滚动时同步赋值）。</summary>
 		private const int IconPrefetchCount = 160;
 
@@ -1492,23 +1532,21 @@ namespace FastFluentFilesFolders.ViewModels
 				catch (TaskCanceledException) { }
 			}, token);
 		}
-
-		[ObservableProperty] private string _testString = "hasn't changed";
-		[ObservableProperty] private ObservableCollection<FileSystemNodeViewModel> _pinnedShortcuts = new();
+		[ObservableProperty] public partial ObservableCollection<FileSystemNodeViewModel> PinnedShortcuts { get; set; } = new();
 		// 文件系统相关的属性和方法
 		private readonly IIconProvider _iconProvider;
-		//[ObservableProperty] private string[] _PathsForBreadcrumbBar = ["C:\\"];
-		[ObservableProperty] private ObservableCollection<FileSystemNodeViewModel> _currentFolderContent = new();
-		[ObservableProperty] private string _currentBreadcrumbPath = "C:\\";
-		[ObservableProperty] private Configs? _appConfigs = null;
-		[ObservableProperty] private bool _canGoBack;
-		[ObservableProperty] private bool _canGoForward;
-		[ObservableProperty] private bool _isSettingsOpen;
-		[ObservableProperty] private bool _isReady;
-		[ObservableProperty] private bool _isSearchMode = false;
-		[ObservableProperty] private string _searchText = string.Empty;
-		[ObservableProperty] private ObservableCollection<FileSystemNodeViewModel> _searchResults = new();
-		[ObservableProperty] private bool _isSearching = false;
+		//[ObservableProperty] public partial string[] PathsForBreadcrumbBar { get; set; } = ["C:\\"];
+		[ObservableProperty] public partial ObservableCollection<FileSystemNodeViewModel> CurrentFolderContent { get; set; } = new();
+		[ObservableProperty] public partial string CurrentBreadcrumbPath { get; set; } = "C:\\";
+		[ObservableProperty] public partial Configs? AppConfigs { get; set; } = null;
+		[ObservableProperty] public partial bool CanGoBack { get; set; }
+		[ObservableProperty] public partial bool CanGoForward { get; set; }
+		[ObservableProperty] public partial bool IsSettingsOpen { get; set; }
+		[ObservableProperty] public partial bool IsReady { get; set; }
+		[ObservableProperty] public partial bool IsSearchMode { get; set; } = false;
+		[ObservableProperty] public partial string SearchText { get; set; } = string.Empty;
+		[ObservableProperty] public partial ObservableCollection<FileSystemNodeViewModel> SearchResults { get; set; } = new();
+		[ObservableProperty] public partial bool IsSearching { get; set; } = false;
 		private CancellationTokenSource? _searchCts;
 
 		public int DisplayedItemCount => IsSearchMode ? SearchResults.Count : CurrentFolderContent.Count;
@@ -1518,7 +1556,7 @@ namespace FastFluentFilesFolders.ViewModels
 
 		// ===== 多标签页 =====
 		public ObservableCollection<ExplorerTab> Tabs { get; } = new();
-		[ObservableProperty] private ExplorerTab? _selectedTab;
+		[ObservableProperty] public partial ExplorerTab? SelectedTab { get; set; }
 		public ExplorerTab? CurrentTab => SelectedTab;
 		private bool _isRestoringTab;
 
@@ -2167,6 +2205,27 @@ namespace FastFluentFilesFolders.ViewModels
 		// 切换标签页时旧文件夹仍属于另一个标签页，只切换展示、不释放其子项缓存。
 		private bool _suppressFolderRelease;
 
+		// ===== 目录热缓存（问题①：两目录来回切换的重复分配）=====
+		// 以前离开目录就立刻 ReleaseChildren，回到该目录必须重新枚举磁盘 + 重建全部子项。
+		// 诊断探针实测：362 项的目录每次导航临时分配约 3MB、耗时 15~47ms，且 `preloaded` 恒为 0
+		// （每次都在重新枚举）；而同一目录反复刷新时节点按路径复用、`live` 几乎不涨 —— 说明涨的是
+		// 这次重复分配，不是泄漏。现在把最近离开的目录留在缓存里，回访时 IsLoaded 仍为 true，
+		// UpdateCurrentFolderContentAsync 会跳过枚举与重建（届时探针的 preloaded 会变成 1）。
+		// 纯 C# 逻辑、无反射/委托，AOT 友好。
+		private readonly List<(FileSystemNodeViewModel Folder, long CachedTick)> _warmFolders = new();
+
+		/// <summary>热缓存容量。1 就够覆盖 A↔B 来回切换（常驻 = 当前目录 + 上一个目录 两份）。</summary>
+		private const int WarmFolderCapacity = 1;
+
+		/// <summary>项数超过这个值的目录不留在热缓存里，避免超大目录常驻内存翻倍。</summary>
+		private const int WarmFolderMaxItems = 5000;
+
+		/// <summary>
+		/// 热缓存保鲜期。命中缓存意味着**不重新枚举磁盘**，外部程序新建/删除的文件在窗口内看不到；
+		/// 超过这个时长回访会放弃复用、按普通导航重读磁盘。用户主动点刷新永远强刷，不受影响。
+		/// </summary>
+		private const long WarmFolderTtlMs = 8000;
+
 		/// <summary>
 		/// 当前浏览的文件夹。所有导航入口（表格双击、目录树、固定栏、地址栏、后退/前进/向上）
 		/// 都会经过这里，集中处理“离开旧文件夹时释放子项缓存”，避免每访问一个文件夹就把它的
@@ -2181,7 +2240,12 @@ namespace FastFluentFilesFolders.ViewModels
 
 				var oldFolder = _selectedFolder;
 				if (!_suppressFolderRelease)
+				{
+					// 顺序很重要：先“认领”即将进入的目录（从热缓存移出，避免旧目录入队时把它挤掉），
+					// 再处理要离开的目录。
+					if (value != null) TryClaimWarmFolder(value);
 					TryReleaseChildrenOnLeaving(oldFolder, value);
+				}
 
 				OnPropertyChanging(nameof(SelectedFolder));
 				_selectedFolder = value;
@@ -2204,14 +2268,111 @@ namespace FastFluentFilesFolders.ViewModels
 			if (oldFolder.NodeKind is not (FileNodeKind.Folder or FileNodeKind.Drive)) return;
 			if (oldFolder.IsArchiveEntry) return;
 			if (oldFolder.IsExpanded) return;
-			oldFolder.ReleaseChildren();
+			ReleaseFolderMaybeWarm(oldFolder);
+		}
+
+		/// <summary>能进热缓存就留着（回访零重建），否则立即释放子项。</summary>
+		private void ReleaseFolderMaybeWarm(FileSystemNodeViewModel folder)
+		{
+			if (TryKeepWarm(folder)) return;
+			DropWarmFolder(folder);
+			folder.ReleaseChildren();
+		}
+
+		/// <summary>
+		/// 进入目录时先“认领”它：如果它正好在热缓存里，从队列移出（正在使用，不能被后续淘汰掉）。
+		/// 超过保鲜期的则不认可用、直接释放子项，回访按普通导航重读磁盘。
+		/// </summary>
+		private void TryClaimWarmFolder(FileSystemNodeViewModel folder)
+		{
+			var index = _warmFolders.FindIndex(e => ReferenceEquals(e.Folder, folder));
+			if (index < 0) return;
+
+			var entry = _warmFolders[index];
+			_warmFolders.RemoveAt(index);
+
+			var ageMs = Environment.TickCount64 - entry.CachedTick;
+			if (ageMs > WarmFolderTtlMs)
+			{
+				// 保鲜期过了：放弃复用，让这次导航重新枚举磁盘（外部改动才看得到）
+				folder.ReleaseChildren();
+				Debug.WriteLine($"[WarmFolder] expired age={ageMs}ms {folder.FullPath}");
+				return;
+			}
+
+			Debug.WriteLine($"[WarmFolder] hit age={ageMs}ms items={CountRealChildren(folder)} {folder.FullPath}");
+		}
+
+		/// <summary>判断这个目录能不能留在热缓存里；能就入队并淘汰超量的。</summary>
+		private bool TryKeepWarm(FileSystemNodeViewModel folder)
+		{
+			if (!folder.IsLoaded) return false;
+			if (folder.IsPlaceholder || !folder.IsDirectory) return false;
+			if (folder.NodeKind is not (FileNodeKind.Folder or FileNodeKind.Drive)) return false;
+			if (folder.IsArchiveEntry || folder.IsExpanded) return false;
+			if (CountRealChildren(folder) > WarmFolderMaxItems) return false;
+
+			// 被别的标签页 / 目录树 / 固定栏持有的目录不能进缓存：
+			// 淘汰时会 ReleaseChildren，把那些地方的树/列表一并清空。
+			if (IsHeldElsewhere(folder)) return false;
+
+			// 重复入队时只刷新时间，避免同一节点在队列里出现两份
+			var existing = _warmFolders.FindIndex(e => ReferenceEquals(e.Folder, folder));
+			if (existing >= 0) _warmFolders.RemoveAt(existing);
+
+			_warmFolders.Add((folder, Environment.TickCount64));
+
+			while (_warmFolders.Count > WarmFolderCapacity)
+			{
+				var oldest = _warmFolders[0];
+				_warmFolders.RemoveAt(0);
+				if (ReferenceEquals(oldest.Folder, _selectedFolder)) continue;   // 防御：绝不动当前目录
+				Debug.WriteLine($"[WarmFolder] evict {oldest.Folder.FullPath}");
+				oldest.Folder.ReleaseChildren();
+			}
+			return true;
+		}
+
+		private void DropWarmFolder(FileSystemNodeViewModel folder)
+			=> _warmFolders.RemoveAll(e => ReferenceEquals(e.Folder, folder));
+
+		/// <summary>清空热缓存并释放其中目录的子项（内容可能已变旧时必须调用）。</summary>
+		private void ClearWarmFolders()
+		{
+			if (_warmFolders.Count == 0) return;
+			foreach (var entry in _warmFolders)
+			{
+				if (ReferenceEquals(entry.Folder, _selectedFolder)) continue;
+				entry.Folder.ReleaseChildren();
+			}
+			_warmFolders.Clear();
+		}
+
+		private static int CountRealChildren(FileSystemNodeViewModel folder)
+		{
+			var count = 0;
+			foreach (var child in folder.Children)
+				if (!child.IsPlaceholder) count++;
+			return count;
+		}
+
+		/// <summary>目录是否还被别的标签页 / 目录树根 / 固定栏持有（这些地方各自管理释放时机）。</summary>
+		private bool IsHeldElsewhere(FileSystemNodeViewModel folder)
+		{
+			foreach (var tab in Tabs)
+				if (!ReferenceEquals(tab, CurrentTab) && ReferenceEquals(tab.FolderNode, folder)) return true;
+			foreach (var root in RootDirectories)
+				if (ReferenceEquals(root, folder)) return true;
+			foreach (var pinned in PinnedShortcuts)
+				if (ReferenceEquals(pinned, folder)) return true;
+			return false;
 		}
 		// 当前表格正在展示其内容的文件夹节点：重复进入同一文件夹时跳过无谓的重建
 		private FileSystemNodeViewModel? _displayedFolderNode;
 
-		// 后台构建完成的表格数据源（GroupedFileList），由 MiddleFilesView.UpdateGroupedSource 消费，
-		// 避免在 UI 线程上做分组构建（SetItems/RebuildFlat）。
-		internal GroupedFileList? PendingPrebuiltSource { get; set; }
+		// 后台整理好的表格内容（顺序已排好、分组键已写回），由 MiddleFilesView.UpdateGroupedSource 消费。
+		// 只装顺序、不装构建结果：真正的分组/扁平化只在前台 SetItems 里做一次。
+		internal PrebuiltContent? PendingPrebuiltSource { get; set; }
 		internal int PendingPrebuiltVersion { get; set; }
 
 		// 表格里**当前已展示内容**是否按时间分组。不能用 SelectedFolder 实时推导：
@@ -2229,8 +2390,9 @@ namespace FastFluentFilesFolders.ViewModels
 			var version = tab != null ? ++tab.NavigationVersion : 1;
 			if (tab != null && tab.FolderToRelease != null && tab.FolderToRelease != value)
 			{
-				// 释放子项缓存并重置加载状态，避免退回该文件夹时显示为空
-				tab.FolderToRelease.ReleaseChildren();
+				// 释放子项缓存并重置加载状态，避免退回该文件夹时显示为空。
+				// 走统一入口：符合条件的会留在热缓存里（回访零重建），不符合的立即释放。
+				ReleaseFolderMaybeWarm(tab.FolderToRelease);
 				tab.FolderToRelease = null;
 			}
 			Debug.WriteLine($"\n----Selected:{value?.Name}\n");
@@ -2316,11 +2478,12 @@ namespace FastFluentFilesFolders.ViewModels
 
 				var (prebuilt, newContent) = await Task.Run(() =>
 				{
-					var g = new GroupedFileList();
-					// 单遍构建：分组 + 组内排序 + RebuildFlat 一次完成，避免 SetItems 后再 SortWithinGroups 二次构建
-					g.SetItems(items, special, sortPath, sortAscending);
-					var nc = new ObservableCollection<FileSystemNodeViewModel>(items);
-					return (g, nc);
+					// 后台只算“顺序 + 分组键”，不再构建第二份 GroupedFileList：
+					// 以前这里 new 一个 GroupedFileList 并完整 SetItems 一遍，前台拿到后又 SetItems 一遍，
+					// 每次导航等于干两遍分组/重排（诊断实测这是“热缓存命中后剩余 ~1.6MB 分配”的主要来源）。
+					var sorted = BuildSortedSnapshot(items, special, sortPath, sortAscending);
+					var nc = new ObservableCollection<FileSystemNodeViewModel>(sorted);
+					return (new PrebuiltContent(sorted, special), nc);
 				});
 
 				await _uiDispatcherQueue.EnqueueAsync(() =>
@@ -2659,7 +2822,7 @@ namespace FastFluentFilesFolders.ViewModels
 				CurrentTab.FolderToRelease = SelectedFolder;
 			// lazyLoad: true —— 目录枚举统一由 UpdateCurrentFolderContentAsync → LoadChildrenAsync 完成一次，
 			// 避免构造函数里 StartAsyncCount 再全量枚举一遍（面包屑/地址栏/后退进入新路径更跟手）
-			var node = new FileSystemNodeViewModel(path, true, false, _appConfigs, _uiDispatcherQueue, true);
+			var node = new FileSystemNodeViewModel(path, true, false, AppConfigs, _uiDispatcherQueue, true);
 			node.IsStandalone = true;
 			if (CurrentTab != null) CurrentTab.PreviousPath = null;
 			SelectedFolder = node;
@@ -2834,29 +2997,7 @@ namespace FastFluentFilesFolders.ViewModels
 		}
 
 		private static List<string> GetQuickAccessPinnedFolders()
-		{
-			var result = new List<string>();
-			try
-			{
-				Type shellType = Type.GetTypeFromProgID("Shell.Application", true);
-				dynamic shell = Activator.CreateInstance(shellType);
-				dynamic quickAccess = shell.NameSpace("shell:::{679f85cb-0220-4080-b29b-5540cc05aab6}");
-				if (quickAccess != null)
-				{
-					foreach (dynamic item in quickAccess.Items())
-					{
-						try
-						{
-							string? path = item.Path;
-							if (!string.IsNullOrEmpty(path) && Directory.Exists(path))
-								result.Add(path);
-						}
-						catch { }
-					}
-				}
-			}
-			catch { }
-            return result;
-		}
+			// 统一走 QuickAccessHelper：普通构建枚举系统快速访问，AOT 下读配置里的固定列表
+			=> QuickAccessHelper.GetPinnedFolderPaths();
 	}
 }

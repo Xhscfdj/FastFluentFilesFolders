@@ -13,7 +13,7 @@ namespace FastFluentFilesFolders.Services
         private Dictionary<string, string> _strings = new();
 
         [ObservableProperty]
-        private string _currentLanguage = "zh-Hans";
+        public partial string CurrentLanguage { get; set; } = "zh-Hans";
 
         public LocalizationService()
         {

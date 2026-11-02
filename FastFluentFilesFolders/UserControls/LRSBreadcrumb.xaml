@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <UserControl x:Class="FastFluentFilesFolders.UserControls.LRSBreadcrumb"
              x:Name="LRSB"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -6,6 +6,7 @@
              xmlns:local="using:FastFluentFilesFolders.UserControls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+			 Unloaded="LRSB_Unloaded"
              mc:Ignorable="d">
 
 	<UserControl.Resources>
@@ -26,7 +27,7 @@
 				</DoubleAnimation.EasingFunction>
 			</DoubleAnimation>
 		</Storyboard>
-		<x:Double x:Key="CtrlHeight">145</x:Double>
+		<x:Double x:Key="CtrlHeight">45</x:Double>
 		<x:Double x:Key="CtrlWidth">40</x:Double>
 	</UserControl.Resources>
 	<Grid ColumnSpacing="0" RowSpacing="20" MinHeight="40">
@@ -47,8 +48,8 @@
 
 		<Button Grid.Column="0" x:Name="BackButton"
 				Width="{StaticResource CtrlWidth}" Height="{StaticResource LRSBreadcrumbControlsHeight}"
-				Command="{Binding GoBackCommand, ElementName=LRSB}"
-				IsEnabled="{Binding CanGoBack, ElementName=LRSB}"
+				Command="{x:Bind GoBackCommand, Mode=OneWay}"
+				IsEnabled="{x:Bind CanGoBack, Mode=OneWay}"
 				Style="{StaticResource SubtleButtonStyle}"
 				Padding="4">
 			<Viewbox Width="14" Height="14">
@@ -58,8 +59,8 @@
 
 		<Button Grid.Column="1" x:Name="ForwardButton"
             Width="{StaticResource CtrlWidth}" Height="{StaticResource LRSBreadcrumbControlsHeight}"
-            Command="{Binding GoForwardCommand, ElementName=LRSB}"
-            IsEnabled="{Binding CanGoForward, ElementName=LRSB}"
+            Command="{x:Bind GoForwardCommand, Mode=OneWay}"
+            IsEnabled="{x:Bind CanGoForward, Mode=OneWay}"
             Style="{StaticResource SubtleButtonStyle}"
             Padding="4">
 			<Viewbox Width="14" Height="14">
@@ -69,7 +70,7 @@
 
 		<Button Grid.Column="2" x:Name="UpButton"
             Width="{StaticResource CtrlWidth}" Height="{StaticResource LRSBreadcrumbControlsHeight}"
-            Command="{Binding GoUpCommand, ElementName=LRSB}"
+            Command="{x:Bind GoUpCommand, Mode=OneWay}"
             Style="{StaticResource SubtleButtonStyle}"
             Padding="4">
 			<Viewbox Width="14" Height="14">
@@ -89,8 +90,8 @@
 
 		<Button Grid.Column="4" x:Name="HomeButton"
 				Width="{StaticResource CtrlWidth}" Height="{StaticResource LRSBreadcrumbControlsHeight}"
-				Command="{Binding NavigateCommand, ElementName=LRSB}"
-				CommandParameter="{Binding HomePath, ElementName=LRSB}"
+				Command="{x:Bind NavigateCommand, Mode=OneWay}"
+				CommandParameter="{x:Bind HomePath, Mode=OneWay}"
 				Style="{StaticResource SubtleButtonStyle}"
 				Padding="4">
 			<Viewbox Width="14" Height="14">
@@ -109,13 +110,14 @@
 						 LostFocus="OnPathTextBoxLostFocus"
 						 KeyDown="OnPathTextBoxKeyDown"
 						 IsReadOnly="True"
-						 Text="{Binding CurrentPath, ElementName=LRSB, Mode=OneWay}"/>
+						 Text="{x:Bind CurrentPath, Mode=OneWay}"/>
 
 				<TextBox x:Name="SearchTextBox"
 				 VerticalAlignment="Stretch"
 				 Background="Transparent" BorderThickness="0"
 				 Visibility="Collapsed"
-				 KeyDown="OnSearchTextBoxKeyDown"/>
+				 KeyDown="OnSearchTextBoxKeyDown"
+				 Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
 
 				<ScrollViewer x:Name="BreadcrumbScrollViewer"
 					  HorizontalScrollBarVisibility="Auto"
@@ -123,7 +125,7 @@
 					  IsHitTestVisible="True"
 					  Background="Transparent">
 					<ItemsControl x:Name="BreadcrumbItemsControl" Margin="10,0,0,0"
-						  ItemsSource="{Binding Segments, ElementName=LRSB}">
+						  ItemsSource="{x:Bind Segments, Mode=OneWay}">
 						<ItemsControl.ItemsPanel>
 							<ItemsPanelTemplate>
 								<StackPanel Orientation="Horizontal"/>
@@ -132,23 +134,23 @@
 						<ItemsControl.ItemTemplate>
 							<DataTemplate x:DataType="local:BreadcrumbSegment">
 								<StackPanel Orientation="Horizontal" VerticalAlignment="Stretch" Margin="0,5,0,5">
-									<Button Command="{Binding NavigateCommand}"
-											CommandParameter="{Binding FullPath}"
+									<Button Command="{x:Bind NavigateCommand, Mode=OneWay}"
+											CommandParameter="{x:Bind FullPath, Mode=OneWay}"
 											Style="{StaticResource SubtleButtonStyle}"
-											Content="{Binding DisplayName}"
+											Content="{x:Bind DisplayName, Mode=OneWay}"
 											BorderThickness="0"
-											Padding="6,6"
+											Padding="10,6,10,6"
 											VerticalAlignment="Stretch"
 											FontSize="13"/>
 									<Button x:Name="ChevronButton"
 											BorderThickness="0"
 											VerticalAlignment="Stretch"
 											Style="{StaticResource SubtleButtonStyle}"
-											Padding="2"
-											FontSize="10"
-											Tag="{Binding}"
+											Padding="4,2,4,2"
+											FontSize="13"
+											Tag="{x:Bind}"
 											Click="OnChevronClick"
-											Visibility="{Binding IsLast, Converter={StaticResource LastToVisibilityConverter}}">
+											Visibility="{x:Bind IsLast, Converter={StaticResource LastToVisibilityConverter}}">
 										<Button.RenderTransform>
 											<RotateTransform Angle="0"/>
 										</Button.RenderTransform>
@@ -188,7 +190,7 @@
 		<Button Grid.Column="7" x:Name="CopyPathButton"
             Width="{StaticResource CtrlWidth}" Height="{StaticResource LRSBreadcrumbControlsHeight}"
 			Margin="10,0,0,0"
-            Command="{Binding CopyPathCommand, ElementName=LRSB}"
+            Click="OnCopyPathClick"
 			Style="{StaticResource SubtleButtonStyle}"
             Padding="4">
 			<Viewbox Width="16" Height="16">
@@ -208,7 +210,7 @@
                         Style="{StaticResource SubtleButtonStyle}"
                         Padding="4">
 						<Viewbox Width="14" Height="14">
-							<local:ThemedIcon Glyph="{Binding}"/>
+							<local:ThemedIcon Glyph="{x:Bind}" />
 						</Viewbox>
 					</Button>
 				</DataTemplate>

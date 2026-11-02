@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Composition;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
@@ -16,7 +16,6 @@ using System.Windows.Input;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.System;
 using FastFluentFilesFolders.ViewModels;
-using FastFluentFilesFolders.Services;
 
 namespace FastFluentFilesFolders.UserControls
 {
@@ -116,6 +115,12 @@ namespace FastFluentFilesFolders.UserControls
         public ObservableCollection<BreadcrumbSegment> Segments { get; } = new();
         public ICommand CopyPathCommand { get; }
 
+        // 供 x:Bind 使用的中心 ViewModel。
+        // 注意：不要再对普通 CLR 属性用运行时 Binding/SetBinding —— Release(AOT) 下
+        // BuiltInComInterop 被关闭，ICustomProperty 需要 [GeneratedBindableCustomProperty]，
+        // 否则会抛 NotSupportedException 导致控件无法创建。
+        public MainWindowViewModel ViewModel => App.SharedViewModel;
+
         private Compositor _compositor;
         private bool _isSearchMode;
 
@@ -145,18 +150,14 @@ namespace FastFluentFilesFolders.UserControls
 
             App.LocalizationService.PropertyChanged += (_, e) =>
             {
-                if (e.PropertyName == nameof(LocalizationService.CurrentLanguage))
+                // 用 App 限定，避免依赖 using 被"移除未使用 using"删掉后编译失败
+                if (e.PropertyName == nameof(App.LocalizationService.CurrentLanguage))
                     RefreshTooltips();
             };
 
             SearchTextBox.PlaceholderText = App.ML.SearchPlaceholder;
-            SearchTextBox.SetBinding(TextBox.TextProperty, new Binding
-            {
-                Source = App.SharedViewModel,
-                Path = new PropertyPath(nameof(MainWindowViewModel.SearchText)),
-                Mode = BindingMode.TwoWay,
-                UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged
-            });
+            // SearchTextBox.Text 现在由 XAML 的 x:Bind 双向绑定到 ViewModel.SearchText，
+            // 这里不能再调用 SetBinding（AOT 下 ICustomProperty 反射被禁用会抛异常）。
             App.SharedViewModel.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(MainWindowViewModel.IsSearchMode))
@@ -276,12 +277,9 @@ namespace FastFluentFilesFolders.UserControls
             PathTextBox.BorderThickness = new Microsoft.UI.Xaml.Thickness(1);
             PathTextBox.Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextBoxBackgroundThemeBrush"];
             BreadcrumbScrollViewer.Visibility = Visibility.Collapsed;
-            PathTextBox.SetBinding(TextBox.TextProperty, new Microsoft.UI.Xaml.Data.Binding
-            {
-                Source = this,
-                Path = new PropertyPath(nameof(CurrentPath)),
-                Mode = Microsoft.UI.Xaml.Data.BindingMode.OneWay
-            });
+            // Text 已通过 XAML 的 x:Bind(OneWay) 绑定到 CurrentPath，这里只需保证进入编辑时
+            // 显示的是最新路径（并清掉上次编辑时残留的手输入内容）。
+            PathTextBox.Text = CurrentPath ?? string.Empty;
             PathTextBox.Focus(FocusState.Programmatic);
             PathTextBox.SelectAll();
         }
@@ -556,6 +554,8 @@ namespace FastFluentFilesFolders.UserControls
             flyout.Items.Clear();
         }
 
+        private void OnCopyPathClick(object sender, RoutedEventArgs e) => ExecuteCopyPath();
+
         private void ExecuteCopyPath()
         {
             if (!string.IsNullOrEmpty(CurrentPath))
@@ -614,7 +614,7 @@ namespace FastFluentFilesFolders.UserControls
             }
         }
 
-        private class RelayCommand : ICommand
+        private partial class RelayCommand : ICommand
         {
             private readonly Action _execute;
             private readonly Func<bool> _canExecute;
@@ -641,9 +641,16 @@ namespace FastFluentFilesFolders.UserControls
 		{
             var brush = Application.Current.Resources["ControlFillColorDefaultBrush"] as SolidColorBrush;
 		}
-	}
-    
-	public class LastToVisibilityConverter : Microsoft.UI.Xaml.Data.IValueConverter
+
+		private void LRSB_Unloaded(object sender, RoutedEventArgs e)
+		{
+            Bindings.StopTracking();
+			DataContext = null;
+            
+		}
+    }
+
+	public partial class LastToVisibilityConverter : Microsoft.UI.Xaml.Data.IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {

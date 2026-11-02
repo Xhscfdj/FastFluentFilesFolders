@@ -1,6 +1,11 @@
 ﻿#define MyAppName "FastFluentFilesFolders"
-#define MyAppVersion "1.1.1"
-#define MyAppPublisher "XhunjiWare"
+
+; 版本号由 build.ps1 的 -Version 通过 ISCC /DMyAppVersion=... 注入（唯一来源）。
+; 只有单独用 ISCC 手动编译（没走 build.ps1）时才使用下面的兜底值，别指望改它就能发布新版。
+#ifndef MyAppVersion
+    #define MyAppVersion "1.1.1"
+#endif
+#define MyAppPublisher "Sink Dynamo"
 #define MyAppExeName "FastFluentFilesFolders.exe"
 #ifndef DestinationArch
     #define DestinationArch "x64"

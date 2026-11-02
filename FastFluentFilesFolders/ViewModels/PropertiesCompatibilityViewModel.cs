@@ -64,19 +64,19 @@ namespace FastFluentFilesFolders.ViewModels
 		public string ChangeHighDpiLabel => App.ML.Get("PropertiesChangeHighDpi");
 		public string ChangeAllUsersLabel => App.ML.Get("PropertiesChangeAllUsers");
 
-		[ObservableProperty] private bool compatModeEnabled;
-		[ObservableProperty] private bool simplifiedColorsEnabled;
-		[ObservableProperty] private bool run640x480;
-		[ObservableProperty] private bool disableFullscreenOptimizations;
-		[ObservableProperty] private bool runAsAdmin;
-		[ObservableProperty] private bool registerForRestart;
-		[ObservableProperty] private bool legacyIcc;
+		[ObservableProperty] public partial bool CompatModeEnabled { get; set; }
+		[ObservableProperty] public partial bool SimplifiedColorsEnabled { get; set; }
+		[ObservableProperty] public partial bool Run640x480 { get; set; }
+		[ObservableProperty] public partial bool DisableFullscreenOptimizations { get; set; }
+		[ObservableProperty] public partial bool RunAsAdmin { get; set; }
+		[ObservableProperty] public partial bool RegisterForRestart { get; set; }
+		[ObservableProperty] public partial bool LegacyIcc { get; set; }
 
 		public IReadOnlyList<KeyValueOption> CompatModes { get; }
 		public IReadOnlyList<KeyValueOption> ColorModes { get; }
 
-		[ObservableProperty] private int selectedCompatModeIndex;
-		[ObservableProperty] private int selectedColorModeIndex;
+		[ObservableProperty] public partial int SelectedCompatModeIndex { get; set; }
+		[ObservableProperty] public partial int SelectedColorModeIndex { get; set; }
 
 		public PropertiesCompatibilityViewModel(FileSystemNodeViewModel item)
 		{

@@ -8,7 +8,8 @@ using System.Linq;
 
 namespace FastFluentFilesFolders.Helpers
 {
-    public class FileGroupHeader : FileSystemNodeViewModel
+    [WinRT.GeneratedBindableCustomProperty]
+    public partial class FileGroupHeader : FileSystemNodeViewModel
     {
         public FileGroupHeader(string key) : base(key, false, true, null!, null!, true)
         {
@@ -18,13 +19,53 @@ namespace FastFluentFilesFolders.Helpers
         }
     }
 
-    public class GroupedFileList : ObservableCollection<FileSystemNodeViewModel>
+    /// <summary>
+    /// 表格数据源（未分组时与普通列表等价，分组时自动插入组头）。
+    /// <para>
+    /// 必须 <c>partial</c>：它作为 <c>ItemsSource</c> 跨 WinRT ABI 传给表格，Native AOT /
+    /// 关闭 <c>BuiltInComInterop</c> 的构建要靠 CsWinRT 源生成器为 partial 类型生成 AOT 安全的
+    /// COM 虚表（CsWinRT1028）。
+    /// </para>
+    /// </summary>
+    public partial class GroupedFileList : ObservableCollection<FileSystemNodeViewModel>
     {
         private readonly Dictionary<string, List<FileSystemNodeViewModel>> _groupChildren = new();
         private readonly Dictionary<string, FileSystemNodeViewModel> _groupHeaders = new();
         private DispatcherQueue? _dispatcher;
         private bool _isBatchUpdating;
         private bool _isGrouped;
+
+        // ---- 等价短路用的输入指纹（见 SetItems）----
+        // 只存哈希，不存节点引用：否则这份历史会把已经 ReleaseChildren 的节点一直钉住，反而制造泄漏。
+        private int _lastInputSignature;
+        private int _lastInputCount;
+        private bool _hasLastInput;
+
+        /// <summary>输入序列的引用指纹：顺序敏感、不持有引用，用于判断“内容其实没变，不必整批重建”。</summary>
+        private static int ComputeSignature(IReadOnlyList<FileSystemNodeViewModel> list)
+        {
+            var hash = new HashCode();
+            for (var i = 0; i < list.Count; i++)
+                hash.Add(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(list[i]));
+            return hash.ToHashCode();
+        }
+
+        /// <summary>
+        /// 分组键是否仍然有效：<see cref="FileSystemNodeViewModel.SortByTime"/> 应当等于按当前
+        /// <see cref="FileSystemNodeViewModel.LastModifiedTime"/> 算出来的时间组。不相等说明文件
+        /// 改过时间（或第一次还没写回），必须重新分组，不能走等价短路。
+        /// </summary>
+        private static bool GroupKeysStillValid(IReadOnlyList<FileSystemNodeViewModel> list)
+        {
+            for (var i = 0; i < list.Count; i++)
+            {
+                var item = list[i];
+                if (item.IsPlaceholder) continue;
+                if (!string.Equals(item.SortByTime, GetTimeGroup(item.LastModifiedTime), StringComparison.Ordinal))
+                    return false;
+            }
+            return true;
+        }
 
         /// <summary>当前是否按时间分组（供外部在复用同一数据源时传递分组状态）。</summary>
         public bool IsGrouped => _isGrouped;
@@ -68,8 +109,9 @@ namespace FastFluentFilesFolders.Helpers
         /// <summary>
         /// 构造排序比较器：第一优先级“目录在文件前面”（升/降序都不受影响），
         /// 第二优先级才按所选列比较。
+        /// 供 <c>MainWindowViewModel</c> 在后台预先排序用（避免前台再排一遍）。
         /// </summary>
-        private static Comparison<FileSystemNodeViewModel>? GetComparison(string sortPath, bool ascending)
+        internal static Comparison<FileSystemNodeViewModel>? GetComparison(string sortPath, bool ascending)
         {
             Comparison<FileSystemNodeViewModel>? keyCompare = sortPath switch
             {
@@ -112,20 +154,63 @@ namespace FastFluentFilesFolders.Helpers
             return lo;
         }
 
-        public void SetItems(IEnumerable<FileSystemNodeViewModel> items, bool grouped,
+        /// <summary>
+        /// 整批替换内容（分组/排序在内部一次做完）。
+        /// </summary>
+        /// <returns>
+        /// true = 内容确实重建了（行容器会重新实体化，入场动画照常由表格播放）；
+        /// false = 命中等价短路：内容序列与分组形态都没变，数据源一行没动。
+        /// 刷新时目录里没有任何变化就走这条路 —— 此时调用方必须自己补一次视觉反馈，
+        /// 否则用户点了刷新看不到任何反应。
+        /// </returns>
+        public bool SetItems(IEnumerable<FileSystemNodeViewModel> items, bool grouped,
             string? sortPath = null, bool ascending = true)
         {
+            var list = items.ToList();
+            var wantsSort = !string.IsNullOrEmpty(sortPath);
+
+            // ---- 等价短路（S4-3'）----
+            // 刷新、以及“目录热缓存命中后回访”这两种场景，节点实例是按路径复用的、顺序也没变，
+            // 此时再整批 Clear + Add 完全是浪费：会丢掉全部行容器、列表闪一下、面板还要重排一遍。
+            // 元数据变化由 ApplyMetadata 就地改属性、绑定自动刷新，不需要重建内容。
+            //
+            // 判定只看「同一批实例 + 同样的顺序 + 同样的分组形态」：内容序列一致时，
+            // 无论排序参数怎么变，重建都不会带来任何视觉差异。这里用「引用哈希的组合签名」
+            // 而不是保存节点引用，避免这份历史把已 ReleaseChildren 的节点钉住（反而制造泄漏）。
+            // （UpdateSourcePrebuilt 灌内容时不传排序参数，所以不能把排序状态放进判定条件里。）
+            if (_hasLastInput
+                && _isGrouped == grouped
+                && _lastInputCount == list.Count
+                && _lastInputSignature == ComputeSignature(list)
+                // 分组目录还必须确认“时间组没变”：节点实例虽然复用，但 ApplyMetadata 会更新
+                // LastModifiedTime，文件可能已经该换到别的时间组。分组键不刷新就会显示在旧组里。
+                && (!grouped || GroupKeysStillValid(list)))
+            {
+                // 排序状态仍要同步（哪怕这次不重建），否则后续增量插入会按旧排序插错位置
+                if (!wantsSort)
+                    ClearActiveSort();
+                else if (!_hasActiveSort
+                         || !string.Equals(_sortPath, sortPath, StringComparison.Ordinal)
+                         || _sortAscending != ascending)
+                    SetActiveSort(sortPath!, ascending);
+
+                return false;
+            }
+
+            _lastInputSignature = ComputeSignature(list);
+            _lastInputCount = list.Count;
+            _hasLastInput = true;
+
             _isGrouped = grouped;
             _groupChildren.Clear();
             _groupHeaders.Clear();
 
-            if (!string.IsNullOrEmpty(sortPath))
-                SetActiveSort(sortPath, ascending);
+            if (wantsSort)
+                SetActiveSort(sortPath!, ascending);
             else
                 ClearActiveSort();
 
-            var list = items.ToList();
-            var comparison = string.IsNullOrEmpty(sortPath) ? null : GetComparison(sortPath, ascending);
+            var comparison = wantsSort ? GetComparison(sortPath!, ascending) : null;
 
             if (!grouped || list.Count == 0)
             {
@@ -134,7 +219,7 @@ namespace FastFluentFilesFolders.Helpers
                     list.Sort(comparison);
                 foreach (var item in list)
                     Add(item);
-                return;
+                return true;
             }
 
             foreach (var item in list)
@@ -158,6 +243,7 @@ namespace FastFluentFilesFolders.Helpers
             }
 
             RebuildFlat();
+            return true;
         }
 
         public void AddItem(FileSystemNodeViewModel item)
@@ -436,4 +522,13 @@ namespace FastFluentFilesFolders.Helpers
             "group_last_year" => 7, "group_long_ago" => 8, _ => 9
         };
     }
+
+    /// <summary>
+    /// 后台预构建好的表格内容：**已经按当前排序排好**，分组目录的时间组键也已写回各节点。
+    ///
+    /// 以前后台会先 new 一个完整的 <see cref="GroupedFileList"/> 并 <c>SetItems</c> 一遍、
+    /// 前台拿到后再 <c>SetItems</c> 一遍 —— 等于每次导航干两遍分组与重排。
+    /// 现在后台只算“顺序 + 分组键”，构建交给前台那唯一一次 <c>SetItems</c>。
+    /// </summary>
+    internal sealed record PrebuiltContent(IReadOnlyList<FileSystemNodeViewModel> Items, bool Grouped);
 }

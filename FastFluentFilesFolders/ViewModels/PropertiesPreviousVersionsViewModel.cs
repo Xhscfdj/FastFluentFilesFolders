@@ -22,10 +22,10 @@ namespace FastFluentFilesFolders.ViewModels
 		public string OpenLabel => App.ML.Get("PropertiesPreviousOpen");
 		public string RestoreLabel => App.ML.Get("PropertiesPreviousRestore");
 
-		[ObservableProperty] private bool isLoading;
-		[ObservableProperty] private bool hasVersions;
-		[ObservableProperty] private bool hasEmptyMessage;
-		[ObservableProperty] private string emptyMessage = string.Empty;
+		[ObservableProperty] public partial bool IsLoading { get; set; }
+		[ObservableProperty] public partial bool HasVersions { get; set; }
+		[ObservableProperty] public partial bool HasEmptyMessage { get; set; }
+		[ObservableProperty] public partial string EmptyMessage { get; set; } = string.Empty;
 
 		public PropertiesPreviousVersionsViewModel(FileSystemNodeViewModel item)
 		{

@@ -18,12 +18,12 @@ using VirtualKey = Windows.System.VirtualKey;
 
 namespace FastFluentFilesFolders.UserControls
 {
-    public class LrsTableView : TableView
+    public partial class LrsTableView : TableView
     {
         // 整个生命周期只用一个数据源实例：换文件夹时原地替换内容，而不是换 ItemsSource。
         // 换 ItemsSource 会让 ListView 重建整套行/单元格（实测在 400 项文件夹上来回切换
         // 每次导航工作集会涨 30MB 左右，属于 WinUI 原生 XAML 资源未回收），原地更新则可以复用容器。
-        private readonly GroupedFileList _groupedSource = new();
+        private readonly GroupedFileList _groupedSource = [];
 
         // 当前排序状态（列 + 方向），由标签页状态灌入；用户主动排序时反向通过 SortChanged 通知外部。
         // 之前只有 GroupedFileList 内部字段记着排序，换目录/刷新重新灌内容时不会重新套用，
@@ -44,30 +44,6 @@ namespace FastFluentFilesFolders.UserControls
             ItemsSource = _groupedSource;
             Loaded += OnLoaded;
             Unloaded += OnUnloaded;
-        }
-
-        static LrsTableView()
-        {
-            // 临时诊断：内容替换入场动画的排查日志（transition.log）；排查完可删掉这两行与 Helpers/TransitionLog.cs
-            TableViewTransitionTrace.Sink = Helpers.TransitionLog.Write;
-
-            // 构建指纹：日志第一行就写清“当前跑的是哪份产物”，避免再花时间猜是不是旧构建
-            try
-            {
-                var appAssembly = System.Reflection.Assembly.GetExecutingAssembly();
-                var libAssembly = typeof(TableView).Assembly;
-                var appStamp = System.IO.File.Exists(appAssembly.Location)
-                    ? System.IO.File.GetLastWriteTime(appAssembly.Location).ToString("MM-dd HH:mm") : "?";
-                var libStamp = System.IO.File.Exists(libAssembly.Location)
-                    ? System.IO.File.GetLastWriteTime(libAssembly.Location).ToString("MM-dd HH:mm") : "?";
-                TableViewTransitionTrace.Write(
-                    $"---- trace attached (app {appAssembly.GetName().Version} @{appStamp}, " +
-                    $"lib {libAssembly.GetName().Version} @{libStamp}) ----");
-            }
-            catch
-            {
-                TableViewTransitionTrace.Write("---- trace attached ----");
-            }
         }
 
         private void EnsureStableSourceAttached()
@@ -156,11 +132,6 @@ namespace FastFluentFilesFolders.UserControls
                     ContentReplacementSlideOffsetY = 22;
                     break;
             }
-
-            TableViewTransitionTrace.Write(
-                $"mode={mode} animateReplacement={AnimateContentReplacement} " +
-                $"transitions={ItemContainerTransitions?.Count ?? 0} stagger={ContentReplacementStagger.TotalMilliseconds:0}ms " +
-                $"slide={ContentReplacementSlideOffsetY:0}px duration={ContentReplacementAnimationDuration.TotalMilliseconds:0}ms");
         }
 
         /// <summary>仅保留单条增删/重排动画（不包含入场动画，避免切换文件夹时逐行出现）。</summary>
@@ -190,49 +161,40 @@ namespace FastFluentFilesFolders.UserControls
             // 告诉库“内容要整体替换了”：库会在本轮布局结束时（渲染之前）统一滚顶并按设置播放入场动画
             BeginContentReplacement();
             // 单遍构建：SetItems 内部直接分组 + 排序，避免再调 SortWithinGroups 造成第二次 RebuildFlat
-            _groupedSource.SetItems(items, grouped, sortPath, ascending);
+            var rebuilt = _groupedSource.SetItems(items, grouped, sortPath, ascending);
             // 换内容之后立刻再复位一次（此时旧内容的滚动范围还在，ChangeView 会同步生效），
             // 让随后那次布局是从“已经在顶部”开始的；库在本帧末还会再兜一次并统一开播动画。
             ResetScrollPosition(force: false);
-            TableViewTransitionTrace.Write(
-                $"mount source items={items.Count} grouped={grouped} sort={sortPath ?? "-"}/{(ascending ? "asc" : "desc")}");
             SyncSortState(sortPath, ascending, itemsAlreadySorted: true);
             FinishContentReplacement();
             ScheduleScrollToTop();
+            // 刷新而目录里一行都没变（等价短路命中）时补一次视觉反馈：
+            // 按当前设置对可见行重播一遍“进入目录”入场动画，否则点了刷新完全看不出反应。
+            if (!rebuilt) ReplayContentReplacementEntrance();
         }
 
         /// <summary>
-        /// 使用后台已构建好的 GroupedFileList 整体挂载（UI 线程只做一次 Reset 级切换）。
-        /// 后台构建时如果已经套用过同一个排序，这里就不再在 UI 线程重排（性能优先）。
+        /// 使用后台已整理好的内容整体挂载（UI 线程只做一次 Reset 级切换）。
+        /// 后台已经把顺序排好、分组键写回，这里**不再排序、也不再过滤分组头**——
+        /// 传入的就是纯条目列表，构建只发生在这唯一一次 SetItems 里。
         /// </summary>
-        public void UpdateSourcePrebuilt(GroupedFileList source, string? sortPath = null, bool ascending = true)
+        internal void UpdateSourcePrebuilt(PrebuiltContent content, string? sortPath = null, bool ascending = true)
         {
             PrepareForContentReplacement();
             EnsureStableSourceAttached();
             // 告诉库“内容要整体替换了”：库会在本轮布局结束时（渲染之前）统一滚顶并按设置播放入场动画
             BeginContentReplacement();
 
-            // 只取真实条目，过滤掉 source 里已经生成的分组标题行：
-            // 把带标题的扁平列表再交给 SetItems 分组，会为“标题行”再生成一层标题 → 分组文件夹出现两个标签。
-            var items = new List<FileSystemNodeViewModel>(source.Count);
-            foreach (var item in source)
-            {
-                if (item is not FileGroupHeader)
-                    items.Add(item);
-            }
-
-            _groupedSource.SetItems(items, source.IsGrouped);
+            var rebuilt = _groupedSource.SetItems(content.Items, content.Grouped);
             // 换内容之后立刻再复位一次（同 UpdateSource 的说明）
             ResetScrollPosition(force: false);
-            TableViewTransitionTrace.Write(
-                $"mount prebuilt items={items.Count} grouped={source.IsGrouped} sort={sortPath ?? "-"}/{(ascending ? "asc" : "desc")}");
             var normalized = string.IsNullOrEmpty(sortPath) ? null : sortPath;
-            var alreadySorted =
-                string.Equals(source.ActiveSortPath ?? string.Empty, normalized ?? string.Empty, StringComparison.Ordinal) &&
-                (normalized is null || source.ActiveSortAscending == ascending);
-            SyncSortState(normalized, ascending, alreadySorted);
+            SyncSortState(normalized, ascending, itemsAlreadySorted: true);
             FinishContentReplacement();
             ScheduleScrollToTop();
+            // 刷新而目录里没有任何变化时，SetItems 走了等价短路、不会重建任何行容器，
+            // 库那道入场动画就永远等不到“行被重新 prepare” —— 这里按同一套参数对可见行重播一遍。
+            if (!rebuilt) ReplayContentReplacementEntrance();
         }
 
         /// <summary>

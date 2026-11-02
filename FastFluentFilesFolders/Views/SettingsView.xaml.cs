@@ -36,6 +36,7 @@ namespace FastFluentFilesFolders.Views
         protected override void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
+            _settingsVm?.Resubscribe();
             LoadPluginSettings();
             RefreshInstalledPluginsList();
 
@@ -48,7 +49,7 @@ namespace FastFluentFilesFolders.Views
         {
             base.OnNavigatedFrom(e);
             AutoSaveSettings();
-            // NavigationCacheMode=Disabled：页面销毁前必须退订，否则 VM 被单例 AppConfigs 泄漏
+            // NavigationCacheMode=Disabled：页面销毁前必须退订，否则 VM 会被单例 AppConfigs / ML 钉住
             _settingsVm?.Unsubscribe();
         }
 
@@ -112,8 +113,7 @@ namespace FastFluentFilesFolders.Views
                 : Visibility.Collapsed;
         }
 
-        private async void OnImportPluginClick(object sender, RoutedEventArgs e)
-        {
+        private async void OnImportPluginClick(object sender, RoutedEventArgs e)        {
             try
             {
                 var picker = new FileOpenPicker();
@@ -232,9 +232,34 @@ namespace FastFluentFilesFolders.Views
             await dialog.ShowAsync();
         }
 
+        /// <summary>
+        /// 「按时间分组文件夹」列表里的删除按钮。
+        ///
+        /// 这里不能用 <c>{Binding DataContext.DeleteTimeGroupedFolderCommand, ElementName=SV}</c>：
+        /// 运行时绑定要靠 ICustomProperty 反射解析 <see cref="SettingsViewModel"/> 的成员，而它是普通 C# 类、
+        /// 没有 <c>[WinRT.GeneratedBindableCustomProperty]</c>；当前 Release 构建的 runtimeconfig 里
+        /// <c>BuiltInComInterop.IsSupported=false</c>，拿不到 ICustomProperty 就在**布局期**抛异常
+        /// （crash.log 里只留下 `MeasureOverride` 的 `COMException 0x80004005`）直接带走进程。
+        /// 触发条件是「时间分组文件夹列表非空 + 展开这个 Expander」——列表为空时项模板不实例化，所以以前不崩。
+        /// </summary>
+        private void OnDeleteTimeGroupedFolderClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement { Tag: string path }) return;
+            if (_settingsVm is not { } vm) return;
+            vm.DeleteTimeGroupedFolderCommand.Execute(path);
+        }
+
         private void AutoSaveSettings()
         {
             App.SharedViewModel?.AppConfigs?.SaveConfig();
         }
-    }
+
+		private void SV_Unloaded(object sender, RoutedEventArgs e)
+		{
+            // 页面被换下/销毁时无条件退订（幂等）：单例 Configs / ML 的事件都不能再引用这个 VM。
+            // 不在这里把 _settingsVm / DataContext 置空：x:Bind 的两向写回依赖
+            // dataRoot._settingsVm，置空后页面若被重新挂载，输入会静默写不回 VM。
+            _settingsVm?.Unsubscribe();
+		}
+	}
 }

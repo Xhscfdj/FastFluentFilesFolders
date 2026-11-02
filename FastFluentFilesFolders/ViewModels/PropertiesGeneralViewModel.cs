@@ -37,23 +37,23 @@ namespace FastFluentFilesFolders.ViewModels
 
 		public ImageSource? Icon { get; }
 
-		[ObservableProperty] private string name;
-		[ObservableProperty] private string typeText = string.Empty;
-		[ObservableProperty] private string description = string.Empty;
-		[ObservableProperty] private string location = string.Empty;
-		[ObservableProperty] private string size = string.Empty;
-		[ObservableProperty] private string sizeOnDisk = string.Empty;
-		[ObservableProperty] private string contains = string.Empty;
-		[ObservableProperty] private string created = string.Empty;
-		[ObservableProperty] private string modified = string.Empty;
-		[ObservableProperty] private string accessed = string.Empty;
-		[ObservableProperty] private string processes = string.Empty;
-		[ObservableProperty] private bool hasProcessesInfo;
-		[ObservableProperty] private string attributesSummary = string.Empty;
-		[ObservableProperty] private bool isReadOnly;
-		[ObservableProperty] private bool isHidden;
-		[ObservableProperty] private bool hasDescription;
-		[ObservableProperty] private bool isDirectory;
+		[ObservableProperty] public partial string Name { get; set; }
+		[ObservableProperty] public partial string TypeText { get; set; } = string.Empty;
+		[ObservableProperty] public partial string Description { get; set; } = string.Empty;
+		[ObservableProperty] public partial string Location { get; set; } = string.Empty;
+		[ObservableProperty] public partial string Size { get; set; } = string.Empty;
+		[ObservableProperty] public partial string SizeOnDisk { get; set; } = string.Empty;
+		[ObservableProperty] public partial string Contains { get; set; } = string.Empty;
+		[ObservableProperty] public partial string Created { get; set; } = string.Empty;
+		[ObservableProperty] public partial string Modified { get; set; } = string.Empty;
+		[ObservableProperty] public partial string Accessed { get; set; } = string.Empty;
+		[ObservableProperty] public partial string Processes { get; set; } = string.Empty;
+		[ObservableProperty] public partial bool HasProcessesInfo { get; set; }
+		[ObservableProperty] public partial string AttributesSummary { get; set; } = string.Empty;
+		[ObservableProperty] public partial bool IsReadOnly { get; set; }
+		[ObservableProperty] public partial bool IsHidden { get; set; }
+		[ObservableProperty] public partial bool HasDescription { get; set; }
+		[ObservableProperty] public partial bool IsDirectory { get; set; }
 
 		public string? LastError { get; private set; }
 

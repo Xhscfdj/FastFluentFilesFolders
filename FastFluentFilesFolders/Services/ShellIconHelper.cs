@@ -37,11 +37,20 @@ namespace FastFluentFilesFolders.Services
 		private const uint SHGFI_LARGEICON = 0x0;
 		private const uint SHGFI_SMALLICON = 0x1;
 		private const uint SHGFI_USEFILEATTRIBUTES = 0x10;
+		private const uint SHGFI_PIDL = 0x8;
 
-		[DllImport("shell32.dll", CharSet = CharSet.Auto)]
+		[DllImport("shell32.dll", CharSet = CharSet.Unicode)]
 		private static extern IntPtr SHGetFileInfo(string pszPath, uint dwFileAttributes, ref SHFILEINFO psfi, uint cbSizeFileInfo, uint uFlags);
 
-		[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+		/// <summary>按 PIDL 取文件信息（SHGFI_PIDL）。PIDL 是纯指针，不涉及 COM 接口封送，AOT 下可用。</summary>
+		[DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "SHGetFileInfo")]
+		private static extern IntPtr SHGetFileInfoByPidl(IntPtr pidl, uint dwFileAttributes, ref SHFILEINFO psfi, uint cbSizeFileInfo, uint uFlags);
+
+		/// <summary>把 “::{CLSID}” / “shell:::{CLSID}” 这类 Shell 命名空间路径解析成 PIDL。</summary>
+		[DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
+		private static extern int SHParseDisplayName(string pszName, IntPtr pbc, out IntPtr ppidl, uint sfgaoIn, out uint psfgaoOut);
+
+		[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
 		private struct SHFILEINFO
 		{
 			public IntPtr hIcon;
@@ -240,21 +249,37 @@ namespace FastFluentFilesFolders.Services
 			if (IsShellItemIconPath(Path))
 				return await LoadShellItemIconAsync(GetShellItemParsingName(Path), useLargeIcon, dispatcherQueue);
 
+			return await LoadIconViaSHGetFileInfoAsync(Path, isFolder, useLargeIcon, dispatcherQueue, useFileAttributes: true);
+		}
+
+		/// <summary>
+		/// 用 SHGetFileInfo 取图标（纯 Win32，不经过任何 COM 接口封送，Native AOT 下同样可用）。
+		/// <paramref name="useFileAttributes"/> 为 true 时对文件夹/不存在路径附加 USEFILEATTRIBUTES，
+		/// 避免为了一个类型图标去实际访问磁盘；取 Shell 命名空间（“::{CLSID}”）图标时必须为 false。
+		/// </summary>
+		private async Task<ImageSource?> LoadIconViaSHGetFileInfoAsync(
+			string path, bool isFolder, bool useLargeIcon, DispatcherQueue dispatcherQueue, bool useFileAttributes)
+		{
 			var shfi = new SHFILEINFO();
 			uint flags = SHGFI_ICON | (useLargeIcon ? SHGFI_LARGEICON : SHGFI_SMALLICON);
 			uint dwAttributes = 0;
 
-			// 对于文件夹或无效路径，使用 USEFILEATTRIBUTES 避免实际访问
-			if (isFolder || Directory.Exists(Path) || !File.Exists(Path))
+			if (useFileAttributes && (isFolder || Directory.Exists(path) || !File.Exists(path)))
 			{
 				flags |= SHGFI_USEFILEATTRIBUTES;
 				if (isFolder)
 					dwAttributes = 0x10; // FILE_ATTRIBUTE_DIRECTORY
 			}
 
-			IntPtr hIcon = SHGetFileInfo(Path, dwAttributes, ref shfi, (uint)Marshal.SizeOf<SHFILEINFO>(), flags);
+			SHGetFileInfo(path, dwAttributes, ref shfi, (uint)Marshal.SizeOf<SHFILEINFO>(), flags);
 			if (shfi.hIcon == IntPtr.Zero)
+			{
+				// Native AOT 下按「字符串路径」调 SHGetFileInfo 会失败（同一路径的 PIDL 版本正常），
+				// 所以对真实存在的路径再走一次 PIDL 版本（AOT 下已验证可用）。
+				if (File.Exists(path) || Directory.Exists(path))
+					return await LoadShellNamespaceIconViaPidlAsync(path, useLargeIcon, dispatcherQueue);
 				return null;
+			}
 
 			try
 			{
@@ -274,7 +299,7 @@ namespace FastFluentFilesFolders.Services
 			}
 			catch (Exception ex)
 			{
-				Debug.WriteLine($"[ShellIconHelper] LoadIconCoreAsync error: {ex.Message}");
+				Debug.WriteLine($"[ShellIconHelper] LoadIconViaSHGetFileInfoAsync({path}) error: {ex.Message}");
 				return null;
 			}
 			finally
@@ -340,6 +365,82 @@ namespace FastFluentFilesFolders.Services
 		/// 真实系统图标（此电脑/网络/回收站/WSL/云盘等）。
 		/// </summary>
 		private async Task<ImageSource?> LoadShellItemIconAsync(string parsingName, bool useLargeIcon, DispatcherQueue dispatcherQueue)
+		{
+			// Native AOT / 关闭 BuiltInComInterop 时，`out IShellItemImageFactory` 这种
+			// COM 接口封送不可用（IL2050），整条路会失败 → 图标退化成字体字形。
+			// 顺序：COM 工厂（非 AOT 下拿到最清晰的系统图标）→ PIDL（AOT 下可用的主路径）
+			// → 字符串 SHGetFileInfo（最后兜底）。
+			var viaFactory = await TryLoadIconViaShellItemFactoryAsync(parsingName, useLargeIcon, dispatcherQueue);
+			if (viaFactory != null)
+				return viaFactory;
+
+			// AOT / 无内置 COM 时的主路径：SHParseDisplayName → PIDL → SHGetFileInfo(SHGFI_PIDL)
+			var viaPidl = await LoadShellNamespaceIconViaPidlAsync(parsingName, useLargeIcon, dispatcherQueue);
+			if (viaPidl != null)
+				return viaPidl;
+
+			var viaFileInfo = await LoadIconViaSHGetFileInfoAsync(parsingName, isFolder: true, useLargeIcon, dispatcherQueue, useFileAttributes: false);
+			return viaFileInfo;
+		}
+
+		/// <summary>
+		/// 用 SHParseDisplayName 解析出 PIDL，再用 SHGetFileInfo(SHGFI_PIDL) 取图标。
+		/// 全程只有指针与整数，不经过 COM 接口封送，因此 Native AOT（BuiltInComInterop 关闭）下也可用，
+		/// 能正确拿到 此电脑 / 网络 / 回收站 / WSL 这些 “::{CLSID}” 虚拟位置的系统图标。
+		/// </summary>
+		private async Task<ImageSource?> LoadShellNamespaceIconViaPidlAsync(string parsingName, bool useLargeIcon, DispatcherQueue dispatcherQueue)
+		{
+			IntPtr pidl = IntPtr.Zero;
+			try
+			{
+				int hr = SHParseDisplayName(parsingName, IntPtr.Zero, out pidl, 0, out _);
+				if (hr != 0 || pidl == IntPtr.Zero)
+				{
+					return null;
+				}
+
+				var shfi = new SHFILEINFO();
+				uint flags = SHGFI_PIDL | SHGFI_ICON | (useLargeIcon ? SHGFI_LARGEICON : SHGFI_SMALLICON);
+				SHGetFileInfoByPidl(pidl, 0, ref shfi, (uint)Marshal.SizeOf<SHFILEINFO>(), flags);
+				if (shfi.hIcon == IntPtr.Zero)
+				{
+					return null;
+				}
+
+				try
+				{
+					var pixelData = await Task.Run(() =>
+					{
+						using (var icon = Icon.FromHandle(shfi.hIcon))
+						{
+							return ExtractIconPixelData(icon);
+						}
+					});
+					if (pixelData == null)
+						return null;
+
+					return await CreateImageSourceAsync(pixelData, dispatcherQueue);
+				}
+				finally
+				{
+					DestroyIcon(shfi.hIcon);
+				}
+			}
+			catch (Exception ex)
+			{
+				return null;
+			}
+			finally
+			{
+				if (pidl != IntPtr.Zero)
+				{
+					try { Marshal.FreeCoTaskMem(pidl); } catch { }
+				}
+			}
+		}
+
+
+		private async Task<ImageSource?> TryLoadIconViaShellItemFactoryAsync(string parsingName, bool useLargeIcon, DispatcherQueue dispatcherQueue)
 		{
 			IntPtr hBitmap = IntPtr.Zero;
 			IShellItemImageFactory? factory = null;
