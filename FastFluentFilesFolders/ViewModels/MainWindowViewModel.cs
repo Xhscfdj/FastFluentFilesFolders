@@ -2644,12 +2644,21 @@ namespace FastFluentFilesFolders.ViewModels
 
 			try
 			{
-				// 先尝试默认打开
-				Process.Start(new ProcessStartInfo
+				// 先尝试默认打开。
+				// 必须显式指定工作目录为文件所在目录：否则子进程继承本进程的工作目录
+				// （打包应用的当前目录通常是 System32 等无关位置），导致程序按相对路径
+				// 查找同目录的 dll/数据文件时报错（如 th15c.exe 找不到同目录的 th15.exe）。
+				// 资源管理器双击时就是这样做，这里保持一致。
+				var workingDirectory = Path.GetDirectoryName(filePath);
+				var startInfo = new ProcessStartInfo
 				{
 					FileName = filePath,
 					UseShellExecute = true
-				});
+				};
+				if (!string.IsNullOrEmpty(workingDirectory) && Directory.Exists(workingDirectory))
+					startInfo.WorkingDirectory = workingDirectory;
+
+				using var process = Process.Start(startInfo);
 			}
 			catch (Win32Exception ex) when (ex.NativeErrorCode == 1155) // 无关联程序
 			{

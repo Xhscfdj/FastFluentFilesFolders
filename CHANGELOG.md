@@ -1,10 +1,6 @@
 # Changelog
 
-本文件记录本项目所有值得记录的变更。
-
-格式遵循 [Keep a Changelog 2.0.0](https://keepachangelog.com/en/2.0.0/)，版本号遵循 [语义化版本 2.0.0](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
-
-## [Unreleased]
+## [1.2.0]
 
 > 已知问题：AOT 发布命令里**不能**加 `-p:PublishTrimmed=false`：AOT 必然裁剪，会直接报 `PublishTrimmed is implied by native compilation and cannot be disabled`（这条与 `WinUI.TableView` 无关，它只会出 `WMC1510` 警告）；正确命令是 `dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:WindowsPackageType=None -p:PublishAot=true -p:PlatformTarget=x64`。
 > 另：不要给工程直接加 `Microsoft.Windows.CsWinRT` 包。它会把 `cswinrt.exe` 拉进构建重新生成整套 WinRT 投影，而本机只有 Windows SDK `10.0.22621.0` / `10.0.26100.0`，缺 `Platforms\UAP\10.0.19041.0\Platform.xml`，构建会直接失败（`Could not read the Windows SDK's Platform.xml`）。AOT 需要的 unsafe 生成已由 `<AllowUnsafeBlocks>true</AllowUnsafeBlocks>` 满足（app 与 `WinUI.TableView` 都设了）。
@@ -36,6 +32,7 @@
 
 ### Fixed
 
+- 修复从本程序打开 exe 时**子进程工作目录不对**的问题（双击 `th15c.exe` 后它按相对路径找不到同目录的 `th15.exe`，而同操作在资源管理器里正常）：`MainWindowViewModel.OpenWithDefaultProgram` 之前只写了 `FileName` + `UseShellExecute = true`，`WorkingDirectory` 留空等于让子进程继承本进程的当前目录（WinUI 应用启动时通常是 `System32` 之类与目标文件无关的位置），所有靠相对路径读同目录资源的程序（游戏、绿色软件、自带 dll 的 exe）都会找错地方；现在与资源管理器双击一致，显式把工作目录设为被打开文件所在目录，并顺手 `using` 掉返回的 `Process` 句柄
 - 修复点「刷新」时**目录里什么文件都没变就完全看不出反应**（现在会按设置里的「切换动画」重播一遍进入目录的入场动画）：根因是 `GroupedFileList.SetItems` 的等价短路（输入仍是同一批实例、顺序一致时直接返回）同时也把入场动画短路掉了——表格的入场动画是靠「行容器被重新 prepare」才开播的，内容没重建就压根没有容器可播，整次刷新只有磁盘枚举而无任何视觉反馈。现在 `SetItems` 返回 `bool`（content 是否真的重建），`LrsTableView.UpdateSource` / `UpdateSourcePrebuilt` 在拿到 `false` 时调用库新增的 `TableView.ReplayContentReplacementEntrance()`：按当前模式的同一套参数（默认 = 130ms + 22px 上滑、溪流 = 200ms 逐行错开、淡入 = 350ms 纯淡入；「关闭」时不播）对**已实体化、即视口内的行**重播一次入场动画。内容确实变了时 SetItems 会真的重建，仍走原来那次入场动画，不会重复播两批
 - 修复设置页展开「按时间分组文件夹」**直接崩溃**（`crash.log` 里只留下 `FrameworkElement.MeasureOverride` 的 `COMException 0x80004005`，看不出原因）：根因是 `FastFluentFilesFolders.csproj` 里**误留了一行裸的 `<PublishAot>true</PublishAot>`**——就在正上方三行注释写着「不要在普通 build 中打开 PublishAot！」的下面，于是每次 build 写出的 `runtimeconfig.json` 都带 `System.Runtime.InteropServices.BuiltInComInterop.IsSupported=false`，**所有 `{Binding}` 的 ICustomProperty 反射查找全部失效**。该列表项模板里那条 `{Binding DataContext.DeleteTimeGroupedFolderCommand, ElementName=SV}` 在展开时随项模板实例化而抛异常，在布局期成为 stowed exception 直接带走进程；列表为空时项模板不实例化，所以一直没暴露（本机配置里恰好有一条 `TimeGroupedFolders`）。修法：①删掉那行 `PublishAot`（要 AOT 就用命令行 `/p:PublishAot=true`，这条规则 CHANGELOG 早写过、又被违反了一次）；②把该删除按钮从运行时绑定改成 `Click` 事件 + `Tag` 传路径，彻底不依赖 ICustomProperty（否则即使不崩，AOT 下按钮也是点不动的）。Rebuild 后 `runtimeconfig.json` 里 `BuiltInComInterop.IsSupported` / `IsDynamicCodeSupported` 两个键都不再出现（= 默认允许反射绑定），应用启动正常
 - 修复切换语言后设置页**三个下拉框仍显示旧语言**（排序方式、背景材质、切换动画）：这些选项的文字是 `SettingsViewModel` 构造时按**当时的**语言取值的普通 POCO 字符串，列表之后从不重建，所以只转发属性通知不会让它们更新；另外「排序方式」「语言」两个 `ComboBox` 的 `ItemsSource` 还漏了 `Mode`（`x:Bind` 默认 `OneTime`）。现在 `SettingsViewModel` 订阅 `MultiLanguageStringsViewModel.LanguageChanged`，在里面整表重建三个选项列表、按**语义值**（`Mode` / `Value`）恢复选中——重建期间用 `_syncingOptions` 挡住 `OnSelectedXxxChanged` 的写回，避免把 `null` 或重复值写进 `user_configs.json` 并多落一次盘（`OnSelectedOrderModeItemChanged` 原来还没有 null 检查，重建时会直接 NRE）；`TransitionModeItems` 从裸属性改成带通知的属性，两处 `ItemsSource` 补上 `Mode=OneWay`。列表换新后 `ComboBox` 会重建项容器，`DataTemplate` 里的 `{x:Bind Display}` 重新求值，文字即跟随语言
