@@ -1,8 +1,10 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using FastFluentFilesFolders.ViewModels;
+using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Drawing;
 using System.Threading;
 
@@ -23,6 +25,31 @@ namespace FastFluentFilesFolders.Models
 
         /// <summary>当前标签页正在浏览的文件夹节点（可复用，避免反复重建）</summary>
         [ObservableProperty] public partial FileSystemNodeViewModel? FolderNode { get; set; }
+
+        /// <summary>
+        /// 标签头显示的文件夹图标。图标的加载是异步的（首次读 <c>FolderNode.Icon</c> 只发起请求、
+        /// 立刻返回 null），所以这里把节点图标的“迟到”通知转发成 <see cref="Icon"/> 的属性通知，
+        /// 标签头才能从空白补成真实图标。
+        /// </summary>
+        public ImageSource? Icon => FolderNode?.Icon;
+
+        partial void OnFolderNodeChanged(FileSystemNodeViewModel? oldValue, FileSystemNodeViewModel? newValue)
+        {
+            if (oldValue != null) oldValue.PropertyChanged -= OnFolderNodePropertyChanged;
+            if (newValue != null) newValue.PropertyChanged += OnFolderNodePropertyChanged;
+        }
+
+        private void OnFolderNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(FileSystemNodeViewModel.Icon))
+                OnPropertyChanged(nameof(Icon));
+        }
+
+        /// <summary>标签页被关闭时断开对文件夹节点的订阅，避免已关闭的标签页跟着热缓存里的节点一起活着。</summary>
+        public void Detach()
+        {
+            if (FolderNode != null) FolderNode.PropertyChanged -= OnFolderNodePropertyChanged;
+        }
 
         /// <summary>该标签页独立的后退历史</summary>
         public List<string> BackStack { get; } = new();

@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- 修复标签页头部的文件夹图标一直空白：图标是异步解码的，首次读 `FolderNode.Icon` 只发起请求并立即返回 `null`，而之前没有任何人把“图标后来到了”这件事告诉标签头，`Image.Source` 就永远停在 `null`。现在 `ExplorerTab` 暴露可通知的 `Icon`（转发当前 `FolderNode` 的图标变化），标签头在图标解码完成时就地补上；关闭标签页时会断开对节点的订阅，避免已关掉的标签页跟着热缓存里的节点一起活着
+- 修复新建标签页后切换到其它目录时，调试器“引发的异常”里稳定刷一条 `System.Threading.Tasks.TaskCanceledException`（位于 `System.Private.CoreLib.dll`）：根因是 `DebounceSaveConfig` 用 `Task.Delay(2000, token)` 做 2 秒防抖，每次新的导航都 `Cancel()` 掉上一个还没到点的延时，而取消 `Task.Delay` 必然抛该异常（异常虽然被 catch 掉，调试器仍会按 first-chance 打印，看着像程序出错）。现在改用 `DispatcherQueueTimer`：重置计时只 `Stop()` + `Start()`，不再抛异常，也不再为每次导航新建一个 `CancellationTokenSource` + 后台任务；后台线程（固定项变更回调）调用时会先切回 UI 线程
+
 ## [1.2.0]
 
 > 已知问题：AOT 发布命令里**不能**加 `-p:PublishTrimmed=false`：AOT 必然裁剪，会直接报 `PublishTrimmed is implied by native compilation and cannot be disabled`（这条与 `WinUI.TableView` 无关，它只会出 `WMC1510` 警告）；正确命令是 `dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:WindowsPackageType=None -p:PublishAot=true -p:PlatformTarget=x64`。
@@ -217,7 +224,8 @@
 - 刷新按钮单独执行磁盘重载；点击面包屑当前段/地址栏重回车不再触发整目录重载
 - 修复部分翻译问题
 
-[Unreleased]: https://github.com/Xhscfdj/FastFluentFilesFolders/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/Xhscfdj/FastFluentFilesFolders/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/Xhscfdj/FastFluentFilesFolders/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/Xhscfdj/FastFluentFilesFolders/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/Xhscfdj/FastFluentFilesFolders/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/Xhscfdj/FastFluentFilesFolders/releases/tag/v1.0.2

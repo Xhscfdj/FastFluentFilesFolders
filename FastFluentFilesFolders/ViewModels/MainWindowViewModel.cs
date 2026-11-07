@@ -1508,29 +1508,40 @@ namespace FastFluentFilesFolders.ViewModels
 
 		/// <summary>
 		/// 防抖写配置：连续操作（排序、导航等）只落盘一次，避免频繁写文件。
+		/// 用 <see cref="Microsoft.UI.Dispatching.DispatcherQueueTimer"/> 而不是
+		/// <c>Task.Delay(2000, token)</c> + <see cref="CancellationTokenSource"/>：
+		/// 每次新的调用都会取消上一个还没到点的延时，而取消 <c>Task.Delay</c> 一定会抛
+		/// <see cref="TaskCanceledException"/>（在 System.Private.CoreLib 里抛出，调试器的
+		/// “引发的异常”输出会稳定刷一条，看起来像程序出错了）。计时器只是重置，不抛任何异常，
+		/// 也不用为每次输入新建 CTS + 后台任务。
 		/// </summary>
 		private void DebounceSaveConfig()
 		{
 			if (AppConfigs == null || !IsReady) return;
-			_saveConfigCts?.Cancel();
-			_saveConfigCts = new CancellationTokenSource();
-			var token = _saveConfigCts.Token;
-			_ = Task.Run(async () =>
+
+			// 固定项变更等回调来自后台线程：计时器必须在 UI 线程创建/操作
+			if (!_uiDispatcherQueue.HasThreadAccess)
 			{
-				try
+				_uiDispatcherQueue.TryEnqueue(DebounceSaveConfig);
+				return;
+			}
+
+			if (_saveConfigTimer == null)
+			{
+				var timer = _uiDispatcherQueue.CreateTimer();
+				timer.Interval = TimeSpan.FromSeconds(2);
+				timer.IsRepeating = false;
+				timer.Tick += (_, _) =>
 				{
-					await Task.Delay(2000, token);
-					if (!token.IsCancellationRequested)
-					{
-						await _uiDispatcherQueue.EnqueueAsync(() =>
-						{
-							if (!token.IsCancellationRequested)
-								AppConfigs?.SaveConfig();
-						});
-					}
-				}
-				catch (TaskCanceledException) { }
-			}, token);
+					timer.Stop();
+					AppConfigs?.SaveConfig();
+				};
+				_saveConfigTimer = timer;
+			}
+
+			// 重新开始 = 把 2 秒窗口往后推
+			_saveConfigTimer.Stop();
+			_saveConfigTimer.Start();
 		}
 		[ObservableProperty] public partial ObservableCollection<FileSystemNodeViewModel> PinnedShortcuts { get; set; } = new();
 		// 文件系统相关的属性和方法
@@ -1936,7 +1947,8 @@ namespace FastFluentFilesFolders.ViewModels
 		/// <summary>设置下一次“粘贴”的目标文件夹（右键文件夹→粘贴时使用）。</summary>
 		public void SetPasteTarget(string? fullPath) => _pasteTargetOverride = fullPath;
 		private const int MaxBackDepth = 100;
-		private CancellationTokenSource? _saveConfigCts;
+		/// <summary>防抖写配置用的计时器（UI 线程上创建，懒加载）。</summary>
+		private Microsoft.UI.Dispatching.DispatcherQueueTimer? _saveConfigTimer;
 		private ObservableCollection<FileSystemNodeViewModel> _rootDirectories = new();
 		public ObservableCollection<FileSystemNodeViewModel> RootDirectories
 		{

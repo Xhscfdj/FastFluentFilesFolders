@@ -133,6 +133,39 @@ namespace FastFluentFilesFolders.Views
         /// </summary>
         private void OnLanguageChanged(object? sender, EventArgs e) => RefreshAllStrings();
 
+        /// <summary>
+        /// 右键菜单的统一创建入口（位置见 <see cref="ContextShowOptions"/>）。
+        /// <para>
+        /// <c>Placement</c> 既要在 ShowAt 的参数里给，也要在这里给：ShowAt 传入的 Placement 只对“本次弹出”有效
+        /// （FlyoutBase 内部存成 placement override，关闭时会被清掉），而右键菜单是同一个实例反复复用，
+        /// 一旦某次布局发生在 override 失效之后，就会退回 flyout 自己的 Placement——默认是 <c>Top</c>，
+        /// 也就是“以鼠标点为中心、向上弹”，表现就是菜单固定往左上偏半个菜单宽/一整个菜单高。
+        /// </para>
+        /// </summary>
+        private static CommandBarFlyout CreateContextFlyout()
+        {
+            return new CommandBarFlyout
+            {
+                AlwaysExpanded = true,
+                Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft,
+            };
+        }
+
+        /// <summary>
+        /// 右键菜单的弹出参数：鼠标点就是菜单左上角。
+        /// <para>
+        /// 必须显式给 <c>Placement</c>。默认的 <c>Top</c> 是“以鼠标点为中心、向上弹出”，而 WinUI 发现菜单越过
+        /// 可用区域（窗口化 popup 用的是显示器工作区）时会把它整体减掉自身宽/高——等于“翻到点的另一侧”。
+        /// 这两个叠加起来，靠近屏幕右/下边缘右键时菜单会多挪半个菜单宽（最大化后窗口贴住屏幕边缘，就会明显
+        /// 跑偏）。<c>BottomEdgeAlignedLeft</c> 让“翻到另一侧”刚好落在点的左边/上边，结果可预期。
+        /// </para>
+        /// </summary>
+        private static FlyoutShowOptions ContextShowOptions(Point position) => new()
+        {
+            Position = position,
+            Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft,
+        };
+
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
             App.ML.LanguageChanged -= OnLanguageChanged;
@@ -324,6 +357,58 @@ namespace FastFluentFilesFolders.Views
             }
         }
 
+#if DEBUG
+        // 临时诊断（定位“最大化后右键菜单错位”）：把每次右键的坐标/尺寸以及弹出层的最终矩形
+        // 追加到 %TEMP%\lrs-ctxmenu.log。定稿后删掉。
+        private static readonly string ContextMenuLogPath =
+            System.IO.Path.Combine(System.IO.Path.GetTempPath(), "lrs-ctxmenu.log");
+
+        private static void LogContextMenu(string message)
+        {
+            try { System.IO.File.AppendAllText(ContextMenuLogPath, message + Environment.NewLine); }
+            catch { /* 诊断日志失败不影响功能 */ }
+        }
+
+        private void LogContextMenuRequest(string tag, Point position)
+        {
+            try
+            {
+                var root = FileGrid.XamlRoot;
+                var origin = FileGrid.TransformToVisual(null).TransformPoint(new Point(0, 0));
+                var window = App.MainWindow;
+                LogContextMenu(string.Format(
+                    "[{0:HH:mm:ss.fff}] {1} pos=({2:F1},{3:F1}) grid={4:F1}x{5:F1} gridOrigin=({6:F1},{7:F1}) xamlRoot={8:F1}x{9:F1} window={10}x{11}@{12},{13}",
+                    DateTime.Now, tag, position.X, position.Y,
+                    FileGrid.ActualWidth, FileGrid.ActualHeight, origin.X, origin.Y,
+                    root?.Size.Width ?? -1, root?.Size.Height ?? -1,
+                    window?.AppWindow.Size.Width ?? -1, window?.AppWindow.Size.Height ?? -1,
+                    window?.AppWindow.Position.X ?? -1, window?.AppWindow.Position.Y ?? -1));
+            }
+            catch (Exception ex) { LogContextMenu("request log failed: " + ex.Message); }
+        }
+
+        private static void LogOpenPopups(CommandBarFlyout flyout)
+        {
+            try
+            {
+                var root = flyout.XamlRoot;
+                if (root?.Content is null) return;
+
+                LogContextMenu("    flyout placement=" + flyout.Placement);
+
+                foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(root))
+                {
+                    if (popup.Child is not FrameworkElement child || child.ActualWidth <= 0) continue;
+                    var p = child.TransformToVisual(root.Content).TransformPoint(new Point(0, 0));
+                    LogContextMenu(string.Format(
+                        "    popup={0} constrainToRoot={1} rect=({2:F1},{3:F1}) size={4:F1}x{5:F1}",
+                        child.GetType().Name, popup.ShouldConstrainToRootBounds, p.X, p.Y, child.ActualWidth, child.ActualHeight));
+                }
+            }
+            catch (Exception ex) { LogContextMenu("    popup log failed: " + ex.Message); }
+        }
+#endif
+
         private void OnFileGridContextRequested(UIElement sender, ContextRequestedEventArgs args)
         {
             args.TryGetPosition(sender, out var position);
@@ -340,13 +425,19 @@ namespace FastFluentFilesFolders.Views
                 element = VisualTreeHelper.GetParent(element);
             }
 
+#if DEBUG
+            // 临时诊断：定位“最大化后右键菜单错位”。修好后连同 LogOpenPopups 一起删掉。
+            LogContextMenuRequest(row?.Content is FileSystemNodeViewModel node && !node.IsPlaceholder ? "row" : "blank", position);
+#endif
+
+            // 是文件/文件夹？
+            // 如果是，则替换坐标为该行坐标，否则为鼠标右键位置
             if (row?.Content is FileSystemNodeViewModel item && !item.IsPlaceholder)
             {
                 if (!FileGrid.SelectedItems.Contains(item))
                     FileGrid.SelectedItem = item;
-                UpdatePinToggleButton(item);
                 var t = sender.TransformToVisual(row);
-                var showOptions = new FlyoutShowOptions { Position = t.TransformPoint(position) };
+                var showOptions = ContextShowOptions(t.TransformPoint(position));
 
                 if (item.IsRecycleEntry)
                 {
@@ -356,7 +447,10 @@ namespace FastFluentFilesFolders.Views
                 }
                 else
                 {
+                    // 先建菜单（会创建 _pinToggleButton），再按当前项刷新固定/取消固定项；
+                    // 反过来的话首次弹出（或窗口尺寸变化重建后）固定项会停在默认的隐藏状态。
                     _itemContextFlyout ??= BuildItemContextFlyout();
+                    UpdatePinToggleButton(item);
                     RebuildPluginItems(_itemContextFlyout, _itemPluginItems, item);
                     _itemContextFlyout.ShowAt(row, showOptions);
                 }
@@ -367,13 +461,13 @@ namespace FastFluentFilesFolders.Views
                 {
                     // 回收站空白处：清空回收站
                     _recycleBaseFlyout ??= BuildRecycleBaseFlyout();
-                    _recycleBaseFlyout.ShowAt(sender, new FlyoutShowOptions { Position = position });
+                    _recycleBaseFlyout.ShowAt(sender, ContextShowOptions(position));
                 }
                 else
                 {
                     _baseContextFlyout ??= BuildBaseContextFlyout();
                     RebuildPluginItems(_baseContextFlyout, _basePluginItems, null);
-                    _baseContextFlyout.ShowAt(sender, new FlyoutShowOptions { Position = position });
+                    _baseContextFlyout.ShowAt(sender, ContextShowOptions(position));
                 }
             }
             args.Handled = true;
@@ -445,7 +539,7 @@ namespace FastFluentFilesFolders.Views
 
         private CommandBarFlyout BuildItemContextFlyout()
         {
-            var flyout = new CommandBarFlyout { AlwaysExpanded = true };
+            var flyout = CreateContextFlyout();
 
             flyout.PrimaryCommands.Add(ThemedBtn(ML.CmdCut,   ThemedIconKey("Icon.Cut"),    OnCutClick));
             flyout.PrimaryCommands.Add(ThemedBtn(ML.CmdCopy,   ThemedIconKey("Icon.Copy"),    OnCopyClick));
@@ -480,7 +574,7 @@ namespace FastFluentFilesFolders.Views
 
         private CommandBarFlyout BuildBaseContextFlyout()
         {
-            var flyout = new CommandBarFlyout { AlwaysExpanded = true };
+            var flyout = CreateContextFlyout();
 
             var newSubMenu = new MenuFlyout();
             newSubMenu.Items.Add(SubMenuBtn(ML.NewTextDocument, "\uE7C3", OnNewTextDocumentClick));
@@ -510,7 +604,7 @@ namespace FastFluentFilesFolders.Views
 
         private CommandBarFlyout BuildRecycleItemFlyout()
         {
-            var flyout = new CommandBarFlyout { AlwaysExpanded = true };
+            var flyout = CreateContextFlyout();
 
             flyout.PrimaryCommands.Add(GlyphBtn(ML.RecycleRestore, "\uE8E5", OnRecycleRestoreClick));
             flyout.PrimaryCommands.Add(RedBtn(ML.CmdPermanentDelete, "\uECC9", OnRecycleDeleteClick));
@@ -522,7 +616,7 @@ namespace FastFluentFilesFolders.Views
 
         private CommandBarFlyout BuildRecycleBaseFlyout()
         {
-            var flyout = new CommandBarFlyout { AlwaysExpanded = true };
+            var flyout = CreateContextFlyout();
             ApplyMenuItemStyle(flyout);
             flyout.SecondaryCommands.Add(GlyphBtn(ML.RecycleEmpty, "\uE74D", OnRecycleEmptyClick));
             return flyout;
@@ -793,7 +887,7 @@ namespace FastFluentFilesFolders.Views
             AddPluginContextMenuItems(flyout, targetNode, tracker);
         }
 
-        private void AddPluginContextMenuItems(CommandBarFlyout flyout, FileSystemNodeViewModel? targetNode, List<ICommandBarElement> tracker)
+        private static void AddPluginContextMenuItems(CommandBarFlyout flyout, FileSystemNodeViewModel? targetNode, List<ICommandBarElement> tracker)
         {
             var plugins = App.PluginManager?.GetContextMenuPlugins();
             if (plugins == null || !plugins.Any()) return;
@@ -863,7 +957,7 @@ namespace FastFluentFilesFolders.Views
             }
         }
 
-        private AppBarButton ThemedBtn(string label, string styleKey, RoutedEventHandler? click)
+        private static AppBarButton ThemedBtn(string label, string styleKey, RoutedEventHandler? click)
         {
             var icon = new ThemedIcon();
             icon.Style = (Style)Application.Current.Resources[styleKey];
@@ -904,7 +998,13 @@ namespace FastFluentFilesFolders.Views
         private static void OnMenuFlyoutOpened(object? sender, object e)
         {
             if (sender is not CommandBarFlyout flyout || flyout.DispatcherQueue == null) return;
-            flyout.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => StretchSecondaryCommands(flyout));
+            flyout.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                StretchSecondaryCommands(flyout);
+#if DEBUG
+                LogOpenPopups(flyout);
+#endif
+            });
         }
 
         private static void StretchSecondaryCommands(CommandBarFlyout flyout)
