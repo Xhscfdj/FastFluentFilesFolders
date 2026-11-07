@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
-
+- 修复右键菜单位置异常的问题
 - 修复标签页头部的文件夹图标一直空白：图标是异步解码的，首次读 `FolderNode.Icon` 只发起请求并立即返回 `null`，而之前没有任何人把“图标后来到了”这件事告诉标签头，`Image.Source` 就永远停在 `null`。现在 `ExplorerTab` 暴露可通知的 `Icon`（转发当前 `FolderNode` 的图标变化），标签头在图标解码完成时就地补上；关闭标签页时会断开对节点的订阅，避免已关掉的标签页跟着热缓存里的节点一起活着
 - 修复新建标签页后切换到其它目录时，调试器“引发的异常”里稳定刷一条 `System.Threading.Tasks.TaskCanceledException`（位于 `System.Private.CoreLib.dll`）：根因是 `DebounceSaveConfig` 用 `Task.Delay(2000, token)` 做 2 秒防抖，每次新的导航都 `Cancel()` 掉上一个还没到点的延时，而取消 `Task.Delay` 必然抛该异常（异常虽然被 catch 掉，调试器仍会按 first-chance 打印，看着像程序出错）。现在改用 `DispatcherQueueTimer`：重置计时只 `Stop()` + `Start()`，不再抛异常，也不再为每次导航新建一个 `CancellationTokenSource` + 后台任务；后台线程（固定项变更回调）调用时会先切回 UI 线程
 
